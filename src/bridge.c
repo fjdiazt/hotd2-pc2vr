@@ -77,6 +77,15 @@ static int write_code(BYTE *at, const BYTE *bytes, unsigned n)
     return 1;
 }
 
+static int relax_mesh_culling(BYTE *at)
+{
+    static const BYTE signature[]={0xF7,0x44,0x24,0x18,0x00,0xF0,0xFF,0x00};
+    const BYTE side_planes=0;
+    if(memcmp(at,signature,sizeof(signature)))return 0;
+    /* Mdl_Draw: retain near/far/custom planes; submit meshes outside the flat screen edges. */
+    return write_code(at+5,&side_planes,1);
+}
+
 static int active_input(void)
 {
     DWORD seq;
@@ -366,13 +375,14 @@ typedef struct { DWORD colour,style; } DrawStyle;
 static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
 {
     DWORD blend=0,src=2,dst=1,zwrite=1,test=0,func=8,ref=0,alphaop=2,alphaarg=2;
-    DWORD lighting=0,colorvertex=0,matsrc=0;
+    DWORD lighting=0,colorvertex=0,matsrc=0,cull=D3DCULL_NONE;
     D3DMATERIAL7 material;
     DrawStyle style={0xFFFFFFFF,0};
 #define RS(name,out) IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_##name,&out)
     RS(ALPHABLENDENABLE,blend);RS(SRCBLEND,src);RS(DESTBLEND,dst);RS(ZWRITEENABLE,zwrite);
     RS(ALPHATESTENABLE,test);RS(ALPHAFUNC,func);RS(ALPHAREF,ref);
     RS(LIGHTING,lighting);RS(COLORVERTEX,colorvertex);RS(DIFFUSEMATERIALSOURCE,matsrc);
+    RS(CULLMODE,cull);
 #undef RS
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ALPHAOP,&alphaop);
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ALPHAARG1,&alphaarg);
@@ -381,7 +391,8 @@ static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
        SUCCEEDED(IDirect3DDevice7_GetMaterial(device,&material)))
         style.colour=hotd_rgba(material.diffuse.r,material.diffuse.g,material.diffuse.b,material.diffuse.a);
     style.style=hotd_style(blend,src,dst,zwrite,alphaop==D3DTOP_MODULATE ||
-        (alphaop==D3DTOP_SELECTARG1 && (alphaarg&D3DTA_SELECTMASK)==D3DTA_DIFFUSE),test,func,ref);
+        (alphaop==D3DTOP_SELECTARG1 && (alphaarg&D3DTA_SELECTMASK)==D3DTA_DIFFUSE),test,func,ref) |
+        ((cull&3u)<<HOTD_CULL_SHIFT);
     return style;
 }
 
@@ -716,6 +727,7 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     frame->input_supported=input_ready;
     logline("HOTD2 bridge pid=%lu input_profile=%d",(unsigned long)GetCurrentProcessId(),input_ready);
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
+    logline("native mesh screen-edge culling: %s",relax_mesh_culling(game_base+0xA7F81)?"relaxed":"unsupported; unchanged");
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};

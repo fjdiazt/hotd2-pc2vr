@@ -21,6 +21,24 @@ Addresses below are absolute for image base `0x400000`. Hooks use RVAs plus the 
 
 ## Rendering
 
+### Native screen-edge mesh culling
+
+The supported executable's `Mdl_Draw` at `0x4A7EF0` calls Direct3D7 `ComputeSphereVisibility` for individual meshes (`0x4A7F63`), then tests the result at `0x4A7F81` against `0x00FFF000`. A mesh rejected here never reaches polygon capture. This can hide a character's separate body meshes outside the original flat camera's field of view, even when those meshes should be visible in VR.
+
+The bridge validates the eight-byte instruction signature and changes only `0x4A7F86`, from `F0` to `00`: the rejection mask becomes `0x00FF0000`. This clears only the LEFT/RIGHT/TOP/BOTTOM sphere-intersection reject bits. FRONT/BACK and six custom planes remain; material passes, backface behavior and damage/dismemberment visibility are untouched. Whole-object/stage culling elsewhere remains. The change affects injected sessions in memory; the game executable on disk is unchanged. The signature self-check verifies preserved planes, unchanged surrounding bytes and rejection of unsupported instructions.
+
+Full build/offline checks passed (`build/mesh-culling-build.log`). A desktop-only native gameplay test alternated the original and relaxed mask five times in one running process. The first four pairs captured 7,976–8,038 versus 9,238–9,296 triangles, including 1,158–1,159 versus 2,060–2,064 wholly offscreen triangles. All ten samples reported zero dropped geometry; the final pair crossed a scene/camera change. Animation continued between samples, so these are runtime submission comparisons, not identical-frame visual proof. Raw samples and counts are under ignored `build/mesh-culling-comparison.json`. The relaxed mask was restored afterward. Initial headset testing exposed the wall-visibility issue below; full-level coverage and performance remain unchecked. Request authorization before future VR launches.
+
+Reference: [hotd2-re model renderer](https://github.com/GitFist/hotd2-re/blob/8536c9141fe55602a6ed4dfe965dadc4a91fd775/src/port/render/model_renderer.cpp) helped locate the native path; the original executable's disassembly and Direct3D7 constants establish the actual patch. No rebuilt game or external assets were used.
+
+### Wall visibility after expanded mesh capture
+
+User reported unwanted wall surfaces covering the original forward view during the headset test. Inspection found a separate rendering gap: the bridge discarded `D3DRENDERSTATE_CULLMODE`, and the viewer always used `D3D11_CULL_NONE`. Expanded submission can therefore expose the reverse sides of additional walls. This is a confirmed missing render state and a plausible cause of the reported obstruction; the exact wall was not captured for an A/B comparison.
+
+The bridge now packs the native cull mode into previously unused style bits 22–23. Vertex/frame sizes remain unchanged. The viewer includes those bits in draw-run grouping and selects matching hardware rasterizer states: D3D7 CW rejects D3D11's default clockwise front faces, CCW rejects back faces, and NONE retains both sides. The rasterizer returns to NONE after native runs, preserving the separate gun and floating-panel behavior. Native strip winding and baked world transforms remain intact. The mesh-expansion patch remains enabled; no character-only hook or lighting-based classification was added.
+
+Regression checks first failed on discarded bridge cull state and on a visible triangle that should be rejected. After the fix, fake-COM capture checks cover all three native modes; offscreen WARP rendering checks cover both triangle windings under every mode through both world/sharp paths. Full build/offline checks passed (`build/native-face-culling-build.log`). On the subsequent authorized VR retest, the session reached FOCUSED and centered on tracked poses (`build/native-face-culling-vr.log`); user reported it seems to work and approved committing, while requesting more testing before full acceptance. This is provisional headset confirmation; broader scene coverage and expanded-capture performance remain pending.
+
 The game exposes a live perspective matrix. A sampled 640x480 frame gave `fx=640.2079`, `fy=640.2079`, center `(320,240)`. XYZ vertices are transformed through the game's world and view matrices; transformed/lit vertices use reciprocal W. The bridge changes only Z's sign to supply the viewer's right/up/backward axes.
 
 Native geometry uses repeating, including negative, texture UVs. Clamping them produced stretched stripes. Protocol v2 carries each texture's atlas rectangle separately from its original UVs; the world shader repeats UVs within that rectangle. Desktop inspection then showed textured level geometry, characters and native HUD elements. This is not complete visual qualification of lighting, transparency or HUD depth.

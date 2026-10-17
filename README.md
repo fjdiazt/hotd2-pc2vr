@@ -28,6 +28,8 @@ No external wrapper, game INI change or on-disk executable edit is required. Lau
 
 Injected sessions also restore opaque alpha after the game's two GDI bitmap-upload paths. This fixes the black/clipped game-mode menu on the tested renderer while preserving native alpha testing and RGB artwork. The mode-selection screen is verified on desktop and user-confirmed in VR; other screens still need visual checks.
 
+The bridge also relaxes native per-mesh culling at the flat screen's left/right/top/bottom edges, so offscreen body parts can reach the VR renderer. Near/far and custom clipping planes remain. Native per-draw backface culling is preserved in the viewer. Desktop capture confirms additional offscreen geometry. User reported the headset result looks good after the backface correction; broader scene coverage and performance still need testing.
+
 For a native desktop comparison, run `build\HOTD2Launch.exe 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe' --native-window`. This selects only the native windowed mode in memory, without injecting the bridge or starting a viewer. Native renderer and quit questions remain.
 
 ## Controls
@@ -57,7 +59,7 @@ Close the viewer before the second command. It briefly drives both aim coordinat
 
 - Native geometry, texture capture, gun asset loading and desktop rendering have been exercised. See `docs/findings.md` for evidence and remaining checks.
 - User confirmed the 3D scene, both guns, good aiming, working trigger firing and immersive reload in the headset. Revised 50-degree up/45-degree down thresholds, head tracking, stereoscopic comfort, real-world scale and two-player joining need further headset checks. The initial `units_per_metre=10` is uncalibrated.
-- Only geometry submitted by the original game is available. Turning or leaning may expose culled or missing surfaces.
+- Only geometry submitted by the original game is available. Per-mesh screen-edge rejection is relaxed, but whole-object/stage culling and intentionally absent surfaces can still leave gaps when turning or leaning.
 - White artifacts persisted after atlas repair. Native material color/opacity and blend states were being discarded; those now pass capture and actual shader pixel checks. User confirmed the result looks better in the headset. Full native lighting, transparency ordering, texture addressing and HUD depth still need visual qualification. A single scene must fit the atlas; mutable textures need dirty tracking if encountered.
 - The supported game has SHA256 `C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A` (MD5 `97C9E516A287AAB33A455A396DADAA45`). Native hooks validate instruction signatures before writing.
 

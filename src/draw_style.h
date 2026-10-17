@@ -5,7 +5,9 @@
 #define HOTD_NO_ZWRITE 256u
 #define HOTD_DIFFUSE_ALPHA 512u
 #define HOTD_ALPHA_TEST 1024u
-#define HOTD_DRAW_STATE_MASK 511u
+#define HOTD_CULL_SHIFT 22u
+#define HOTD_CULL_MASK (3u<<HOTD_CULL_SHIFT)
+#define HOTD_DRAW_STATE_MASK (511u|HOTD_CULL_MASK)
 
 static inline uint32_t hotd_style(unsigned blend,unsigned src,unsigned dst,unsigned zwrite,
     unsigned diffuse_alpha,unsigned test,unsigned func,unsigned ref)

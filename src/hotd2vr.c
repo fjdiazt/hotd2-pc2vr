@@ -468,6 +468,7 @@ static ID3D11PixelShader   *g_ps;
 static ID3D11PixelShader   *g_psOv;   /* same rules, sharp-bilinear fetch */
 static ID3D11InputLayout   *g_il;
 static ID3D11RasterizerState *g_rs;
+static ID3D11RasterizerState *g_nativeCull[4];
 static ID3D11DepthStencilState *g_dss;
 static ID3D11DepthStencilState *g_dssRead;
 static ID3D11BlendState *g_nativeBlend[12][12];
@@ -696,8 +697,13 @@ static void makePipeline(void)
 
     ZeroMemory(&rd, sizeof(rd));
     rd.FillMode = D3D11_FILL_SOLID;
-    rd.CullMode = D3D11_CULL_NONE;      /* winding order is not known, draw both faces */
+    rd.CullMode = D3D11_CULL_NONE;
     ID3D11Device_CreateRasterizerState(g_dev, &rd, &g_rs);
+    for(unsigned cull=2;cull<=3;cull++) {
+        /* D3D7 CW/CCW describe the rejected winding; D3D11's default front is CW. */
+        rd.CullMode=cull==2?D3D11_CULL_FRONT:D3D11_CULL_BACK;
+        if(FAILED(ID3D11Device_CreateRasterizerState(g_dev,&rd,&g_nativeCull[cull])))die("native cull state");
+    }
 
     ZeroMemory(&dd, sizeof(dd));
     /* the game has no z-buffer (HGL_D3D sets ZENABLE 0): the DLL hands the
@@ -1108,6 +1114,7 @@ static void drawNativeRuns(unsigned start,unsigned count,int ui)
     while(start<end) {
         unsigned key=g_local[start].style&HOTD_DRAW_STATE_MASK,stop=start+3;
         unsigned src=key&15,dst=(key>>4)&15;
+        unsigned cull=(key&HOTD_CULL_MASK)>>HOTD_CULL_SHIFT;
         ID3D11BlendState *blend=NULL;
         while(stop<end && (g_local[stop].style&HOTD_DRAW_STATE_MASK)==key)stop+=3;
         if(src && src<=11 && dst>=1 && dst<=11) {
@@ -1127,11 +1134,13 @@ static void drawNativeRuns(unsigned start,unsigned count,int ui)
         }
         ID3D11DeviceContext_OMSetBlendState(g_ctx,blend,NULL,0xFFFFFFFF);
         ID3D11DeviceContext_OMSetDepthStencilState(g_ctx,ui?g_dssUI:(key&HOTD_NO_ZWRITE?g_dssRead:g_dss),0);
+        ID3D11DeviceContext_RSSetState(g_ctx,cull>=2?g_nativeCull[cull]:g_rs);
         ID3D11DeviceContext_Draw(g_ctx,stop-start,start);
         start=stop;
     }
     ID3D11DeviceContext_OMSetBlendState(g_ctx,NULL,NULL,0xFFFFFFFF);
     ID3D11DeviceContext_OMSetDepthStencilState(g_ctx,ui?g_dssUI:g_dss,0);
+    ID3D11DeviceContext_RSSetState(g_ctx,g_rs);
 }
 
 /* mvpFlat, when given, is the same view with the zoom taken back out. The tail
@@ -1852,6 +1861,7 @@ static void releaseGraphics(void)
     if (!g_ctx) return;
     ID3D11DeviceContext_ClearState(g_ctx);
     for(src=0;src<12;src++)for(dst=0;dst<12;dst++)RELEASE(g_nativeBlend[src][dst]);
+    for(src=2;src<=3;src++)RELEASE(g_nativeCull[src]);
     RELEASE(g_dssRead);
     RELEASE(g_scopeSRV); RELEASE(g_scopeRtv); RELEASE(g_scopeDsv); RELEASE(g_scopeTex);
     RELEASE(g_scopeVB); RELEASE(g_cbScope); RELEASE(g_vsScope); RELEASE(g_psScope);

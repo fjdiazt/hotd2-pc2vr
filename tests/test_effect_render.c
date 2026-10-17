@@ -7,6 +7,7 @@
 static ID3D11Texture2D *target,*staging;
 static ID3D11RenderTargetView *rtv;
 static ID3D11DepthStencilView *dsv;
+static int reverse_winding;
 static void check_effect(DWORD colour,unsigned style,int textured,int expected,int sharp)
 {
     float matrix[16],clear[]={.4f,.4f,.4f,1};
@@ -22,6 +23,9 @@ static void check_effect(DWORD colour,unsigned style,int textured,int expected,i
             g_local[i].atlas_x=g_local[i].atlas_y=.5f/4096;
             g_local[i].atlas_w=g_local[i].atlas_h=1.0f/4096;
         }
+    }
+    if(reverse_winding) {
+        Vc2Vertex swap=g_local[1];g_local[1]=g_local[2];g_local[2]=swap;
     }
     uploadVerts();mIdent(matrix);
     ID3D11DeviceContext_ClearRenderTargetView(g_ctx,rtv,clear);
@@ -63,9 +67,15 @@ int main(void)
         check_effect(0x80FFFFFF,hotd_style(1,5,6,1,0,0,8,0),1,179,sharp);
         check_effect(0x80FFFFFF,hotd_style(1,5,6,1,1,1,5,127),1,102,sharp);
         check_effect(0x80FFFFFF,hotd_style(1,5,5,0,1,0,8,0),1,90,sharp);
+        for(reverse_winding=0;reverse_winding<2;reverse_winding++) {
+            check_effect(0xFFFFFFFF,1u<<22,0,255,sharp); /* D3DCULL_NONE */
+            check_effect(0xFFFFFFFF,2u<<22,0,reverse_winding?255:102,sharp); /* D3DCULL_CW */
+            check_effect(0xFFFFFFFF,3u<<22,0,reverse_winding?102:255,sharp); /* D3DCULL_CCW */
+        }
+        reverse_winding=0;
     }
     ID3D11RenderTargetView_Release(rtv);ID3D11DepthStencilView_Release(dsv);
     ID3D11Texture2D_Release(target);ID3D11Texture2D_Release(staging);releaseGraphics();
-    puts("Effect shaders: black shadows, splash opacity, alpha test and native blend factors passed (world/sharp).");
+    puts("Effect rendering: shadows, opacity, alpha test, native blending and CW/CCW/no culling passed (world/sharp).");
     return 0;
 }
