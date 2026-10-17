@@ -18,6 +18,27 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes)
 
 int main(void)
 {
+    char temp[MAX_PATH],ini[MAX_PATH];
+    assert(GetTempPathA(MAX_PATH,temp) && GetTempFileNameA(temp,"htc",0,ini));
+    assert(!readCheats(ini));
+    unsigned rate;
+    assert(readRapidRate(ini,&rate) && rate==3);
+    assert(WritePrivateProfileStringA("vr","rapid_fire_rate","5",ini));
+    assert(readRapidRate(ini,&rate) && rate==5);
+    assert(WritePrivateProfileStringA("vr","rapid_fire_rate","invalid",ini));
+    assert(!readRapidRate(ini,&rate));
+    assert(cheatArg("--infinite-ammo")==HOTD_CHEAT_AMMO);
+    assert(cheatArg("--infinite-lives")==HOTD_CHEAT_LIVES);
+    assert(cheatArg("--rapid-fire")==HOTD_CHEAT_RAPID);
+    assert(!cheatArg("--infinite-amm"));
+    assert(WritePrivateProfileStringA("vr","infinite_ammo","1",ini));
+    assert(readCheats(ini)==HOTD_CHEAT_AMMO);
+    assert(WritePrivateProfileStringA("vr","infinite_lives","1",ini));
+    assert(WritePrivateProfileStringA("vr","rapid_fire","1",ini));
+    assert(readCheats(ini)==HOTD_CHEAT_MASK);
+    assert(WritePrivateProfileStringA("vr","infinite_ammo","0",ini));
+    assert(readCheats(ini)==(HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID));
+    assert(DeleteFileA(ini));
     const XrViewStateFlags tracked=XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT|
         XR_VIEW_STATE_POSITION_TRACKED_BIT|XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
     assert(!headPoseReady(0,XR_SESSION_STATE_READY,XR_SUCCESS,2,tracked));
@@ -31,6 +52,12 @@ int main(void)
         XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT));
     assert(!headPoseReady(1,XR_SESSION_STATE_FOCUSED,XR_SUCCESS,2,0));
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
+    g_cheatFlags=HOTD_CHEAT_MASK;pushCheats();
+    assert(g_frame->cheat_flags==HOTD_CHEAT_MASK && !g_frame->aim_seq && !g_frame->aim_buttons);
+    assert(g_frame->rapid_fire_rate==3);
+    g_cfgRapidRate=5;pushCheats();assert(g_frame->rapid_fire_rate==5);
+    g_cfgRapidRate=3;
+    g_cheatFlags=0;pushCheats();assert(!g_frame->cheat_flags);
     g_frame->magic=VC2_SHARE_MAGIC;g_frame->version=VC2_SHARE_VERSION;
     g_frame->seq=g_frame->atlas_seq=2;g_frame->frame=1;g_frame->vertex_count=3;
     g_frame->verts[0].x=11;g_frame->atlas[0]=111;
@@ -50,6 +77,6 @@ int main(void)
     oldAtlas=g_atlPix;
     assert(pullFrame() && g_local[0].x==33 && g_atlPix==oldAtlas && g_atlPix[0]==222);
     free(g_frame);
-    puts("Frame snapshot: matched texture/geometry generations and rejected torn copies passed.");
+    puts("Viewer: INI/CLI cheats, separate cheat heartbeat and coherent frame snapshots passed.");
     return 0;
 }

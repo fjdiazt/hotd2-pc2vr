@@ -7,7 +7,7 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 3
+#define VC2_SHARE_VERSION 5
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960
@@ -19,6 +19,10 @@
 #define VC2_BTN_RELOAD 8u
 #define VC2_BTN_UP 16u
 #define VC2_BTN_DOWN 32u
+#define HOTD_CHEAT_AMMO 256u
+#define HOTD_CHEAT_LIVES 512u
+#define HOTD_CHEAT_RAPID 1024u
+#define HOTD_CHEAT_MASK (HOTD_CHEAT_AMMO|HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID)
 
 #pragma pack(push, 4)
 typedef struct {
@@ -50,8 +54,11 @@ typedef struct {
     Vc2Vertex verts[VC2_MAX_VERTS];
     uint32_t screen[VC2_SCREEN_MAX_W * VC2_SCREEN_MAX_H];
     uint32_t atlas[VC2_ATLAS_W * VC2_ATLAS_H];
+    volatile uint32_t cheat_flags,cheat_tick; /* Viewer -> game; independent of gun ownership. */
+    volatile uint32_t rapid_fire_rate;
 } Vc2Frame;
 #pragma pack(pop)
 _Static_assert(sizeof(Vc2Vertex) == 48, "vertex layout changed");
 _Static_assert(offsetof(Vc2Frame, verts) == 156, "frame layout changed");
+_Static_assert(offsetof(Vc2Frame,cheat_flags)==83544220 && sizeof(Vc2Frame)==83544232,"cheat layout changed");
 #endif

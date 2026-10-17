@@ -3,9 +3,28 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <math.h>
+#include <stdlib.h>
 #include "hotd_share.h"
 
 typedef struct { unsigned held,action; } HotdTrigger;
+typedef struct { uint32_t at; unsigned active; } HotdRapid;
+static inline int hotd_parse_rapid_rate(const char *text,unsigned *out)
+{
+    char *end;
+    unsigned long rate;
+    if(!text || *text<'0' || *text>'9')return 0;
+    rate=strtoul(text,&end,10);
+    if(*end || rate<1 || rate>30)return 0;
+    *out=(unsigned)rate;return 1;
+}
+static inline int hotd_rapid_fire(HotdRapid *repeat,int held,int enabled,unsigned rate,uint32_t now)
+{
+    if(!held || !enabled || rate<1 || rate>30){repeat->active=0;return 0;}
+    if(!repeat->active || (uint64_t)(uint32_t)(now-repeat->at)*rate>=1000) {
+        repeat->active=1;repeat->at=now;return 1;
+    }
+    return 0;
+}
 static inline unsigned hotd_menu_stick(unsigned previous,int active,float y)
 {
     if(!active || !isfinite(y) || fabsf(y)>1.0001f)return 0;

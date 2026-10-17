@@ -1,7 +1,11 @@
 param(
     [string]$GameExe = 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe',
     [ValidateSet('VR','Window','Stereo')][string]$Mode = 'VR',
-    [int]$Seconds = 0
+    [int]$Seconds = 0,
+    [switch]$InfiniteAmmo,
+    [switch]$InfiniteLives,
+    [switch]$RapidFire,
+    [ValidateRange(1,30)][int]$RapidFireRate = 3
 )
 $ErrorActionPreference = 'Stop'
 $out = Join-Path $PSScriptRoot 'build'
@@ -14,5 +18,9 @@ $viewerArgs = @()
 if ($Mode -eq 'Window') { $viewerArgs += '--window' }
 if ($Mode -eq 'Stereo') { $viewerArgs += '--stereo' }
 if ($Seconds -gt 0) { $viewerArgs += '--seconds', "$Seconds" }
+if ($InfiniteAmmo) { $viewerArgs += '--infinite-ammo' }
+if ($InfiniteLives) { $viewerArgs += '--infinite-lives' }
+if ($RapidFire) { $viewerArgs += '--rapid-fire' }
+if ($PSBoundParameters.ContainsKey('RapidFireRate')) { $viewerArgs += '--rapid-fire-rate', "$RapidFireRate" }
 & "$out\HOTD2VR.exe" @viewerArgs
 exit $LASTEXITCODE

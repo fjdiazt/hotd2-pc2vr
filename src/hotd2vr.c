@@ -200,6 +200,27 @@ static int g_cfgZoomSmooth = 55;  /* %% of the zoomed view's wobble to damp out 
 static char g_cfgGun[MAX_PATH];   /* OBJ to draw in the gun hand; empty = none */
 static int  g_cfgGunScale = 100;  /* percent */
 static int  g_cfgReloadMs = 180;  /* reload flick, ms */
+static unsigned g_cheatFlags;
+static unsigned g_cfgRapidRate=3;
+static int readRapidRate(const char *path,unsigned *rate)
+{
+    char text[32];
+    GetPrivateProfileStringA("vr","rapid_fire_rate","3",text,sizeof(text),path);
+    return hotd_parse_rapid_rate(text,rate);
+}
+static unsigned readCheats(const char *path)
+{
+    return (GetPrivateProfileIntA("vr","infinite_ammo",0,path)?HOTD_CHEAT_AMMO:0) |
+        (GetPrivateProfileIntA("vr","infinite_lives",0,path)?HOTD_CHEAT_LIVES:0) |
+        (GetPrivateProfileIntA("vr","rapid_fire",0,path)?HOTD_CHEAT_RAPID:0);
+}
+static unsigned cheatArg(const char *arg)
+{
+    if(!strcmp(arg,"--infinite-ammo"))return HOTD_CHEAT_AMMO;
+    if(!strcmp(arg,"--infinite-lives"))return HOTD_CHEAT_LIVES;
+    if(!strcmp(arg,"--rapid-fire"))return HOTD_CHEAT_RAPID;
+    return 0;
+}
 
 static void loadCfg(void)
 {
@@ -207,6 +228,10 @@ static void loadCfg(void)
     DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
     while (n > 0 && path[n - 1] != '\\') n--;
     lstrcpyA(path + n, "HOTD2VR.ini");
+    g_cheatFlags=readCheats(path);
+    if(!readRapidRate(path,&g_cfgRapidRate)) {
+        note("Invalid rapid_fire_rate; using 3 shots/sec (allowed 1..30).\n");g_cfgRapidRate=3;
+    }
     g_cfgMsaa  = (int)GetPrivateProfileIntA("vr", "msaa", 4, path);
     g_cfgDepth = (int)GetPrivateProfileIntA("vr", "depth", 0, path);
     g_cfgDepthBias = (int)GetPrivateProfileIntA("vr", "depthbias", 2, path);
@@ -287,11 +312,20 @@ static int openShare(void)
     return 1;
 }
 
+static void pushCheats(void)
+{
+    if(!g_frame)return;
+    g_frame->rapid_fire_rate=g_cfgRapidRate;
+    g_frame->cheat_flags=g_cheatFlags;
+    MemoryBarrier();
+    g_frame->cheat_tick=GetTickCount();
+}
 /* seqlock read: copy, then check nothing moved underneath us */
 static int pullFrame(void)
 {
     unsigned a, b, n, i, atlasSeq;
     if (!g_frame) return 0;
+    pushCheats();
     for (i = 0; i < 8; i++) {
         HotdLens lens;
         unsigned lensValid,addStart,l3End,ovStart,frameNo;
@@ -3571,17 +3605,28 @@ int main(int argc, char **argv)
     int window = 0, stereo = 0, seconds = 0, i;
     loadCfg();
     for (i = 1; i < argc; i++) {
+        unsigned cheat=cheatArg(argv[i]);
         if (!strcmp(argv[i], "--window")) window = 1;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
         else if (!strcmp(argv[i], "--seconds") && i+1 < argc) seconds = atoi(argv[++i]);
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N]\n"); return 2; }
+        else if(!strcmp(argv[i],"--rapid-fire-rate")) {
+            if(i+1>=argc || !hotd_parse_rapid_rate(argv[++i],&g_cfgRapidRate)) {
+                note("--rapid-fire-rate requires an integer from 1 to 30 (shots/sec).\n");return 2;
+            }
+        }
+        else if(cheat)g_cheatFlags|=cheat;
+        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--infinite-ammo] [--infinite-lives] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
     for (i = 0; i < 100 && !openShare(); i++) Sleep(100);
     if (!g_frame) { note("No HOTD2 bridge. Start through Start-HOTD2.ps1.\n"); return 1; }
     if (seconds > 0) g_stopAt = GetTickCount() + (DWORD)seconds*1000;
     note("Bridge connected; input profile %s\n", g_frame->input_supported ? "verified" : "unavailable");
+    note("Cheats requested: ammo=%u lives=%u rapid_fire=%u (up to %u shots/sec; native weapon handling applies)\n",
+        !!(g_cheatFlags&HOTD_CHEAT_AMMO),!!(g_cheatFlags&HOTD_CHEAT_LIVES),!!(g_cheatFlags&HOTD_CHEAT_RAPID),g_cfgRapidRate);
     if (stereo) runStereo(); else if (window) runWindow(); else runVR();
+    g_cheatFlags=0;
+    pushCheats();
     pushAim(320, 240, 0); pushAim2(320, 240, 0);
     if (g_gameProc) CloseHandle(g_gameProc);
     UnmapViewOfFile(g_frame); CloseHandle(g_map);

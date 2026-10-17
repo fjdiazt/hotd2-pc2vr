@@ -11,9 +11,9 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", action="store_true", help="briefly own both gun axes, without firing")
 args = parser.parse_args()
-SIZE = 83544220
+SIZE = 83544232
 memory = mmap.mmap(-1, SIZE, tagname=r"Local\HOTD2_PC2VR_Frame", access=mmap.ACCESS_WRITE if args.input else mmap.ACCESS_READ)
-assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 3), "HOTD2 bridge not running or protocol mismatch"
+assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 5), "HOTD2 bridge not running or protocol mismatch"
 
 def snapshot():
     deadline = time.monotonic() + 3

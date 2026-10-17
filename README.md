@@ -44,9 +44,35 @@ Either thumbstick navigates the game-mode menu up/down through native arrow keys
 
 Desktop preview: W/A/S/D move, mouse drag turns, R resets, M toggles the captured game panel, Escape closes the viewer. Stereo preview provides a desktop check without a headset.
 
+## Optional cheats
+
+All default off. Enable per launch through the launcher:
+
+```powershell
+.\Start-HOTD2.ps1 -Mode VR -InfiniteLives -InfiniteAmmo -RapidFire -RapidFireRate 3
+```
+
+For a viewer attached to an already injected game, use `build\HOTD2VR.exe --infinite-lives --infinite-ammo --rapid-fire --rapid-fire-rate 3`. These flag names match VC2VR for lives/ammo. Omit unwanted flags. Flags enable cheats for that viewer session without changing the INI. The rate option overrides the INI for that launch; it does not enable rapid fire by itself.
+
+Persistent settings live in `build\HOTD2VR.ini`:
+
+```ini
+[vr]
+infinite_lives=1
+infinite_ammo=1
+rapid_fire=1
+rapid_fire_rate=3
+```
+
+Lives/ammo use the game's native cheat flags for both players, including outside akimbo. They also work with desktop preview. Existing game settings are restored when the viewer closes or its cheat heartbeat expires after 500 ms. The original `Hod2.ini` is untouched. If ammo is already empty when enabling the cheat, reload once.
+
+Rapid fire repeats a held VR trigger at up to `rapid_fire_rate` shots/sec, independently per hand in akimbo. Default is **3 shots/sec**; allowed values are whole numbers 1–30. Native frame timing and weapon handling can lower the actual rate. Reload gestures still take priority; menus, paused play, cutscenes, inactive players and stale input receive no repeated shots. VR gun recoil/haptics retain their existing trigger-press behavior.
+
+Desktop testing at the earlier 10 shots/sec setting observed 11 shots with ammo held at 6, then ammo dropping to 0 after disabling infinite ammo. Native flag activation/restoration and desktop command-line delivery passed. After headset comparisons, user accepted 3 shots/sec as the default. Damage protection, P2 gameplay and Original-mode weapons still need runtime confirmation.
+
 ## Validation
 
-`build.ps1` runs projection/FVF/prompt, native trigger-edge, atlas allocation, cache eviction, frame-snapshot and offscreen D3D11 effect-pixel checks. These checks start neither the game nor OpenXR. With attract gameplay or a game running through the injected bridge:
+`build.ps1` runs projection/FVF/prompt, native trigger-edge, cheat configuration/restoration, rapid-fire timing/guards, atlas allocation, cache eviction, frame-snapshot and offscreen D3D11 effect-pixel checks. These checks start neither the game nor OpenXR. With attract gameplay or a game running through the injected bridge:
 
 ```powershell
 python .\tests\test_live.py

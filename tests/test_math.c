@@ -17,6 +17,42 @@ int main(void)
     HotdAtlas atlas={0};
     unsigned ax,ay,bx,by;
     HotdTrigger trigger={0},other={0};
+    HotdRapid repeat={0},repeat2={0};
+    assert(hotd_rapid_fire(&repeat,1,1,10,0));
+    assert(!hotd_rapid_fire(&repeat,1,1,10,99));
+    assert(hotd_rapid_fire(&repeat,1,1,10,100));
+    assert(hotd_rapid_fire(&repeat2,1,1,10,125)); /* Independent hands. */
+    assert(!hotd_rapid_fire(&repeat,1,1,10,199));
+    assert(!hotd_rapid_fire(&repeat,0,1,10,200));
+    assert(hotd_rapid_fire(&repeat,1,1,10,201)); /* Repress fires immediately. */
+    assert(!hotd_rapid_fire(&repeat,1,0,10,500));
+    assert(hotd_rapid_fire(&repeat,1,1,10,501));
+    repeat.at=UINT32_MAX-49;repeat.active=1;
+    assert(!hotd_rapid_fire(&repeat,1,1,10,49));
+    assert(hotd_rapid_fire(&repeat,1,1,10,50)); /* Tick counter wraps. */
+    repeat.active=0;
+    assert(hotd_rapid_fire(&repeat,1,1,2,0));
+    assert(!hotd_rapid_fire(&repeat,1,1,2,499));
+    assert(hotd_rapid_fire(&repeat,1,1,2,500));
+    repeat.active=0;
+    assert(hotd_rapid_fire(&repeat,1,1,4,0));
+    assert(!hotd_rapid_fire(&repeat,1,1,4,249));
+    assert(hotd_rapid_fire(&repeat,1,1,4,250));
+    repeat.active=0;
+    assert(hotd_rapid_fire(&repeat,1,1,3,0));
+    assert(!hotd_rapid_fire(&repeat,1,1,3,333));
+    assert(hotd_rapid_fire(&repeat,1,1,3,334));
+    assert(!hotd_rapid_fire(&repeat,1,1,0,1000));
+    assert(!hotd_rapid_fire(&repeat,1,1,31,1000));
+    assert(hotd_rapid_fire(&repeat,1,1,30,1000));
+    assert(!hotd_rapid_fire(&repeat,1,1,30,1033));
+    assert(hotd_rapid_fire(&repeat,1,1,30,1034));
+    unsigned rate=99;
+    assert(hotd_parse_rapid_rate("2",&rate) && rate==2);
+    assert(hotd_parse_rapid_rate("1",&rate) && rate==1);
+    assert(hotd_parse_rapid_rate("30",&rate) && rate==30);
+    const char *bad_rates[]={"0","31","-1","2.5","2x",""," 2","999999999999999999999999999"};
+    for(unsigned i=0;i<sizeof(bad_rates)/sizeof(*bad_rates);i++)assert(!hotd_parse_rapid_rate(bad_rates[i],&rate) && rate==30);
     assert(hotd_menu_stick(0,1,.7f)==VC2_BTN_UP);
     assert(hotd_menu_stick(VC2_BTN_UP,1,.4f)==VC2_BTN_UP);
     assert(!hotd_menu_stick(VC2_BTN_UP,1,.2f));

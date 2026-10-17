@@ -29,6 +29,10 @@ static BYTE *game_base;
 static int input_ready;
 static DWORD aim_seq, aim_tick;
 static unsigned buttons[2];
+static int cheats_supported;
+static unsigned cheat_owned;
+static BYTE saved_cheats[2][2];
+static HotdRapid rapid_fire[2];
 static char ini_path[MAX_PATH];
 static IDirect3DDevice7 *active_device;
 static void publish_frame(void);
@@ -95,6 +99,29 @@ static int active_input(void)
     return aim_tick && GetTickCount()-aim_tick < 500;
 }
 
+static int native_cheat_profile(const BYTE *base)
+{
+    static const BYTE life[]={0x8A,0x0C,0x85,0xD8,0x9F,0x9C,0x00};
+    static const BYTE ammo[]={0x8A,0x51,0x79},ammo_original[]={0x8A,0x42,0x79};
+    return !memcmp(base+0x15342,life,sizeof(life)) && !memcmp(base+0x15464,life,sizeof(life)) &&
+        !memcmp(base+0x149D9,ammo,sizeof(ammo)) && !memcmp(base+0x14C47,ammo_original,sizeof(ammo_original));
+}
+
+static void native_cheats(unsigned requested)
+{
+    const unsigned bits[]={HOTD_CHEAT_LIVES,HOTD_CHEAT_AMMO};
+    requested=cheats_supported ? requested&(HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO):0;
+    for(unsigned kind=0;kind<2;kind++)for(unsigned p=0;p<2;p++) {
+        BYTE *flag=game_base+0x5C9FD8+p*0x7C+kind;
+        if(requested&bits[kind]) {
+            if(!(cheat_owned&bits[kind]))saved_cheats[p][kind]=*flag;
+            *flag=1; /* Use native cheats, including item weapons and civilian penalties. */
+        } else if(cheat_owned&bits[kind])*flag=saved_cheats[p][kind];
+    }
+    if(requested!=cheat_owned)logline("native cheats: ammo=%u lives=%u",!!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES));
+    cheat_owned=requested;
+}
+
 static void update_input(void)
 {
     int active = active_input();
@@ -141,7 +168,9 @@ static DWORD __cdecl native_input(void)
     static unsigned previous[2];
     unsigned p;
     DWORD result=native_input_original();
+    unsigned requested=(DWORD)(GetTickCount()-frame->cheat_tick)<500 ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
     update_input();
+    native_cheats(requested);
     for(p=0;p<2;p++) {
         if(active_input() && (!p || frame->akimbo)) {
             HotdGunInput *gun=(HotdGunInput *)(game_base+0x5C8FC0+p*0x28);
@@ -149,6 +178,13 @@ static DWORD __cdecl native_input(void)
             unsigned action=hotd_apply_gun_buttons(gun,buttons[p],previous+p);
             previous[p]|=buttons[p]&VC2_BTN_BACK;
             if(cancel_pressed)action=VC2_BTN_RELOAD;
+            if(hotd_rapid_fire(rapid_fire+p,
+                (buttons[p]&VC2_BTN_FIRE) && !(buttons[p]&VC2_BTN_RELOAD) && !cancel_pressed,
+                (requested&HOTD_CHEAT_RAPID) && *(DWORD *)(game_base+0x5C8E98)==6 &&
+                *(short *)(game_base+0x5A5C62+p*0x130)==5 && *(DWORD *)(game_base+0x5C8E00) &&
+                !*(short *)(game_base+0x5A1A00),frame->rapid_fire_rate,GetTickCount())) {
+                gun->fire=1;action=VC2_BTN_FIRE;
+            }
             if(action==VC2_BTN_RELOAD) {
                 int accepted=native_reload(p,gun);
                 logline("native reload P%u: queued=%d ammo_before=%d phase=%lu status=%d control=%u",p+1,accepted,
@@ -158,7 +194,7 @@ static DWORD __cdecl native_input(void)
             if(action==VC2_BTN_FIRE)
                 logline("native trigger P%u: valid=%d fire=%d ammo=%d",p+1,gun->valid,gun->fire,
                     *(short *)(game_base+0x5A5C7C+p*0x130));
-        } else previous[p]=0;
+        } else {previous[p]=0;rapid_fire[p].active=0;}
     }
     return result;
 }
@@ -727,6 +763,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     frame->input_supported=input_ready;
     logline("HOTD2 bridge pid=%lu input_profile=%d",(unsigned long)GetCurrentProcessId(),input_ready);
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
+    cheats_supported=native_cheat_profile(game_base);
+    logline("native cheat profile: %s",cheats_supported?"verified":"unsupported; native flags unchanged");
     logline("native mesh screen-edge culling: %s",relax_mesh_culling(game_base+0xA7F81)?"relaxed":"unsupported; unchanged");
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
