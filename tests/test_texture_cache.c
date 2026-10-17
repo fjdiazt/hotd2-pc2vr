@@ -5,6 +5,9 @@
 typedef struct { IDirectDrawSurface7 iface; unsigned refs; } FakeSurface;
 static FakeSurface surfaces[1600],*selected;
 static DWORD pixels[128*128];
+static unsigned prompt_fallbacks;
+static int WINAPI fallback_prompt(HWND hwnd,LPCSTR text,LPCSTR caption,UINT flags)
+{(void)hwnd;(void)text;(void)caption;(void)flags;prompt_fallbacks++;return IDNO;}
 static ULONG WINAPI release_surface(IDirectDrawSurface7 *self)
 {
     FakeSurface *surface=(FakeSurface *)self;
@@ -53,6 +56,17 @@ int main(void)
         .GetRenderState=get_render_state,.GetTextureStageState=get_stage_state,.GetMaterial=get_material};
     IDirect3DDevice7 device={&device_vt};
     unsigned i,j,held=0;
+    original_message_box=fallback_prompt;
+    assert(device_message_box(NULL,"Are you sure you want to quit?","House of the Dead2",0x24)==IDYES);
+    assert(!prompt_fallbacks);
+    assert(device_message_box(NULL,"NVIDIA device will be used. \n","Attention",0x34)==IDYES);
+    assert(!prompt_fallbacks);
+    assert(device_message_box(NULL,"Graphics error","House of the Dead2",0x24)==IDNO);
+    assert(device_message_box(NULL,"Are you sure you want to quit?","Other game",0x24)==IDNO);
+    assert(device_message_box(NULL,"Are you sure you want to quit?","House of the Dead2",0x20)==IDNO);
+    assert(device_message_box(NULL,NULL,"House of the Dead2",0x24)==IDNO);
+    assert(device_message_box(NULL,"Are you sure you want to quit?",NULL,0x24)==IDNO);
+    assert(prompt_fallbacks==5);
     frame=calloc(1,sizeof(*frame));assert(frame);
     game_window=GetDesktopWindow();active_device=&device;
     DrawStyle style=read_draw_style(&device,0x112);

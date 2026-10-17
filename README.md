@@ -16,13 +16,13 @@ cd C:\gaming\hotd2-pc2vr
 .\Start-HOTD2.ps1 -Mode VR
 ```
 
-Close the existing game before starting a new session. The native quit confirmation can block closing: end only the intended `Hod2.exe` test process if necessary. `Start-HOTD2.ps1` defaults to `N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe`; `-GameExe` overrides it. `-Seconds 20` bounds a viewer test; the game continues running afterward. To reconnect a viewer to the running bridge, run `build\HOTD2VR.exe` directly (`--window` or `--stereo` for desktop).
+Close the existing game before starting a new session. Injected sessions accept the native quit confirmation automatically in desktop and VR modes. This bypasses the question whenever the game asks it; Back retains its existing behavior rather than becoming a new quit shortcut. `Start-HOTD2.ps1` defaults to `N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe`; `-GameExe` overrides it. `-Seconds 20` bounds a viewer test; the game continues running afterward. To reconnect a viewer to the running bridge, run `build\HOTD2VR.exe` directly (`--window` or `--stereo` for desktop).
 
 `build\HOTD2VR.ini` is the active configuration; subsequent builds preserve it. `HOTD2VR.ini` in the source root supplies defaults for a new build folder.
 
 ## Windowed startup
 
-The verified executable hardcodes mode 11 (640x480, 16-bit fullscreen). The bridge selects native mode 7 (640x480, 32-bit windowed) in memory. It automatically accepts only the native renderer-selection question ending in `will be used.`; other error/confirmation dialogs remain intact. Background rendering prevents the native activation handler from suspending rendering when the viewer takes focus.
+The verified executable hardcodes mode 11 (640x480, 16-bit fullscreen). The bridge selects native mode 7 (640x480, 32-bit windowed) in memory. It automatically accepts the native renderer-selection question ending in `will be used.` and the exact native `Are you sure you want to quit?` question. Other dialogs retain their normal behavior. Background rendering prevents the native activation handler from suspending rendering when the viewer takes focus.
 
 No external wrapper, game INI change or on-disk executable edit is required. Launching `Hod2.exe` normally retains its original behavior. `[bridge] windowed=0` or `background=0` disables the respective change for the next injected launch.
 

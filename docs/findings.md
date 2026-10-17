@@ -9,7 +9,8 @@
 Addresses below are absolute for image base `0x400000`. Hooks use RVAs plus the running image base and validate original instructions.
 
 - `0x49E461`: `push 0x0B` selects entry 11 of the native video-mode table at `0x5988F0`. Entry 7 is 640x480, 32-bit windowed. Changing only the immediate selects that existing mode; no external DirectDraw wrapper is needed. Windowed launch was observed on the desktop.
-- `0x4A52FD` through `0x4A5340`: native device-selection loop asks a Yes/No question when multiple graphics candidates exist. `AllDevicePass` does not suppress this. An exact `MessageBoxA` prompt recognizer selects the native default; error and quit confirmation dialogs remain intact.
+- `0x4A52FD` through `0x4A5340`: native device-selection loop asks a Yes/No question when multiple graphics candidates exist. `AllDevicePass` does not suppress this. An exact `MessageBoxA` prompt recognizer selects the native default; unrelated error dialogs remain intact.
+- `0x49E7BB` through `0x49E7D7`: native quit prompt calls `MessageBoxA` with flags `0x24`, title `House of the Dead2`, and text `Are you sure you want to quit?`. Only `IDNO` (7) cancels closing. The existing bridge import hook now returns `IDYES` for this exact prompt, covering desktop and VR-triggered game exits in injected sessions. Direct unmodified game launches retain their confirmation. The actual hook self-check covers quit acceptance, renderer selection and unrelated/null prompt fallback.
 - `0x4A66E4`: native `WM_ACTIVATEAPP` handling. The guarded activation-branch patch preserves rendering when the VR viewer takes foreground focus.
 - `0x4A59C0`, `0x4A5A00`, `0x4A5A40`: native XYZ triangle strips, transformed/lit strips, and XYZ triangle lists. These are the stable capture seams. Direct3D rewrites optimized draw-method slots after device setup, so hooking `DrawPrimitive` only at creation stopped capturing during gameplay. The copied 9-byte prologues contain no relative branches.
 - `0x572304`: D3DX context `UpdateFrame` vtable slot, initially `0x4BA3FF`. This marks complete frames; publishing each `EndScene` emitted partial or empty frames.
@@ -59,4 +60,10 @@ The complete build passed: material conversion and trigger checks, 1,600-surface
 
 User confirmed scene/gun visibility, aiming, firing and improved appearance after material/blending correction. Atlas changes alone did not eliminate the reported white artifacts. Correct head tracking, stereo comfort, scale, reloading, HUD depth, player 2 joining, long-session texture-cache behavior and full-game coverage still need acceptance. Do not call the conversion finished before those checks.
 
-Do not run the input self-check while someone is using the viewer. Do not kill unrelated VR services or other game processes. The native quit confirmation can block a graceful close; terminate only the explicitly identified HOTD2 test process when a rebuild requires it.
+## Quit confirmation bypass
+
+The exact quit question now returns Yes through the existing `MessageBoxA` hook, with no extra config or on-disk game patch. Scope is injected desktop/VR sessions. Unit checks against the actual hook first reproduced the missing auto-accept, then passed after implementation; unrelated questions, wrong title/button flags and null inputs still reach the original API. Full build and offline checks passed.
+
+Two native `WM_CLOSE` tests auto-accepted the quit question and the game exited normally within five seconds, verified by process handle and bridge log. A separate IPC `VC2_BTN_BACK` test during startup did not exit within five seconds; Back was not changed into an unconditional quit command. That test process was subsequently closed through the verified window-close path. User then tested VR quitting and confirmed it works; the bridge logged auto-acceptance and both game/viewer processes exited. Logs are under `build/quit-desktop-test.log` and `build/quit-vr-input-test.log`.
+
+Do not run the input self-check while someone is using the viewer. Do not kill unrelated VR services or other game processes. Old or uninjected sessions can still show the quit confirmation; terminate only the explicitly identified HOTD2 test process when a rebuild requires it.

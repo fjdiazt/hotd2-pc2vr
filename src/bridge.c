@@ -44,6 +44,10 @@ static void logline(const char *fmt, ...)
 
 static int WINAPI device_message_box(HWND hwnd,LPCSTR text,LPCSTR caption,UINT flags)
 {
+    if(hotd_quit_prompt(text,caption,flags)) {
+        logline("native quit confirmation auto-accepted");
+        return IDYES;
+    }
     if(hotd_device_prompt(text,caption,flags)) {
         logline("native renderer auto-selected: %s",text);
         return IDYES;
