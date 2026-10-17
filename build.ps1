@@ -1,0 +1,42 @@
+param()
+$ErrorActionPreference = 'Stop'
+$root = $PSScriptRoot
+$out = Join-Path $root 'build'
+New-Item -ItemType Directory -Path $out -Force | Out-Null
+$gcc = (Get-Command gcc -ErrorAction Stop).Source
+if ((& $gcc -dumpmachine) -ne 'i686-w64-mingw32') { throw '32-bit MinGW GCC required for game bridge.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -shared -static-libgcc '-Wl,--kill-at' -o "$out\HOTD2Bridge.dll" "$root\src\bridge.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Bridge build failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\HOTD2Launch.exe" "$root\src\launch.c"
+if ($LASTEXITCODE) { throw 'Launcher build failed.' }
+& $gcc -std=c11 -Wall -Wextra -o "$out\test_math.exe" "$root\tests\test_math.c"
+if ($LASTEXITCODE) { throw 'Math test build failed.' }
+& "$out\test_math.exe"
+if ($LASTEXITCODE) { throw 'Math test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_texture_cache.exe" "$root\tests\test_texture_cache.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Texture cache test build failed.' }
+& "$out\test_texture_cache.exe"
+if ($LASTEXITCODE) { throw 'Texture cache test failed.' }
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+$vs = & $vswhere -latest -property installationPath
+if (!$vs) { throw 'Visual Studio C++ tools required for x64 viewer.' }
+$batch = @"
+@call "$vs\VC\Auxiliary\Build\vcvars64.bat" >nul
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\src\hotd2vr.c" /Fo"$out\hotd2vr.obj" /Fe"$out\HOTD2VR.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+@if errorlevel 1 exit /b 1
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_frame_snapshot.c" /Fo"$out\test_frame_snapshot.obj" /Fe"$out\test_frame_snapshot.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+@if errorlevel 1 exit /b 1
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_effect_render.c" /Fo"$out\test_effect_render.obj" /Fe"$out\test_effect_render.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+"@
+[IO.File]::WriteAllText("$out\compile-viewer.cmd", $batch)
+& $env:ComSpec /d /c "$out\compile-viewer.cmd"
+if ($LASTEXITCODE) { throw 'Viewer build failed.' }
+& "$out\test_frame_snapshot.exe"
+if ($LASTEXITCODE) { throw 'Frame snapshot test failed.' }
+& "$out\test_effect_render.exe"
+if ($LASTEXITCODE) { throw 'Effect shader test failed.' }
+Copy-Item "$root\assets\gun\*" -Destination $out -Force
+if (!(Test-Path "$out\HOTD2VR.ini")) { Copy-Item "$root\HOTD2VR.ini" $out }
+$loader = 'N:\games\systems\pcvr\bin\VirtuaCop2VR\VR\openxr_loader.dll'
+if (!(Test-Path "$out\openxr_loader.dll") -and (Test-Path $loader)) { Copy-Item $loader $out }
+Write-Output "Build and offline checks passed: $out"
