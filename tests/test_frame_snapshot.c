@@ -18,6 +18,18 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes)
 
 int main(void)
 {
+    const XrViewStateFlags tracked=XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT|
+        XR_VIEW_STATE_POSITION_TRACKED_BIT|XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
+    assert(!headPoseReady(0,XR_SESSION_STATE_READY,XR_SUCCESS,2,tracked));
+    assert(!headPoseReady(0,XR_SESSION_STATE_VISIBLE,XR_SUCCESS,2,tracked));
+    for(unsigned bit=1;bit<=8;bit<<=1)
+        assert(!headPoseReady(0,XR_SESSION_STATE_FOCUSED,XR_SUCCESS,2,tracked&~(XrViewStateFlags)bit));
+    assert(!headPoseReady(0,XR_SESSION_STATE_FOCUSED,XR_ERROR_RUNTIME_FAILURE,2,tracked));
+    assert(!headPoseReady(0,XR_SESSION_STATE_FOCUSED,XR_SUCCESS,1,tracked));
+    assert(headPoseReady(0,XR_SESSION_STATE_FOCUSED,XR_SUCCESS,2,tracked));
+    assert(headPoseReady(1,XR_SESSION_STATE_VISIBLE,XR_SUCCESS,2,
+        XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT));
+    assert(!headPoseReady(1,XR_SESSION_STATE_FOCUSED,XR_SUCCESS,2,0));
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
     g_frame->magic=VC2_SHARE_MAGIC;g_frame->version=VC2_SHARE_VERSION;
     g_frame->seq=g_frame->atlas_seq=2;g_frame->frame=1;g_frame->vertex_count=3;

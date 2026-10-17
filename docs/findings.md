@@ -58,7 +58,47 @@ The complete build passed: material conversion and trigger checks, 1,600-surface
 
 ## Pending acceptance
 
-User confirmed scene/gun visibility, aiming, firing and improved appearance after material/blending correction. Atlas changes alone did not eliminate the reported white artifacts. Correct head tracking, stereo comfort, scale, reloading, HUD depth, player 2 joining, long-session texture-cache behavior and full-game coverage still need acceptance. Do not call the conversion finished before those checks.
+User confirmed scene/gun visibility, aiming, firing, immersive reload and improved appearance after material/blending correction. Atlas changes alone did not eliminate the reported white artifacts. Revised reload thresholds, correct head tracking, stereo comfort, scale, HUD depth, player 2 joining, long-session texture-cache behavior and full-game coverage still need acceptance. Do not call the conversion finished before those checks.
+
+## Native mode-selection menu alpha
+
+The clipped/black Arcade/Original/Training selection screen reproduces with the native windowed game and no bridge. Title artwork renders fully; keeping the mode menu focused does not resolve it. A native draw probe found successful draw calls and intact RGB artwork, but all nine sampled 32-bit menu textures had alpha zero. The game enables alpha testing with `GREATER_EQUAL`, reference 1, so those textures are discarded. Disabling alpha testing for those diagnostic draws restored the complete menu; the user confirmed it worked. This is independent of VR HUD distance.
+
+The native bitmap loaders at `0x49E9F0` and `0x49F100` use GDI `BitBlt` into DirectDraw surfaces. GDI copies opaque RGB artwork but leaves the ARGB destination alpha zero. The bridge now hooks surface `ReleaseDC` and repairs alpha only for returns to `0x49EAAB` and `0x49F1A9`, after the upload succeeds, and only for RGB/alpha surfaces with 32-bit pixels and an `0xFF000000` alpha mask. RGB remains unchanged; native alpha testing remains enabled. Other callers, 16-bit textures and surfaces without alpha are untouched. Both paths share the same repair.
+
+An asset-header scan found 47 BMP files under `tex`: 44 RGB24 and 3 indexed8, including game-mode labels, options, rankings, network/exit graphics, title images and publisher logos. These are opaque bitmap sources; the repair covers their affected uploads without texture-name rules. Original files remain unchanged. Offline checks cover caller selection, opaque alpha restoration with RGB preservation, skipped formats and failed locks. A fresh bridge-only desktop session restored the full mode menu without diagnostic DLLs (`build/menu-source-fix.png`); `build/HOTD2Bridge.log` records repaired uploads. Other screens and headset presentation still need visual acceptance. `--native-window` intentionally remains a baseline without the bridge repair.
+
+## Startup head-pose anchoring
+
+The user reported needing an initial manual recenter, as previously observed in Battle Pod. Current Battle Pod native-VR code (`C:\src\gaming\starwars-battlepod\.worktrees\native-vr\plugin\native-vr\TrackingMath.hpp`) requires FOCUSED plus position/orientation VALID and TRACKED before initial anchoring; its runtime notes describe VDXR changing origin between READY and FOCUSED. Both HOTD2 and the inspected VC2VR source previously anchored on the first renderable pair of views, ignoring locate failure and pose validity/focus.
+
+HOTD2 now checks successful `xrLocateViews`, exactly two views and valid position/orientation before rendering. Without an anchor (including a pending grip recenter), it additionally requires FOCUSED and both TRACKED flags. Waiting frames submit zero layers and cannot commit an origin. After centering, normal focus changes do not invalidate or replace it; valid inferred poses remain usable. The existing grip action still requests a new center on the next qualified frame. Logs include session transitions and centering flags/position. No timer or repeated automatic recenter was introduced; donor source remains unchanged.
+
+Offline regression checks reject READY/VISIBLE bootstrap samples, each missing validity/tracking flag, locate failure, incomplete stereo views and invalid later poses; they accept focused tracked startup and preserve established anchoring across loss of focus. Full build and checks passed (`build/startup-pose-build.log`). The subsequent headset test logged initial centering at session 5 (FOCUSED), flags `0xF`; the user confirmed startup centering works. The first launch exited unexpectedly before the game published a frame; its cause remains unknown. A fresh desktop game remained running, then the attached VR viewer remained running and centered successfully. That retry is the confirmed headset result.
+
+## Mode-menu thumbstick navigation
+
+The original VC2VR controller bindings used vertical stick motion for manual zoom and stick click to cycle the floating screen. These changed presentation instead of moving the native game-mode selection. Both controller profiles with sticks now bind vertical input to menu navigation; Vive trackpad vertical uses the same action. Stick click has no screen binding. Automatic menu-screen display remains; desktop M/Z diagnostic keys remain.
+
+Each hand engages at 0.65 deflection and releases inside 0.30; inactive/nonfinite input clears it. UP/DOWN travel as input bits with unchanged v3 layout. The bridge merges both hands, cancels opposing directions and injects native DirectInput arrow keys only during mode-selection phase 4. Native held-key repeat owns repetition. Gameplay receives no VR arrow injection. Existing Start/Back/grip and independent firing/reload remain. Tests cover stick deadzone/hysteresis, disconnect/nonfinite input, each hand's arrow route, opposing input, gameplay gating and watchdog release. Build/offline checks passed; headset navigation still needs acceptance. The user confirmed the preceding alpha repair restores the mode menu in VR.
+
+## Immersive reload
+
+User reported A pauses and B skips cutscenes, so face buttons are not reload bindings. After confirming reload works at 60 degrees in the headset, the user requested 50 degrees up and 45 degrees down. A fresh trigger pull reloads when `direction.y >= sin(50deg)` or `direction.y <= -sin(45deg)`. These are VR design choices, not Flycast thresholds. Each controller latches shot/reload until release; moving a held trigger between angles cannot change actions. Tracking loss disarms the current pull. Akimbo maintains separate hand states and commands.
+
+`VC2_BTN_RELOAD` is a new input bit; shared frame layout stays v3. During gameplay (native phase 6, active player status 5), mouse/gun control receives an invalid-aim trigger edge, which the native weapon code interprets as reload. Keyboard/joystick control receives the selected native control scheme's reload-button press mask. Both feed native reload handling; no ammo values are written by the bridge. Menu/inactive-player reload requests suppress firing and do not inject reload. A sends Enter, X sends the player's native Tab start key; neither sends Ctrl. Gun reload animation now follows the reload command, not A/X.
+
+The first headset reload test reached the bridge but every request logged `queued=0`: the guard incorrectly required status 4 (continue handler `0x414280`). Native player initialization at `0x41491A` selects status 5 from `0x579DEC` and installs active handler `0x413E90`, which calls weapon handler `0x414B90`. Corrected the guard and regression fixture to status 5; reload logs now include phase, status and control type. Failed-run logs were preserved in `build/reload-failed/`.
+
+After correction, all offline checks passed and a desktop-only smoke test logged `queued=1 phase=6 status=5 control=1`. That session remained in attract playback (`0x9C8E00=0`), so shots did not consume ammo and refill could not be validated. Test game closed normally; VR was not launched. Ask the user before future VR launches.
+
+Offline tests cover both sides of the distinct up/down thresholds, horizontal shots, action locking, independent hands, lost tracking, nonfinite directions, native gun and keyboard reload paths, preserving physical button bits, one press edge per pull, menu/player guards, watchdog expiry and separate pause keys. User confirmed ammo reload after the status-5 correction. Revised angle comfort, pause behavior and both-player operation still need runtime acceptance.
+
+## Reload/Cancel face buttons
+
+After checking PC native input, B/Y now send each player's Reload/Cancel key (`DIK_RCONTROL`/`DIK_LCONTROL`) instead of Escape. Native weapon handlers at `0x414B13`/`0x414E29` set the cutscene skip request at `0x9A1A18` from Cancel input while gameplay is suspended; event handler `0x435F40` consumes it and advances the event cursor. The prior README claim that Escape itself was the skip action was not established by that code.
+
+Each hand's action is sampled separately: B belongs to right/P1 and Y to left/P2 in akimbo; either hand maps to P1 without akimbo. Cancel also queues a native gun reload on its press edge, covering the selected mouse/gun profile as well as keyboard control. This uses the same phase/player guards and native reload path as the angle gesture. Cancel edges are independent of trigger edges, so holding B/Y does not suppress a later shot. Tests reproduce and cover the new mapping, player separation, one reload edge per press, no injected Escape, held-Cancel firing and existing menu/watchdog guards. Runtime cutscene skip and headset button routing remain unverified; no game or VR launch was performed for this change.
 
 ## Quit confirmation bypass
 

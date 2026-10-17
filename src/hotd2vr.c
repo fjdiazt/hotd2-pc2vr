@@ -9,9 +9,10 @@
  *
  * Controllers (headset mode):
  *      trigger            shoot (left mouse button in the game)
- *      A / X              Start / confirm (Enter)
- *      B / Y              back (Escape)
- *      thumbstick click   floating screen: auto -> always on -> off
+ *      Gun up 50deg/down 45deg + trigger   Reload that gun
+ *      A / X              Start / confirm / pause
+ *      B / Y              native Reload / Cancel (cutscene skip)
+ *      thumbstick up/down native mode-selection menu arrows
  *      grip (squeeze)     recentre on the current head pose
  *
  * The controller is the light gun: its ray is cast against the actual level
@@ -23,7 +24,7 @@
  * itself whenever the 3D scene is nearly empty - menus, scores, name entry -
  * because those are 2D sprites that never reach the quad slot and would
  * otherwise leave the headset in a void. Point at the screen and the ray maps
- * straight onto it, so the native menus are clicked exactly like with a mouse.
+ * straight onto it for aiming. Mode selection uses thumbstick arrow keys.
  *
  * Two modes:
  *      HOTD2VR.exe              headset (default)
@@ -54,6 +55,7 @@
 #include "openxr/openxr_platform.h"
 
 #include "hotd_share.h"
+#include "game_input.h"
 
 #define NEAR_M 0.05f
 #define FAR_M  4000.0f
@@ -1373,7 +1375,7 @@ static float                    g_gun2Hit[3];
 static float                    g_gun2Origin[3];
 static unsigned                 g_gun2Fire;
 static DWORD                    g_gunFireAt;    /* tick of the last trigger pull */
-static DWORD                    g_gunReloadAt;  /* tick of the last A press      */
+static DWORD                    g_gunReloadAt;  /* tick of the last reload pull  */
 static DWORD                    g_gun2FireAt, g_gun2ReloadAt;   /* the same, gun 2 */
 
 static const char *SRC_GUN =
@@ -2166,9 +2168,18 @@ static void loadXr(XrInstance inst)
 
 /* ------------------------------------------------------ controller actions */
 
+static int headPoseReady(int anchored,XrSessionState state,XrResult located,
+                         uint32_t count,XrViewStateFlags flags)
+{
+    XrViewStateFlags required=XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT;
+    if(!anchored)required|=XR_VIEW_STATE_POSITION_TRACKED_BIT|XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
+    return XR_SUCCEEDED(located) && count==2 && (flags&required)==required &&
+        (anchored || state==XR_SESSION_STATE_FOCUSED);
+}
+
 static XrActionSet g_actSet;
-static XrAction    g_actAim, g_actFire, g_actStart, g_actBack, g_actToggle, g_actGrip, g_actZoom, g_actHaptic;
-static volatile float g_zoomLevel = 1.0f;   /* 1 = no zoom; held stick raises it */
+static XrAction    g_actAim, g_actFire, g_actStart, g_actBack, g_actGrip, g_actMenu, g_actHaptic;
+static volatile float g_zoomLevel = 1.0f;   /* 1 = no zoom; optional cinematic zoom */
 static int g_autoOn;                        /* the game is in a zoom moment  */
 static int g_resetControls;
 static XrPath      g_handPath[2];               /* 0 = left, 1 = right */
@@ -2234,10 +2245,9 @@ static void initActions(XrInstance inst, XrSession session)
     MAKE(g_actAim,    "aim",    "Aim",             XR_ACTION_TYPE_POSE_INPUT);
     MAKE(g_actFire,   "fire",   "Shoot",           XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actStart,  "start",  "Start / Enter",   XR_ACTION_TYPE_BOOLEAN_INPUT);
-    MAKE(g_actBack,   "back",   "Back / Escape",   XR_ACTION_TYPE_BOOLEAN_INPUT);
-    MAKE(g_actToggle, "screen", "Floating screen", XR_ACTION_TYPE_BOOLEAN_INPUT);
+    MAKE(g_actBack,   "back",   "Reload / Cancel", XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actGrip,   "recentre", "Recentre",      XR_ACTION_TYPE_FLOAT_INPUT);
-    MAKE(g_actZoom,   "zoom",     "Zoom (toggle)",    XR_ACTION_TYPE_FLOAT_INPUT);
+    MAKE(g_actMenu,   "menu_vertical", "Menu up / down", XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actHaptic, "haptic",   "Recoil",           XR_ACTION_TYPE_VIBRATION_OUTPUT);
 #undef MAKE
 
@@ -2264,12 +2274,10 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actStart, "/user/hand/right/input/a/click");
     BIND(g_actBack,  "/user/hand/left/input/y/click");
     BIND(g_actBack,  "/user/hand/right/input/b/click");
-    BIND(g_actToggle, "/user/hand/left/input/thumbstick/click");
-    BIND(g_actToggle, "/user/hand/right/input/thumbstick/click");
     BIND(g_actGrip, "/user/hand/left/input/squeeze/value");
     BIND(g_actGrip, "/user/hand/right/input/squeeze/value");
-    BIND(g_actZoom, "/user/hand/left/input/thumbstick/y");
-    BIND(g_actZoom, "/user/hand/right/input/thumbstick/y");
+    BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
+    BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
     suggest(inst, "/interaction_profiles/oculus/touch_controller", bb, bn);
 
     bn = 0;
@@ -2283,12 +2291,10 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actStart, "/user/hand/right/input/a/click");
     BIND(g_actBack,  "/user/hand/left/input/b/click");
     BIND(g_actBack,  "/user/hand/right/input/b/click");
-    BIND(g_actToggle, "/user/hand/left/input/thumbstick/click");
-    BIND(g_actToggle, "/user/hand/right/input/thumbstick/click");
     BIND(g_actGrip, "/user/hand/left/input/squeeze/value");
     BIND(g_actGrip, "/user/hand/right/input/squeeze/value");
-    BIND(g_actZoom, "/user/hand/left/input/thumbstick/y");
-    BIND(g_actZoom, "/user/hand/right/input/thumbstick/y");
+    BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
+    BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
     suggest(inst, "/interaction_profiles/valve/index_controller", bb, bn);
 
     bn = 0;
@@ -2304,8 +2310,8 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actBack,  "/user/hand/right/input/menu/click");
     BIND(g_actGrip, "/user/hand/left/input/squeeze/click");
     BIND(g_actGrip, "/user/hand/right/input/squeeze/click");
-    BIND(g_actZoom, "/user/hand/left/input/trackpad/y");
-    BIND(g_actZoom, "/user/hand/right/input/trackpad/y");
+    BIND(g_actMenu, "/user/hand/left/input/trackpad/y");
+    BIND(g_actMenu, "/user/hand/right/input/trackpad/y");
     suggest(inst, "/interaction_profiles/htc/vive_controller", bb, bn);
 
     for (h = 0; h < 2; h++) {
@@ -2325,8 +2331,8 @@ static void initActions(XrInstance inst, XrSession session)
     at.actionSets = &g_actSet;
     if (XR_FAILED(pxrAttachSessionActionSets(session, &at)))
         die("could not attach the action set");
-    note("controllers wired: trigger shoot, A/X start, B/Y back,\n"
-         "                   stick click screen, grip recentre\n");
+    note("controllers wired: trigger shoot, gun up 50deg/down 45deg + trigger reload, A/X start, B/Y reload/cancel,\n"
+         "                   stick up/down mode menu, grip recentre\n");
 }
 #undef BIND
 
@@ -2409,7 +2415,7 @@ static int aimFromPose(const float *p, const float *d,
  *
  * The aim ray starts in local (metre) space. If the floating screen is up and
  * the ray lands on it, that intersection maps straight to 640x480 - native
- * menus become directly clickable. Otherwise the ray is moved into game space
+ * screen aiming follows it. Otherwise the ray is moved into game space
  * (the exact inverse of the model matrix runVR builds: undo the recentre
  * translation, undo the yaw, multiply the scale back out), cast against the
  * frame's triangles, and the hit is projected through the game's own camera -
@@ -2438,10 +2444,15 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     XrActionsSyncInfo si;
     XrActiveActionSet act;
     XrActionStateGetInfo gi;
-    XrActionStateBoolean fire[2], bstart, bback, btoggle;
+    XrActionStateBoolean fire[2], bstart, bback[2];
     XrActionStateFloat grip;
     XrSpaceLocation loc;
-    static int prevToggle, prevGrip, zoomOn, zoomHeld;
+    XrSpaceLocation poses[2];
+    int poseValid[2];
+    unsigned triggerActions[2];
+    static HotdTrigger triggers[2];
+    static int prevGrip;
+    static unsigned menuHeld[2];
     static unsigned prevButtons, prev2;
     int recentre = 0, h, hand;
     unsigned buttons = 0;
@@ -2451,8 +2462,10 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     float sx = 320.0f, sy = 240.0f;
 
     if (g_resetControls) {
-        prevToggle = prevGrip = zoomOn = zoomHeld = 0;
+        prevGrip = 0;
+        menuHeld[0] = menuHeld[1] = 0;
         prevButtons = prev2 = 0;
+        memset(triggers,0,sizeof(triggers));
         g_resetControls = 0;
     }
 
@@ -2463,7 +2476,11 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     si.type = XR_TYPE_ACTIONS_SYNC_INFO;
     si.countActiveActionSets = 1;
     si.activeActionSets = &act;
-    if (pxrSyncActions(session, &si) != XR_SUCCESS) return 0;   /* not focused */
+    if (pxrSyncActions(session, &si) != XR_SUCCESS) {
+        triggers[0].action=triggers[1].action=0;
+        menuHeld[0]=menuHeld[1]=0;
+        return 0;
+    }
 
     gameProjRead();     /* the projection the game is using THIS frame */
 
@@ -2478,37 +2495,34 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     GETB(fire[0], g_actFire, g_handPath[0]);
     GETB(fire[1], g_actFire, g_handPath[1]);
     GETB(bstart, g_actStart, XR_NULL_PATH);
-    GETB(bback, g_actBack, XR_NULL_PATH);
-    GETB(btoggle, g_actToggle, XR_NULL_PATH);
+    GETB(bback[0], g_actBack, g_handPath[0]);
+    GETB(bback[1], g_actBack, g_handPath[1]);
 #undef GETB
+    for(h=0;h<2;h++) {
+        float direction[3]={0};
+        XrSpaceLocationFlags required=XR_SPACE_LOCATION_POSITION_VALID_BIT|XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
+        memset(poses+h,0,sizeof(poses[h]));poses[h].type=XR_TYPE_SPACE_LOCATION;
+        poseValid[h]=XR_SUCCEEDED(pxrLocateSpace(g_aimSpace[h],space,when,poses+h)) &&
+            (poses[h].locationFlags&required)==required;
+        if(poseValid[h])quatRotate(&poses[h].pose.orientation,fwd,direction);
+        triggerActions[h]=hotd_trigger_action(triggers+h,fire[h].isActive && fire[h].currentState,
+            poseValid[h],direction[1]);
+    }
     ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&grip, sizeof(grip));
     gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
     grip.type = XR_TYPE_ACTION_STATE_FLOAT;
     gi.action = g_actGrip; gi.subactionPath = XR_NULL_PATH;
     pxrGetActionStateFloat(session, &gi, &grip);
 
-    /* zoom: flick the thumbstick up to toggle the scope on, flick again to
-     * drop it. A held stick as an analogue zoom turned out nauseating - the
-     * level breathed with every wobble of the thumb - and the snap between
-     * levels was worse. Now it is a latch, and the glide toward the target is
-     * slow (zoomspeed percent of the remaining gap per frame; 4 at 90 Hz
-     * settles in about a second) so the world swells instead of jumping. */
+    for(h=0;h<2;h++) {
+        XrActionStateFloat stick={XR_TYPE_ACTION_STATE_FLOAT};
+        gi.type=XR_TYPE_ACTION_STATE_GET_INFO;gi.action=g_actMenu;gi.subactionPath=g_handPath[h];
+        int active=pxrGetActionStateFloat(session,&gi,&stick)==XR_SUCCESS && stick.isActive;
+        menuHeld[h]=hotd_menu_stick(menuHeld[h],active,stick.currentState);
+        buttons|=menuHeld[h];
+    }
     {
-        XrActionStateFloat z; float push = 0.0f, targetZoom; int hh, pressed;
-        for (hh = 0; hh < 2; hh++) {
-            ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&z, sizeof(z));
-            gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
-            z.type = XR_TYPE_ACTION_STATE_FLOAT;
-            gi.action = g_actZoom; gi.subactionPath = g_handPath[hh];
-            if (pxrGetActionStateFloat(session, &gi, &z) == XR_SUCCESS &&
-                z.isActive && z.currentState > push)
-                push = z.currentState;               /* up only, 0..1 */
-        }
-        /* hysteresis: latch at a firm push, re-arm only near the centre */
-        pressed = zoomHeld ? (push > 0.30f) : (push > 0.65f);
-        if (pressed && !zoomHeld) zoomOn = !zoomOn;
-        zoomHeld = pressed;
-        targetZoom = zoomOn ? (float)g_cfgZoomX / 100.0f : 1.0f;
+        float targetZoom=1.0f;
         /* In the flat game the zoom moments were authored: the engine walks
          * its fov from 60 down to ~18 degrees exactly when a distant enemy is
          * meant to fill the screen, and the player just keeps shooting. Here
@@ -2559,14 +2573,9 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         if (fire[h].isActive && fire[h].currentState && fire[h].changedSinceLastSync)
             buzz(session, h, 0.06f, 1.0f);
 
-    if (btoggle.isActive && btoggle.currentState && !prevToggle)
-        g_scrMode = (g_scrMode + 1) % 3;
-    prevToggle = btoggle.isActive && btoggle.currentState;
-
     if (grip.isActive && grip.currentState > 0.85f && !prevGrip) recentre = 1;
     prevGrip = grip.isActive && grip.currentState > 0.85f;
 
-    if (fire[hand].isActive && fire[hand].currentState) buttons |= VC2_BTN_FIRE;
     /* Start is bound to both hands, so with akimbo one press started BOTH
      * players at once - and in a menu that is a double selection. When there
      * are two guns, player 1 hears only his own hand; the other hand belongs
@@ -2580,39 +2589,22 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         if (pxrGetActionStateBoolean(session, &gi, &s1) == XR_SUCCESS &&
             s1.isActive && s1.currentState) buttons |= VC2_BTN_START;
     } else if (bstart.isActive && bstart.currentState) buttons |= VC2_BTN_START;
-    if (bback.isActive && bback.currentState)           buttons |= VC2_BTN_BACK;
-    {   /* edges drive the gun animation; the game gets the levels as before */
-        if ((buttons & VC2_BTN_FIRE)  && !(prevButtons & VC2_BTN_FIRE))  g_gunFireAt = GetTickCount();
-        if ((buttons & VC2_BTN_START) && !(prevButtons & VC2_BTN_START)) g_gunReloadAt = GetTickCount();
-        prevButtons = buttons;
-    }
-
+    if ((bback[hand].isActive && bback[hand].currentState) ||
+        (!g_cfgAkimbo && bback[1-hand].isActive && bback[1-hand].currentState)) buttons |= VC2_BTN_BACK;
     /* where is the gun */
-    ZeroMemory(&loc, sizeof(loc));
-    loc.type = XR_TYPE_SPACE_LOCATION;
-    if ((XR_FAILED(pxrLocateSpace(g_aimSpace[hand], space, when, &loc)) ||
-         !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)) &&
-        !g_cfgAkimbo) {
-        hand = 1 - hand;
-        ZeroMemory(&loc, sizeof(loc));
-        loc.type = XR_TYPE_SPACE_LOCATION;
-        if (XR_FAILED(pxrLocateSpace(g_aimSpace[hand], space, when, &loc)) ||
-            !(loc.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)) {
-            g_ovCount = 0;
-            g_gunValid = 0;
-            pushAim(sx, sy, buttons);
-            return recentre;
-        }
+    if(!poseValid[hand] && !g_cfgAkimbo)hand=1-hand;
+    loc=poses[hand];
+    g_gunValid=poseValid[hand];
+    if(g_gunValid) {
+        g_gunPose=loc.pose;
+        p[0]=loc.pose.position.x;p[1]=loc.pose.position.y;p[2]=loc.pose.position.z;
+        quatRotate(&loc.pose.orientation,fwd,d);
+        haveHit=aimFromPose(p,d,yaw0,ox,oy,oz,&sx,&sy,hitLocal);
+        buttons|=triggerActions[hand];
     }
-    g_gunPose = loc.pose;               /* the model rides the same pose as the laser */
-    g_gunValid = 1;
-    p[0] = loc.pose.position.x;
-    p[1] = loc.pose.position.y;
-    p[2] = loc.pose.position.z;
-    quatRotate(&loc.pose.orientation, fwd, d);
-
-    haveHit = aimFromPose(p, d, yaw0, ox, oy, oz, &sx, &sy, hitLocal);
-
+    if((buttons&VC2_BTN_FIRE) && !(prevButtons&VC2_BTN_FIRE))g_gunFireAt=GetTickCount();
+    if((buttons&VC2_BTN_RELOAD) && !(prevButtons&VC2_BTN_RELOAD))g_gunReloadAt=GetTickCount();
+    prevButtons=buttons;
     pushAim(sx, sy, buttons);
 
     /* akimbo: the OTHER hand is a second gun. Its trigger fires gun 2, its ray
@@ -2626,8 +2618,8 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         int oh = 1 - hand;              /* the hand that is not the primary gun */
         XrSpaceLocation loc2;
         unsigned buttons2 = 0;
+        if(bback[oh].isActive && bback[oh].currentState)buttons2|=VC2_BTN_BACK;
         g_frame->akimbo = 1;
-        if (fire[oh].isActive && fire[oh].currentState) buttons2 |= VC2_BTN_FIRE;
         /* PLAYER 2 HAS TO PRESS START HIMSELF. The game only draws the second
          * crosshair when its player state is 2 - "player 2 is in the game" -
          * and nothing sets that until P2's own Start arrives on his own device.
@@ -2646,15 +2638,14 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
                 s2.isActive && s2.currentState)
                 buttons2 |= VC2_BTN_START;
         }
-        ZeroMemory(&loc2, sizeof(loc2));
-        loc2.type = XR_TYPE_SPACE_LOCATION;
-        if (!XR_FAILED(pxrLocateSpace(g_aimSpace[oh], space, when, &loc2)) &&
-            (loc2.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)) {
+        loc2=poses[oh];
+        if (poseValid[oh]) {
             float p2[3], d2[3], hit2[3], sx2 = 320.0f, sy2 = 240.0f;
             p2[0] = loc2.pose.position.x;
             p2[1] = loc2.pose.position.y;
             p2[2] = loc2.pose.position.z;
             quatRotate(&loc2.pose.orientation, fwd, d2);
+            buttons2|=triggerActions[oh];
             aimFromPose(p2, d2, yaw0, ox, oy, oz, &sx2, &sy2, hit2);
             pushAim2(sx2, sy2, buttons2);
             g_gun2Pose = loc2.pose; g_gun2Valid = 1;
@@ -2663,11 +2654,13 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
             g_gun2Fire = buttons2;
             {
                 if ((buttons2 & VC2_BTN_FIRE)  && !(prev2 & VC2_BTN_FIRE))  g_gun2FireAt   = GetTickCount();
-                if ((buttons2 & VC2_BTN_START) && !(prev2 & VC2_BTN_START)) g_gun2ReloadAt = GetTickCount();
+                if ((buttons2 & VC2_BTN_RELOAD) && !(prev2 & VC2_BTN_RELOAD)) g_gun2ReloadAt = GetTickCount();
                 prev2 = buttons2;
             }
         } else {
             g_gun2Valid = 0;
+            g_gun2Fire=0;prev2=buttons2;
+            pushAim2(320,240,buttons2);
         }
     } else if (g_frame) {
         g_frame->akimbo = 0;
@@ -2678,7 +2671,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
      * cutout clip lets it through - the blend is additive, the rgb is the
      * brightness. 0xAABBGGRR. */
     g_ovCount = 0;
-    {
+    if(g_gunValid) {
         int fired = (buttons & VC2_BTN_FIRE) != 0;
         ovSight(p, hitLocal,
                 fired ? 0x8070D0FFu : 0x802828FFu,    /* beam  */
@@ -2966,7 +2959,7 @@ static int runVR(void)
                                     (XrSwapchainImageBaseHeader *)eye[i].imgs);
         makeEyeTargets(&eye[i], chosen, eyeMsaa[i]);
     }
-    note("session ready - put the headset on\n");
+    note("session ready - put the headset on; initial centre waits for focused tracking\n");
 
     for (;;) {
         XrEventDataBuffer ev;
@@ -2991,6 +2984,7 @@ static int runVR(void)
             if (ev.type == XR_TYPE_EVENT_DATA_SESSION_STATE_CHANGED) {
                 XrEventDataSessionStateChanged *s = (XrEventDataSessionStateChanged *)&ev;
                 state = s->state;
+                note("OpenXR session state=%d\n",(int)state);
                 if (state == XR_SESSION_STATE_READY) {
                     XrSessionBeginInfo bi = { XR_TYPE_SESSION_BEGIN_INFO };
                     bi.primaryViewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -3023,14 +3017,13 @@ static int runVR(void)
         vli.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
         vli.displayTime = fs.predictedDisplayTime;
         vli.space = space;
-        pxrLocateViews(session, &vli, &vs, 2, &got, views);
+        XrResult located=pxrLocateViews(session, &vli, &vs, 2, &got, views);
 
-        if (fs.shouldRender && got == 2) {
+        if (fs.shouldRender && headPoseReady(haveOrigin,state,located,got,vs.viewStateFlags)) {
             float scale = 1.0f / g_unitsPerMetre;
             float model[16], t[16], rot[16], tmp[16];
 
-            /* the first head pose becomes the game camera: the player starts
-             * standing where the in-game viewpoint is, facing the same way */
+            /* VDXR's bootstrap origin can change before the headset becomes focused. */
             if (!haveOrigin) {
                 const XrQuaternionf *q = &views[0].pose.orientation;
                 originYaw = atan2f(2.0f * (q->w * q->y + q->x * q->z),
@@ -3040,7 +3033,8 @@ static int runVR(void)
                 oz = views[0].pose.position.z;
                 haveOrigin = 1;
                 setScreenPose(ox, oy, oz, originYaw);
-                note("recentred on the current head pose\n");
+                note("recentred on tracked head pose: session=%d flags=%llx position=%g,%g,%g\n",
+                    (int)state,(unsigned long long)vs.viewStateFlags,ox,oy,oz);
             }
 
             if (handleControllers(session, space, fs.predictedDisplayTime,

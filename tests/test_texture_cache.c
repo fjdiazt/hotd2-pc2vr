@@ -5,6 +5,8 @@
 typedef struct { IDirectDrawSurface7 iface; unsigned refs; } FakeSurface;
 static FakeSurface surfaces[1600],*selected;
 static DWORD pixels[128*128];
+static DWORD texture_flags=DDPF_RGB,texture_bits=32,texture_alpha;
+static HRESULT lock_result=DD_OK;
 static unsigned prompt_fallbacks;
 static int WINAPI fallback_prompt(HWND hwnd,LPCSTR text,LPCSTR caption,UINT flags)
 {(void)hwnd;(void)text;(void)caption;(void)flags;prompt_fallbacks++;return IDNO;}
@@ -17,8 +19,10 @@ static ULONG WINAPI release_surface(IDirectDrawSurface7 *self)
 static HRESULT WINAPI lock_surface(IDirectDrawSurface7 *self,RECT *rect,DDSURFACEDESC2 *desc,DWORD flags,HANDLE event)
 {
     (void)self;(void)rect;(void)flags;(void)event;
+    if(FAILED(lock_result))return lock_result;
     desc->dwWidth=desc->dwHeight=128;desc->lPitch=128*4;desc->lpSurface=pixels;
-    desc->ddpfPixelFormat.dwFlags=DDPF_RGB;desc->ddpfPixelFormat.dwRGBBitCount=32;
+    desc->ddpfPixelFormat.dwFlags=texture_flags;desc->ddpfPixelFormat.dwRGBBitCount=texture_bits;
+    desc->ddpfPixelFormat.dwRGBAlphaBitMask=texture_alpha;
     desc->ddpfPixelFormat.dwRBitMask=0xFF0000;desc->ddpfPixelFormat.dwGBitMask=0xFF00;desc->ddpfPixelFormat.dwBBitMask=255;
     return DD_OK;
 }
@@ -79,6 +83,16 @@ int main(void)
     assert((vertex.style&HOTD_DIFFUSE_ALPHA) && (vertex.style&HOTD_ALPHA_TEST));
     for(i=0;i<128*128;i++)pixels[i]=0x123456;
     for(i=0;i<1600;i++){surfaces[i].iface.lpVtbl=&surface_vt;surfaces[i].refs=1;}
+    texture_flags=DDPF_RGB|DDPF_ALPHAPIXELS;texture_alpha=0xFF000000;
+    assert(opaque_bitmap_alpha(&surfaces[0].iface));
+    for(i=0;i<128*128;i++)assert(pixels[i]==0xFF123456);
+    pixels[0]=0x00123456;texture_bits=16;
+    assert(!opaque_bitmap_alpha(&surfaces[0].iface) && pixels[0]==0x00123456);
+    texture_bits=32;texture_flags=DDPF_RGB;
+    assert(!opaque_bitmap_alpha(&surfaces[0].iface) && pixels[0]==0x00123456);
+    texture_flags|=DDPF_ALPHAPIXELS;lock_result=E_FAIL;
+    assert(!opaque_bitmap_alpha(&surfaces[0].iface) && pixels[0]==0x00123456);
+    lock_result=DD_OK;texture_flags=DDPF_RGB;texture_alpha=0;
     for(i=0;i<20;i++) {
         for(j=0;j<80;j++) {
             selected=surfaces+i*80+j;

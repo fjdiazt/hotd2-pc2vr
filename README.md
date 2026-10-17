@@ -26,9 +26,19 @@ The verified executable hardcodes mode 11 (640x480, 16-bit fullscreen). The brid
 
 No external wrapper, game INI change or on-disk executable edit is required. Launching `Hod2.exe` normally retains its original behavior. `[bridge] windowed=0` or `background=0` disables the respective change for the next injected launch.
 
+Injected sessions also restore opaque alpha after the game's two GDI bitmap-upload paths. This fixes the black/clipped game-mode menu on the tested renderer while preserving native alpha testing and RGB artwork. The mode-selection screen is verified on desktop and user-confirmed in VR; other screens still need visual checks.
+
+For a native desktop comparison, run `build\HOTD2Launch.exe 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe' --native-window`. This selects only the native windowed mode in memory, without injecting the bridge or starting a viewer. Native renderer and quit questions remain.
+
 ## Controls
 
-VR: trigger fires; A/X reloads and confirms/starts; B/Y backs out; grip recenters. Both controller guns use the supplied VC2VR mesh. Player 2's full join/control flow still requires headset testing.
+VR startup centers only after OpenXR reports a focused session and valid, actively tracked stereo head poses. Earlier bootstrap poses are ignored. Later focus changes preserve the center; grip requests a new center. User confirmed startup centering works in the headset.
+
+VR: trigger fires. Aim the gun at least 50 degrees above or 45 degrees below horizontal and pull the trigger to reload that gun. Direction comes from the tracked gun, independent of head direction. Each pull stays a shot or reload until release; tracking loss cancels it until release. Both hands work independently in akimbo.
+
+A/X keep native Start/confirm/pause behavior; B/Y send native Reload/Cancel for menu cancellation and cutscene skip; grip recenters. During play, B/Y also reload the corresponding gun, independently in akimbo (B right/P1, Y left/P2). Holding Cancel does not block a later trigger pull. Trigger-angle reload remains available and sends no pause keys. Both controller guns use the supplied VC2VR mesh. Gesture comfort, cancel/skip behavior and player 2's full join/reload flow still require headset testing.
+
+Either thumbstick navigates the game-mode menu up/down through native arrow keys. Center releases the key; holding uses native repeat. Opposing sticks cancel VR navigation. Navigation is limited to native phase 4, so it cannot move keyboard aim during gameplay. Thumbstick zoom and click-to-toggle-screen bindings were removed; the floating menu screen still appears automatically. A confirms and B goes back.
 
 Desktop preview: W/A/S/D move, mouse drag turns, R resets, M toggles the captured game panel, Escape closes the viewer. Stereo preview provides a desktop check without a headset.
 
@@ -46,7 +56,7 @@ Close the viewer before the second command. It briefly drives both aim coordinat
 ## Current boundaries
 
 - Native geometry, texture capture, gun asset loading and desktop rendering have been exercised. See `docs/findings.md` for evidence and remaining checks.
-- User confirmed the 3D scene, both guns, good aiming and working trigger firing in the headset. Head tracking, stereoscopic comfort, real-world scale, reloading and two-player joining need further headset checks. The initial `units_per_metre=10` is uncalibrated.
+- User confirmed the 3D scene, both guns, good aiming, working trigger firing and immersive reload in the headset. Revised 50-degree up/45-degree down thresholds, head tracking, stereoscopic comfort, real-world scale and two-player joining need further headset checks. The initial `units_per_metre=10` is uncalibrated.
 - Only geometry submitted by the original game is available. Turning or leaning may expose culled or missing surfaces.
 - White artifacts persisted after atlas repair. Native material color/opacity and blend states were being discarded; those now pass capture and actual shader pixel checks. User confirmed the result looks better in the headset. Full native lighting, transparency ordering, texture addressing and HUD depth still need visual qualification. A single scene must fit the atlas; mutable textures need dirty tracking if encountered.
 - The supported game has SHA256 `C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A` (MD5 `97C9E516A287AAB33A455A396DADAA45`). Native hooks validate instruction signatures before writing.

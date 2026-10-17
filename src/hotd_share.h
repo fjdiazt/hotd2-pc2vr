@@ -16,6 +16,9 @@
 #define VC2_BTN_FIRE 1u
 #define VC2_BTN_START 2u
 #define VC2_BTN_BACK 4u
+#define VC2_BTN_RELOAD 8u
+#define VC2_BTN_UP 16u
+#define VC2_BTN_DOWN 32u
 
 #pragma pack(push, 4)
 typedef struct {

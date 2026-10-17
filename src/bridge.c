@@ -109,6 +109,24 @@ static void update_input(void)
 }
 
 static DWORD (__cdecl *native_input_original)(void);
+static int native_reload(unsigned player,HotdGunInput *gun)
+{
+    BYTE *profile=game_base+0x5A5D84+player*0x130;
+    if(*(DWORD *)(game_base+0x5C8E98)!=6 ||
+       *(short *)(game_base+0x5A5C62+player*0x130)!=5)return 0;
+    if(profile[1]==1) {
+        gun->valid=0;gun->fire=1; /* Native gun path: off-screen trigger means reload. */
+        return 1;
+    }
+    if(profile[1]==0) {
+        unsigned scheme=profile[0]==1 ? 2u:profile[0]==2 ? 3u:1u;
+        DWORD mask=*(DWORD *)(game_base+0x5C9F6C+player*0x7C+scheme*20);
+        *(DWORD *)(game_base+0x5C9028)|=mask;
+        return mask!=0;
+    }
+    return 0;
+}
+
 static DWORD __cdecl native_input(void)
 {
     static unsigned previous[2];
@@ -118,7 +136,17 @@ static DWORD __cdecl native_input(void)
     for(p=0;p<2;p++) {
         if(active_input() && (!p || frame->akimbo)) {
             HotdGunInput *gun=(HotdGunInput *)(game_base+0x5C8FC0+p*0x28);
-            if(hotd_apply_fire(gun,buttons[p]&VC2_BTN_FIRE,previous+p))
+            unsigned cancel_pressed=(buttons[p]&VC2_BTN_BACK)&~previous[p];
+            unsigned action=hotd_apply_gun_buttons(gun,buttons[p],previous+p);
+            previous[p]|=buttons[p]&VC2_BTN_BACK;
+            if(cancel_pressed)action=VC2_BTN_RELOAD;
+            if(action==VC2_BTN_RELOAD) {
+                int accepted=native_reload(p,gun);
+                logline("native reload P%u: queued=%d ammo_before=%d phase=%lu status=%d control=%u",p+1,accepted,
+                    *(short *)(game_base+0x5A5C7C+p*0x130),*(DWORD *)(game_base+0x5C8E98),
+                    *(short *)(game_base+0x5A5C62+p*0x130),game_base[0x5A5D85+p*0x130]);
+            }
+            if(action==VC2_BTN_FIRE)
                 logline("native trigger P%u: valid=%d fire=%d ammo=%d",p+1,gun->valid,gun->fire,
                     *(short *)(game_base+0x5A5C7C+p*0x130));
         } else previous[p]=0;
@@ -144,9 +172,15 @@ static HRESULT WINAPI keyboard_state(void *self,DWORD size,void *out)
     }
     if (SUCCEEDED(hr) && size==256 && active_input()) {
         BYTE *keys = out;
-        if(buttons[0]&VC2_BTN_START) keys[DIK_RCONTROL]=keys[DIK_RETURN]=0x80;
-        if(buttons[1]&VC2_BTN_START) keys[DIK_LCONTROL]=0x80;
-        if((buttons[0]|buttons[1])&VC2_BTN_BACK) keys[DIK_ESCAPE]=0x80;
+        if(buttons[0]&VC2_BTN_START) keys[DIK_RETURN]=0x80;
+        if(buttons[1]&VC2_BTN_START) keys[DIK_TAB]=0x80;
+        if(buttons[0]&VC2_BTN_BACK) keys[DIK_RCONTROL]=0x80;
+        if(buttons[1]&VC2_BTN_BACK) keys[DIK_LCONTROL]=0x80;
+        if(*(DWORD *)(game_base+0x5C8E98)==4) {
+            unsigned nav=(buttons[0]|buttons[1])&(VC2_BTN_UP|VC2_BTN_DOWN);
+            if(nav==VC2_BTN_UP)keys[DIK_UP]=0x80;
+            if(nav==VC2_BTN_DOWN)keys[DIK_DOWN]=0x80;
+        }
     }
     return hr;
 }
@@ -226,6 +260,22 @@ static DWORD pixel_bgra(DWORD value,const DDPIXELFORMAT *pf,const PALETTEENTRY *
     return ((DWORD)((pf->dwFlags&DDPF_ALPHAPIXELS) ? channel(value,pf->dwRGBAlphaBitMask):255)<<24) |
         ((DWORD)channel(value,pf->dwRBitMask)<<16) | ((DWORD)channel(value,pf->dwGBitMask)<<8) |
         channel(value,pf->dwBBitMask);
+}
+
+static int opaque_bitmap_alpha(IDirectDrawSurface7 *surface)
+{
+    DDSURFACEDESC2 desc={0};unsigned x,y;
+    desc.dwSize=sizeof(desc);
+    if(FAILED(IDirectDrawSurface7_Lock(surface,NULL,&desc,DDLOCK_WAIT,NULL)))return 0;
+    int repaired=desc.ddpfPixelFormat.dwRGBBitCount==32 &&
+        (desc.ddpfPixelFormat.dwFlags&(DDPF_RGB|DDPF_ALPHAPIXELS))==(DDPF_RGB|DDPF_ALPHAPIXELS) &&
+        desc.ddpfPixelFormat.dwRGBAlphaBitMask==0xFF000000;
+    if(repaired)for(y=0;y<desc.dwHeight;y++) {
+        DWORD *row=(DWORD *)((BYTE *)desc.lpSurface+(LONG)y*desc.lPitch);
+        for(x=0;x<desc.dwWidth;x++)row[x]|=0xFF000000;
+    }
+    IDirectDrawSurface7_Unlock(surface,NULL);
+    return repaired;
 }
 
 static Texture *capture_texture(IDirect3DDevice7 *device)
@@ -583,6 +633,26 @@ static HRESULT WINAPI cooperative_level(IDirectDraw7 *self,HWND hwnd,DWORD flags
     logline("SetCooperativeLevel hwnd=%p flags=%08lx",hwnd,(unsigned long)flags);
     return original_coop(self,hwnd,flags);
 }
+static HRESULT (WINAPI *original_release_dc)(IDirectDrawSurface7 *,HDC);
+static HRESULT WINAPI release_bitmap_dc(IDirectDrawSurface7 *self,HDC dc)
+{
+    DWORD caller=(DWORD)(uintptr_t)__builtin_return_address(0)-(DWORD)(uintptr_t)game_base;
+    HRESULT hr=original_release_dc(self,dc);
+    /* GDI BitBlt clears alpha; these two native loaders upload opaque BMP artwork. */
+    if(SUCCEEDED(hr) && hotd_bitmap_dc_caller(caller))
+        logline("native bitmap upload: caller=%lx opaque32=%d",(unsigned long)caller,opaque_bitmap_alpha(self));
+    return hr;
+}
+static HRESULT (WINAPI *original_create_surface)(IDirectDraw7 *,DDSURFACEDESC2 *,IDirectDrawSurface7 **,IUnknown *);
+static HRESULT WINAPI create_surface(IDirectDraw7 *self,DDSURFACEDESC2 *desc,IDirectDrawSurface7 **out,IUnknown *outer)
+{
+    HRESULT hr=original_create_surface(self,desc,out,outer);
+    if(SUCCEEDED(hr) && *out) {
+        IDirectDrawSurface7Vtbl *vt=(IDirectDrawSurface7Vtbl *)(*out)->lpVtbl;
+        replace_pointer((void **)&vt->ReleaseDC,release_bitmap_dc,(void **)&original_release_dc);
+    }
+    return hr;
+}
 static HRESULT (WINAPI *original_ddraw_create)(GUID *,void **,REFIID,IUnknown *);
 static HRESULT WINAPI ddraw_create(GUID *guid,void **out,REFIID iid,IUnknown *outer)
 {
@@ -592,6 +662,7 @@ static HRESULT WINAPI ddraw_create(GUID *guid,void **out,REFIID iid,IUnknown *ou
         IDirectDraw7Vtbl *vt=(IDirectDraw7Vtbl *)((IDirectDraw7 *)*out)->lpVtbl;
         replace_pointer((void **)&vt->QueryInterface,query_interface,(void **)&original_query);
         replace_pointer((void **)&vt->SetCooperativeLevel,cooperative_level,(void **)&original_coop);
+        replace_pointer((void **)&vt->CreateSurface,create_surface,(void **)&original_create_surface);
     }
     return hr;
 }
