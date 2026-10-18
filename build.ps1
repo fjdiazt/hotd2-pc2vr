@@ -9,6 +9,10 @@ if ((& $gcc -dumpmachine) -ne 'i686-w64-mingw32') { throw '32-bit MinGW GCC requ
 if ($LASTEXITCODE) { throw 'Bridge build failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\HOTD2Launch.exe" "$root\src\launch.c"
 if ($LASTEXITCODE) { throw 'Launcher build failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_startup.exe" "$root\tests\test_startup.c"
+if ($LASTEXITCODE) { throw 'Startup test build failed.' }
+& "$out\test_startup.exe"
+if ($LASTEXITCODE) { throw 'Startup test failed.' }
 & $gcc -std=c11 -Wall -Wextra -o "$out\test_math.exe" "$root\tests\test_math.c"
 if ($LASTEXITCODE) { throw 'Math test build failed.' }
 & "$out\test_math.exe"
@@ -30,6 +34,8 @@ $batch = @"
 @if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_frame_snapshot.c" /Fo"$out\test_frame_snapshot.obj" /Fe"$out\test_frame_snapshot.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_world_scale.c" /Fo"$out\test_world_scale.obj" /Fe"$out\test_world_scale.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+@if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_effect_render.c" /Fo"$out\test_effect_render.obj" /Fe"$out\test_effect_render.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 "@
 [IO.File]::WriteAllText("$out\compile-viewer.cmd", $batch)
@@ -37,6 +43,8 @@ $batch = @"
 if ($LASTEXITCODE) { throw 'Viewer build failed.' }
 & "$out\test_frame_snapshot.exe"
 if ($LASTEXITCODE) { throw 'Frame snapshot test failed.' }
+& "$out\test_world_scale.exe"
+if ($LASTEXITCODE) { throw 'World scale test failed.' }
 & "$out\test_effect_render.exe"
 if ($LASTEXITCODE) { throw 'Effect shader test failed.' }
 Copy-Item "$root\assets\gun\*" -Destination $out -Force

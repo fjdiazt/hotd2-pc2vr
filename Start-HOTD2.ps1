@@ -5,14 +5,21 @@ param(
     [switch]$InfiniteAmmo,
     [switch]$InfiniteLives,
     [switch]$RapidFire,
-    [ValidateRange(1,30)][int]$RapidFireRate = 4
+    [ValidateRange(1,30)][int]$RapidFireRate = 4,
+    [switch]$SkipSplash,
+    [switch]$ShowSplash,
+    [ValidateRange(0.1,10.0)][double]$WorldScale = 1.4
 )
 $ErrorActionPreference = 'Stop'
+if ($SkipSplash -and $ShowSplash) { throw 'Choose either -SkipSplash or -ShowSplash.' }
 $out = Join-Path $PSScriptRoot 'build'
 if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
 if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) { throw 'Unsupported HOTD2 executable; no process started.' }
-& "$out\HOTD2Launch.exe" $GameExe
+$launchArgs = @($GameExe)
+if ($SkipSplash) { $launchArgs += '--skip-splash' }
+if ($ShowSplash) { $launchArgs += '--show-splash' }
+& "$out\HOTD2Launch.exe" @launchArgs
 if ($LASTEXITCODE) { throw 'Game injection failed.' }
 $viewerArgs = @()
 if ($Mode -eq 'Window') { $viewerArgs += '--window' }
@@ -22,5 +29,6 @@ if ($InfiniteAmmo) { $viewerArgs += '--infinite-ammo' }
 if ($InfiniteLives) { $viewerArgs += '--infinite-lives' }
 if ($RapidFire) { $viewerArgs += '--rapid-fire' }
 if ($PSBoundParameters.ContainsKey('RapidFireRate')) { $viewerArgs += '--rapid-fire-rate', "$RapidFireRate" }
+if ($PSBoundParameters.ContainsKey('WorldScale')) { $viewerArgs += '--world-scale', $WorldScale.ToString('G', [Globalization.CultureInfo]::InvariantCulture) }
 & "$out\HOTD2VR.exe" @viewerArgs
 exit $LASTEXITCODE

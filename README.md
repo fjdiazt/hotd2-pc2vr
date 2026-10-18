@@ -20,6 +20,14 @@ Close the existing game before starting a new session. Injected sessions accept 
 
 `build\HOTD2VR.ini` is the active configuration; subsequent builds preserve it. `HOTD2VR.ini` in the source root supplies defaults for a new build folder.
 
+### Skip startup splashes
+
+Startup skips the SEGA and Empire logos by default, including when `[bridge] skip_splash` is absent from `build\HOTD2VR.ini`. Set `skip_splash=0` to restore both logos.
+
+`Start-HOTD2.ps1 -SkipSplash` and `-ShowSplash` override the INI for one launch. Direct launcher equivalents are `build\HOTD2Launch.exe <game.exe> --skip-splash` and `--show-splash`; they also work with `--wait` or `--native-window`. The last splash flag wins. Viewer-only reconnects cannot change startup behavior.
+
+The launcher validates the supported startup instruction and changes one byte in suspended process memory before the game starts. The game executable on disk and its `Hod2.ini` remain unchanged. Changes take effect on the next launch.
+
 ## Windowed startup
 
 The verified executable hardcodes mode 11 (640x480, 16-bit fullscreen). The bridge selects native mode 7 (640x480, 32-bit windowed) in memory. It automatically accepts the native renderer-selection question ending in `will be used.` and the exact native `Are you sure you want to quit?` question. Other dialogs retain their normal behavior. Background rendering prevents the native activation handler from suspending rendering when the viewer takes focus.
@@ -31,6 +39,12 @@ Injected sessions also restore opaque alpha after the game's two GDI bitmap-uplo
 The bridge also relaxes native per-mesh culling at the flat screen's left/right/top/bottom edges, so offscreen body parts can reach the VR renderer. Near/far and custom clipping planes remain. Native per-draw backface culling is preserved in the viewer. Desktop capture confirms additional offscreen geometry. User reported the headset result looks good after the backface correction; broader scene coverage and performance still need testing.
 
 For a native desktop comparison, run `build\HOTD2Launch.exe 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe' --native-window`. This selects only the native windowed mode in memory, without injecting the bridge or starting a viewer. Native renderer and quit questions remain.
+
+## World scale
+
+World size defaults to **1.4×**. Set `[vr] worldscale=1.4` in `build\HOTD2VR.ini`, use `Start-HOTD2.ps1 -WorldScale 1.4`, or pass `--world-scale 1.4` directly to `build\HOTD2VR.exe`. Accepted multipliers range from 0.1 to 10; **1 restores the previous world size**, 0.8 makes it 20% smaller, and 2 doubles it. Command-line values override the INI for that viewer session. Convert older percentage settings by dividing by 100 (`140` becomes `1.4`).
+
+World geometry and controller ray conversion use the same scale. The HUD, floating menus, and controller gun models retain their physical size. `[bridge] units_per_metre` remains the base game-unit conversion. Restart the viewer after editing the INI; the game does not need a restart. Headset scale and aiming still need visual confirmation.
 
 ## Controls
 

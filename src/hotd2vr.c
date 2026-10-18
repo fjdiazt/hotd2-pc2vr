@@ -175,6 +175,7 @@ static int g_cfgDepthBias = 2;      /* [vr] depthbias: per-quad paint-order bias
 static int g_cfgHaptic = 1;             /* [vr] haptic: buzz on every shot */
 static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
 static int g_cfgSuper = 140;      /* eye buffer scale in percent */
+static float g_cfgWorldScale = 1.4f; /* world size multiplier; 1 preserves the native unit conversion */
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
  * The game's texels and shades are already gamma-encoded (a 1997 renderer
@@ -205,6 +206,20 @@ static int  g_cfgGunScale = 100;  /* percent */
 static int  g_cfgReloadMs = 180;  /* reload flick, ms */
 static unsigned g_cheatFlags;
 static unsigned g_cfgRapidRate=4;
+static int parseWorldScale(const char *text,float *scale)
+{
+    char *end;float value;
+    if(!text || ((*text<'0' || *text>'9') && *text!='.'))return 0;
+    value=strtof(text,&end);
+    if(end==text || *end || !isfinite(value) || value<.1f || value>10.0f)return 0;
+    *scale=value;return 1;
+}
+static int readWorldScale(const char *path,float *scale)
+{
+    char text[32];
+    GetPrivateProfileStringA("vr","worldscale","1.4",text,sizeof(text),path);
+    return parseWorldScale(text,scale);
+}
 static int readRapidRate(const char *path,unsigned *rate)
 {
     char text[32];
@@ -234,6 +249,9 @@ static void loadCfg(void)
     g_cheatFlags=readCheats(path);
     if(!readRapidRate(path,&g_cfgRapidRate)) {
         note("Invalid rapid_fire_rate; using 4 shots/sec (allowed 1..30).\n");g_cfgRapidRate=4;
+    }
+    if(!readWorldScale(path,&g_cfgWorldScale)) {
+        note("Invalid worldscale; using 1.4x (allowed 0.1..10).\n");g_cfgWorldScale=1.4f;
     }
     g_cfgMsaa  = (int)GetPrivateProfileIntA("vr", "msaa", 4, path);
     g_cfgDepth = (int)GetPrivateProfileIntA("vr", "depth", 0, path);
@@ -367,7 +385,15 @@ static int pullFrame(void)
             if(lensValid) {
                 g_gfx=lens.fx;g_gfy=lens.fy;g_gcx=lens.cx;g_gcy=lens.cy;g_projLive=1;
             }
-            if(units>1.0f)g_unitsPerMetre=units;
+            if(isfinite(units) && units>1.0f) {
+                g_unitsPerMetre=units/g_cfgWorldScale;
+                /* HUD arrives in native game units; keep its physical canvas fixed. */
+                if(g_cfgWorldScale!=1.0f)for(unsigned v=ovStart;v<n;v++) {
+                    g_local[v].x=g_local[v].x/units*g_unitsPerMetre;
+                    g_local[v].y=g_local[v].y/units*g_unitsPerMetre;
+                    g_local[v].z=g_local[v].z/units*g_unitsPerMetre;
+                }
+            }
             if(!g_projLive && fov>5.0f && fov<170.0f) {
                 double half=fov*3.14159265358979/360.0;
                 g_gfx=(float)(320.0/tan(half));g_gfy=1.125f*g_gfx;
@@ -3589,9 +3615,15 @@ int main(int argc, char **argv)
                 note("--rapid-fire-rate requires an integer from 1 to 30 (shots/sec).\n");return 2;
             }
         }
+        else if(!strcmp(argv[i],"--world-scale")) {
+            if(i+1>=argc || !parseWorldScale(argv[++i],&g_cfgWorldScale)) {
+                note("--world-scale requires a multiplier from 0.1 to 10 (for example 1.4).\n");return 2;
+            }
+        }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--infinite-ammo] [--infinite-lives] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--infinite-ammo] [--infinite-lives] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
+    note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
     for (i = 0; i < 100 && !openShare(); i++) Sleep(100);
     if (!g_frame) { note("No HOTD2 bridge. Start through Start-HOTD2.ps1.\n"); return 1; }
