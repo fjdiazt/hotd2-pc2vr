@@ -135,7 +135,7 @@ static void check_near_aim_and_splashes(void)
     assert(aimFromPose(near_origin,direction,0,0,0,0,&sx,&sy,hit)==1);
     assert(fabsf(sx-520)<.01f && fabsf(hit[2]+.05f)<.0001f);
 
-    /* Independent off-center flashes: preserve screen angle, put both on the surface. */
+    /* Half-size flashes retain their off-center anchors and shared surface depth. */
     test_plane(0,0,-6,HOTD_WORLD);
     test_plane(3,.3f,-1,HOTD_SHOT|(1u<<26));
     test_plane(6,-.3f,-1,HOTD_SHOT|(2u<<26));
@@ -146,12 +146,17 @@ static void check_near_aim_and_splashes(void)
     assert(fabsf(g_local[3].z+5.98f)<.001f && fabsf(g_local[6].z+5.98f)<.001f);
     assert(fabsf(g_local[9].z-g_local[3].z)<.0001f);
     assert(g_local[9].z==g_local[10].z && g_local[10].z==g_local[11].z);
-    assert(fabsf(g_local[11].x/g_local[11].z-4.3f/-.8f)<.001f);
-    assert(fabsf(g_local[3].x/g_local[3].z-(-9.7f/-1))<.001f);
-    assert(fabsf(g_local[6].x/g_local[6].z-(-10.3f/-1))<.001f);
+    assert(fabsf(g_local[11].x/g_local[11].z-(-.3f+.5f*(4.3f/-.8f+.3f)))<.001f);
+    assert(fabsf(g_local[3].x/g_local[3].z-4.7f)<.001f);
+    assert(fabsf(g_local[6].x/g_local[6].z-5.3f)<.001f);
+    assert(fabsf((g_local[3].x+g_local[4].x)*.5f/g_local[3].z+.3f)<.001f);
+    assert(fabsf((g_local[6].x+g_local[7].x)*.5f/g_local[6].z-.3f)<.001f);
+    assert(fabsf(fabsf((g_local[4].x-g_local[3].x)/g_local[3].z)-10)<.001f);
+    assert(fabsf(fabsf((g_local[5].y-g_local[3].y)/g_local[3].z)-10)<.001f);
     assert(g_local[0].x==-10 && g_local[0].z==-6); /* World is untouched. */
     test_plane(0,0,-.2f,0);test_plane(3,0,-1,HOTD_SHOT);g_localCount=6;
     placeShotEffects();assert(fabsf(g_local[3].z+59.98f)<.001f); /* Miss uses aimreach, not HUD depth. */
+    assert(fabsf(g_local[3].x/g_local[3].z-5)<.001f); /* Misses retain half size too. */
     g_localCount=0;
 }
 static void check_world_aim(void)

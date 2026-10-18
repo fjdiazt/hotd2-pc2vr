@@ -1029,9 +1029,11 @@ static void placeShotEffects(void)
             if(!rayVsScene(origin,direction,&hit))hit=g_cfgReach*g_unitsPerMetre;
             /* Keep the native screen shape, without scaling a camera-plane mesh into a thick volume. */
             float z=center[2]*fmaxf(.001f*g_unitsPerMetre,hit-.002f*g_unitsPerMetre)/distance;
+            float x=center[0]*z/center[2],y=center[1]*z/center[2];
             for(unsigned i=start;i<end;i++)if(g_local[i].z<-.0001f) {
                 float scale=z/g_local[i].z;
-                g_local[i].x*=scale;g_local[i].y*=scale;g_local[i].z=z;
+                g_local[i].x=x+.5f*(g_local[i].x*scale-x);
+                g_local[i].y=y+.5f*(g_local[i].y*scale-y);g_local[i].z=z;
             }
         }
         start=end;
