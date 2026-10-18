@@ -204,11 +204,11 @@ static char g_cfgGun[MAX_PATH];   /* OBJ to draw in the gun hand; empty = none *
 static int  g_cfgGunScale = 100;  /* percent */
 static int  g_cfgReloadMs = 180;  /* reload flick, ms */
 static unsigned g_cheatFlags;
-static unsigned g_cfgRapidRate=3;
+static unsigned g_cfgRapidRate=4;
 static int readRapidRate(const char *path,unsigned *rate)
 {
     char text[32];
-    GetPrivateProfileStringA("vr","rapid_fire_rate","3",text,sizeof(text),path);
+    GetPrivateProfileStringA("vr","rapid_fire_rate","4",text,sizeof(text),path);
     return hotd_parse_rapid_rate(text,rate);
 }
 static unsigned readCheats(const char *path)
@@ -233,7 +233,7 @@ static void loadCfg(void)
     lstrcpyA(path + n, "HOTD2VR.ini");
     g_cheatFlags=readCheats(path);
     if(!readRapidRate(path,&g_cfgRapidRate)) {
-        note("Invalid rapid_fire_rate; using 3 shots/sec (allowed 1..30).\n");g_cfgRapidRate=3;
+        note("Invalid rapid_fire_rate; using 4 shots/sec (allowed 1..30).\n");g_cfgRapidRate=4;
     }
     g_cfgMsaa  = (int)GetPrivateProfileIntA("vr", "msaa", 4, path);
     g_cfgDepth = (int)GetPrivateProfileIntA("vr", "depth", 0, path);

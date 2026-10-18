@@ -186,3 +186,10 @@ Final desktop native check (owned PID 17500, `build/near-splash-native.json`) ca
 
 
 Headset acceptance after these changes: user reported "works great" in the authorized VR session (`build/near-depth-splash-vr.log`, game PID 46980, viewer PID 57920, focused OpenXR with tracked centering). Active test INI used `akimbo=0`; CLI enabled all cheats at 3 shots/sec. This confirms user acceptance of the tested close aiming/splash result. Full-game coverage, special Original-mode effects and crosshair suppression remain separate.
+
+
+## Rapid-fire default revised to 4 shots/sec
+
+Default is now 4 shots/sec in the shipped INI, viewer initialization, missing/invalid INI fallback and PowerShell launcher parameter. Active local INI was updated as well; backup is `build/HOTD2VR.ini.before-default-rate-4`. Explicit rate overrides and the supported 1-30 range are unchanged. Earlier rate-3 acceptance and test reports above remain historical evidence.
+
+Build/offline gates passed after the default change (`build/default-rate-4-build.log`), including missing-key default, shared request value and the existing 250 ms rate-4 timer check. No game or VR launch.

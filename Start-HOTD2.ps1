@@ -5,7 +5,7 @@ param(
     [switch]$InfiniteAmmo,
     [switch]$InfiniteLives,
     [switch]$RapidFire,
-    [ValidateRange(1,30)][int]$RapidFireRate = 3
+    [ValidateRange(1,30)][int]$RapidFireRate = 4
 )
 $ErrorActionPreference = 'Stop'
 $out = Join-Path $PSScriptRoot 'build'
