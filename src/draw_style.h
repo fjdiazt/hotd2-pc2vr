@@ -12,6 +12,13 @@
 #define HOTD_SHOT 0x02000000u
 #define HOTD_SHOT_GROUP_MASK 0xFC000000u
 
+static inline uint32_t hotd_address(unsigned u,unsigned v)
+{
+    if(u<1 || u>3)u=1;
+    if(v<1 || v>3)v=1;
+    return (u-1)|((v-1)<<2); /* D3DTADDRESS_WRAP=1, MIRROR=2, CLAMP=3. */
+}
+
 static inline uint32_t hotd_style(unsigned blend,unsigned src,unsigned dst,unsigned zwrite,
     unsigned diffuse_alpha,unsigned test,unsigned func,unsigned ref)
 {

@@ -409,13 +409,14 @@ static void read_camera(IDirect3DDevice7 *device)
     }
 }
 
-typedef struct { DWORD colour,style; } DrawStyle;
+typedef struct { DWORD colour,style,address; } DrawStyle;
 static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
 {
     DWORD blend=0,src=2,dst=1,zwrite=1,test=0,func=8,ref=0,alphaop=2,alphaarg=2;
     DWORD lighting=0,colorvertex=0,matsrc=0,cull=D3DCULL_NONE;
+    DWORD address_u=D3DTADDRESS_WRAP,address_v=D3DTADDRESS_WRAP;
     D3DMATERIAL7 material;
-    DrawStyle style={0xFFFFFFFF,0};
+    DrawStyle style={0xFFFFFFFF,0,0};
 #define RS(name,out) IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_##name,&out)
     RS(ALPHABLENDENABLE,blend);RS(SRCBLEND,src);RS(DESTBLEND,dst);RS(ZWRITEENABLE,zwrite);
     RS(ALPHATESTENABLE,test);RS(ALPHAFUNC,func);RS(ALPHAREF,ref);
@@ -424,6 +425,9 @@ static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
 #undef RS
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ALPHAOP,&alphaop);
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ALPHAARG1,&alphaarg);
+    IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ADDRESSU,&address_u);
+    IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ADDRESSV,&address_v);
+    style.address=hotd_address(address_u,address_v);
     if((fvf&D3DFVF_POSITION_MASK)!=D3DFVF_XYZRHW && lighting &&
        (!colorvertex || matsrc==D3DMCS_MATERIAL || !(fvf&D3DFVF_DIFFUSE)) &&
        SUCCEEDED(IDirect3DDevice7_GetMaterial(device,&material)))
@@ -456,6 +460,7 @@ static int convert_vertex(const BYTE *v,DWORD fvf,Texture *tex,DrawStyle style,V
     if(fvf&D3DFVF_SPECULAR)offset+=4;
     out->colour=(fvf&D3DFVF_DIFFUSE) ? (colour&0xFF00FF00u)|((colour&255)<<16)|((colour>>16)&255):style.colour;
     out->style=style.style|capture_kind;
+    out->address=style.address;
     out->u=out->v=-1;out->depth=0;
     out->atlas_x=out->atlas_y=out->atlas_w=out->atlas_h=0;
     if(tex && (fvf&D3DFVF_TEXCOUNT_MASK)) {

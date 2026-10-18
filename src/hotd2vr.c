@@ -587,14 +587,19 @@ static int   g_inScope;                     /* drawing INTO the sight, not the w
 "void alphaTest(float a,uint style) { if(!(style & 1024u)) return; uint v=(uint)(saturate(a)*255.0+0.5); uint r=(style>>14u)&255u; uint f=(style>>11u)&7u;\n" \
 " bool accepted=f==0u || (f==2u && v<r) || (f==3u && v==r) || (f==4u && v<=r) || (f==5u && v>r) || (f==6u && v!=r) || (f==7u && v>=r); clip(accepted ? 1.0 : -1.0); }\n"
 
+#define HOTD_ADDRESS_SHADER \
+"float addressCoord(float t,uint mode) { return mode==1u ? 1.0-abs(1.0-2.0*frac(t*0.5)) : mode==2u ? saturate(t) : frac(t); }\n" \
+"float2 addressUV(float2 t,uint modes) { return float2(addressCoord(t.x,modes&3u),addressCoord(t.y,(modes>>2u)&3u)); }\n"
+
 /* World/overlay share native material opacity and alpha-test rules.
  * A zero atlas width marks an untextured primitive; draw runs carry blending. */
 static const char *SRC =
 "cbuffer C : register(b0) { row_major float4x4 mvp; };\n"
 "Texture2D atlas : register(t0); SamplerState smp : register(s0);\n"
-"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; };\n"
-"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; };\n"
+"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; uint address : TEXCOORD4; };\n"
+"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; nointerpolation uint address : TEXCOORD4; };\n"
 HOTD_ALPHA_SHADER
+HOTD_ADDRESS_SHADER
 "struct POut { float4 c : SV_TARGET; float d : SV_Depth; };\n"
 "#ifdef TRUEZ\n"
 /* TRUE Z. The DLL's exact geometry carries real positions, so the hardware
@@ -605,10 +610,10 @@ HOTD_ALPHA_SHADER
  * eye by BIAS * k relative, so a decal painted after its wall still sits on
  * the wall instead of fighting it. */
 "VOut vs(VIn i, uint vid : SV_VertexID) { VOut o; o.p = mul(mvp, float4(i.p,1));\n"
-"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; return o; }\n"
+"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
 "#define POut float4\n"
 "#else\n"
-"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; return o; }\n"
+"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
 "#endif\n"
 "#ifdef TRUEZ\n"
 "float4 ps(VOut i) : SV_TARGET {\n"
@@ -616,7 +621,7 @@ HOTD_ALPHA_SHADER
 "POut ps(VOut i) {\n"
 "#endif\n"
 "    POut o;\n"
-"    float4 s = atlas.Sample(smp, i.r.xy + frac(i.t) * i.r.zw);\n"
+"    float4 s = atlas.Sample(smp, i.r.xy + addressUV(i.t,i.address) * i.r.zw);\n"
 "    bool flat = i.r.z <= 0;\n"
 "    float a=opacity(i,s,flat); alphaTest(a,i.style);\n"
 "    float3 rgb = flat ? i.c.rgb : saturate(s.rgb * i.c.rgb);\n"
@@ -659,9 +664,10 @@ static const char *SRC_TEX =
 static const char *SRC_OV =
 "cbuffer C : register(b0) { row_major float4x4 mvp; };\n"
 "Texture2D atlas : register(t0); SamplerState smp : register(s0);\n"
-"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; };\n"
-"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; };\n"
+"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; uint address : TEXCOORD4; };\n"
+"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; nointerpolation uint address : TEXCOORD4; };\n"
 HOTD_ALPHA_SHADER
+HOTD_ADDRESS_SHADER
 "struct POut { float4 c : SV_TARGET; float d : SV_Depth; };\n"
 "#ifdef TRUEZ\n"
 /* TRUE Z. The DLL's exact geometry carries real positions, so the hardware
@@ -672,10 +678,10 @@ HOTD_ALPHA_SHADER
  * eye by BIAS * k relative, so a decal painted after its wall still sits on
  * the wall instead of fighting it. */
 "VOut vs(VIn i, uint vid : SV_VertexID) { VOut o; o.p = mul(mvp, float4(i.p,1));\n"
-"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; return o; }\n"
+"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
 "#define POut float4\n"
 "#else\n"
-"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; return o; }\n"
+"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
 "#endif\n"
 "#ifdef TRUEZ\n"
 "float4 ps(VOut i) : SV_TARGET {\n"
@@ -684,7 +690,7 @@ HOTD_ALPHA_SHADER
 "#endif\n"
 "    POut o;\n"
 "    const float2 res = float2(" VC2_STR(VC2_ATLAS_W) ", " VC2_STR(VC2_ATLAS_H) ");\n"
-"    float2 pix = (i.r.xy + frac(i.t) * i.r.zw) * res - 0.5;\n"
+"    float2 pix = (i.r.xy + addressUV(i.t,i.address) * i.r.zw) * res - 0.5;\n"
 "    float2 c0  = floor(pix);\n"
 "    float2 f   = pix - c0;\n"
 "    float2 w   = clamp(fwidth(pix), 1e-5, 1.0);\n"
@@ -719,7 +725,7 @@ static HRESULT compileG(const char *src, const char *entry, const char *prof, ID
 static void makePipeline(void)
 {
     ID3DBlob *vsb = NULL, *psb = NULL, *err = NULL;
-    D3D11_INPUT_ELEMENT_DESC ie[6];
+    D3D11_INPUT_ELEMENT_DESC ie[7];
     D3D11_BUFFER_DESC bd;
     D3D11_RASTERIZER_DESC rd;
     D3D11_DEPTH_STENCIL_DESC dd;
@@ -754,7 +760,9 @@ static void makePipeline(void)
     ie[4].Format = DXGI_FORMAT_R32G32B32A32_FLOAT; ie[4].AlignedByteOffset = 28;
     ie[5].SemanticName = "TEXCOORD"; ie[5].SemanticIndex = 3;
     ie[5].Format = DXGI_FORMAT_R32_UINT; ie[5].AlignedByteOffset = 44;
-    ID3D11Device_CreateInputLayout(g_dev, ie, 6, ID3D10Blob_GetBufferPointer(vsb),
+    ie[6].SemanticName = "TEXCOORD"; ie[6].SemanticIndex = 4;
+    ie[6].Format = DXGI_FORMAT_R32_UINT; ie[6].AlignedByteOffset = offsetof(Vc2Vertex,address);
+    ID3D11Device_CreateInputLayout(g_dev, ie, 7, ID3D10Blob_GetBufferPointer(vsb),
                                    ID3D10Blob_GetBufferSize(vsb), &g_il);
     ID3D10Blob_Release(vsb); ID3D10Blob_Release(psb);
 
@@ -1025,6 +1033,7 @@ static void ovPush(const float *p, DWORD col)
     g_ovVerts[g_ovCount].v = -1.0f;
     g_ovVerts[g_ovCount].depth = 1.0f;
     g_ovVerts[g_ovCount].style = 0;
+    g_ovVerts[g_ovCount].address = 0;
     g_ovCount++;
 }
 
@@ -1546,6 +1555,7 @@ static void gunFace(Vc2Vertex *out, unsigned *n, const float (*c)[3],
         out[*n].x = v[0]; out[*n].y = v[1]; out[*n].z = v[2];
         out[*n].colour = sc;
         out[*n].u = -1.0f; out[*n].v = -1.0f; out[*n].depth = 0.0f;
+        out[*n].address = 0;
         (*n)++;
     }
 }
@@ -1799,6 +1809,7 @@ static void gunLoad(void)
                     if (textured) { out[nout].u = uv[tk][0]; out[nout].v = uv[tk][1]; }
                     else          { out[nout].u = -1.0f;     out[nout].v = -1.0f;     }
                     out[nout].depth = 0.0f;
+                    out[nout].address = 0;
                     nout++;
                 }
             }

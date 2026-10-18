@@ -188,9 +188,11 @@ int main(void)
     g_frame->magic=VC2_SHARE_MAGIC;g_frame->version=VC2_SHARE_VERSION;
     g_frame->seq=g_frame->atlas_seq=2;g_frame->frame=1;g_frame->vertex_count=3;
     g_frame->verts[0].x=11;g_frame->atlas[0]=111;g_frame->active_players=1;
+    g_frame->verts[0].address=hotd_address(2,3);
     g_frame->shot_origins[0][0]=11;
     assert(pullFrame() && g_local[0].x==11 && g_atlPix[0]==111 && g_lastFrame==1 && g_activePlayers==1);
     assert(g_shotOrigins[0][0]==11);
+    assert(g_local[0].address==hotd_address(2,3));
     Vc2Vertex *oldVertices=g_local;
     unsigned *oldAtlas=g_atlPix;
     g_frame->seq=g_frame->atlas_seq=3;g_frame->frame=2;

@@ -8,6 +8,8 @@ static ID3D11Texture2D *target,*staging;
 static ID3D11RenderTargetView *rtv;
 static ID3D11DepthStencilView *dsv;
 static int reverse_winding;
+static float sample_u=.25f,sample_v=.25f,texture_span=1.0f/4096;
+static unsigned sample_address;
 static void check_effect(DWORD colour,unsigned style,int textured,int expected,int sharp)
 {
     float matrix[16],clear[]={.4f,.4f,.4f,1};
@@ -18,10 +20,11 @@ static void check_effect(DWORD colour,unsigned style,int textured,int expected,i
     for(i=0;i<3;i++) {
         g_local[i].x=i==2?3.0f:-1.0f;g_local[i].y=i==1?3.0f:-1.0f;g_local[i].z=.5f;
         g_local[i].colour=colour;g_local[i].style=style;
+        g_local[i].address=sample_address;
         if(textured) {
-            g_local[i].u=g_local[i].v=.25f;
+            g_local[i].u=sample_u;g_local[i].v=sample_v;
             g_local[i].atlas_x=g_local[i].atlas_y=.5f/4096;
-            g_local[i].atlas_w=g_local[i].atlas_h=1.0f/4096;
+            g_local[i].atlas_w=g_local[i].atlas_h=texture_span;
         }
     }
     if(reverse_winding) {
@@ -80,8 +83,27 @@ int main(void)
         }
         reverse_winding=0;
     }
+    /* Positive/negative repeats and exact seams, independently addressed on U and V. */
+    const struct {float uv;int expected[3];} cases[]={
+        {-1.0f/3,{128,64,0}},{4.0f/3,{64,128,255}},{-1,{0,255,0}},
+        {1,{0,255,255}},{1.0f/3,{64,64,64}}};
+    const unsigned gray[]={0,64,128,255};
+    texture_span=3.0f/4096;
+    for(unsigned axis=0;axis<2;axis++) {
+        for(unsigned y=0;y<4;y++)for(unsigned x=0;x<4;x++)
+            g_atlPix[y*4096+x]=0xFF000000u|gray[axis?y:x]*0x010101u;
+        g_atlFresh=1;uploadAtlasTex();
+        for(unsigned u=1;u<=3;u++)for(unsigned v=1;v<=3;v++) {
+            sample_address=hotd_address(u,v);
+            for(unsigned c=0;c<sizeof(cases)/sizeof(*cases);c++)for(int sharp=0;sharp<2;sharp++) {
+                sample_u=axis?.33333333f:cases[c].uv;
+                sample_v=axis?cases[c].uv:.33333333f;
+                check_effect(0xFFFFFFFF,0,1,cases[c].expected[(axis?v:u)-1],sharp);
+            }
+        }
+    }
     ID3D11RenderTargetView_Release(rtv);ID3D11DepthStencilView_Release(dsv);
     ID3D11Texture2D_Release(target);ID3D11Texture2D_Release(staging);releaseGraphics();
-    puts("Effect rendering: shadows, opacity, alpha test, native blending and CW/CCW/no culling passed (world/sharp).");
+    puts("Effect rendering: shadows, opacity, alpha test, blending, culling and U/V wrap/mirror/clamp passed (world/sharp).");
     return 0;
 }

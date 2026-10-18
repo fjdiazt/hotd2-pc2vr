@@ -7,7 +7,7 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 8
+#define VC2_SHARE_VERSION 10
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960
@@ -31,7 +31,7 @@ typedef struct {
     uint32_t colour;
     float u, v, depth;
     float atlas_x, atlas_y, atlas_w, atlas_h;
-    uint32_t style;
+    uint32_t style, address; /* Per-axis native wrap/mirror/clamp; see hotd_address(). */
 } Vc2Vertex;
 
 typedef struct {
@@ -61,7 +61,7 @@ typedef struct {
     float shot_origins[64][3]; /* Exact camera-space anchors for grouped native flashes. */
 } Vc2Frame;
 #pragma pack(pop)
-_Static_assert(sizeof(Vc2Vertex) == 48, "vertex layout changed");
+_Static_assert(sizeof(Vc2Vertex) == 52, "vertex layout changed");
 _Static_assert(offsetof(Vc2Frame, verts) == 156, "frame layout changed");
-_Static_assert(offsetof(Vc2Frame,cheat_flags)==83544220 && offsetof(Vc2Frame,shot_origins)==83544236 && sizeof(Vc2Frame)==83545004,"effect layout changed");
+_Static_assert(offsetof(Vc2Frame,cheat_flags)==84504220 && offsetof(Vc2Frame,shot_origins)==84504236 && sizeof(Vc2Frame)==84505004,"effect layout changed");
 #endif

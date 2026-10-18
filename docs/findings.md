@@ -193,3 +193,16 @@ Headset acceptance after these changes: user reported "works great" in the autho
 Default is now 4 shots/sec in the shipped INI, viewer initialization, missing/invalid INI fallback and PowerShell launcher parameter. Active local INI was updated as well; backup is `build/HOTD2VR.ini.before-default-rate-4`. Explicit rate overrides and the supported 1-30 range are unchanged. Earlier rate-3 acceptance and test reports above remain historical evidence.
 
 Build/offline gates passed after the default change (`build/default-rate-4-build.log`), including missing-key default, shared request value and the existing 250 ms rate-4 timer check. No game or VR launch.
+
+## Per-material texture addressing
+
+User reported a symmetry seam / wrongly textured half on the opening car and a boss, visible in the conversion desktop window as well as VR while the native game looks correct. The bridge read blend/alpha/cull state but discarded D3DTSS_ADDRESSU/V; both conversion shaders applied frac(UV) unconditionally. Native material state supports wrap, mirror and clamp independently per axis. VC2VR handles its own engine's quad flips in its UV builder, so its behavior is not a substitute for capturing HOTD2's D3D7 sampler state.
+
+Bridge now captures both address modes per draw, encodes zero-based U/V modes in a new uint32 address vertex field, and leaves raw UVs intact. Both world and sharp HUD shaders address interpolated UVs inside the selected atlas tile: wrap via frac, mirror via a period-two triangle wave, clamp via saturate. Atlas gutters still isolate neighboring tiles. Draw batching keeps its existing blend/cull grouping because address metadata reaches the pixel shader per primitive. Generated laser/gun vertices initialize the new field. Protocol v10: 52-byte vertices; total mapping 84,505,004 bytes; cheat fields at 84,504,220, shot anchors at 84,504,236. Matching bridge/viewer builds are required; old v9 captures remain historical fixtures.
+
+Actual bridge fake-COM checks verify all nine U/V combinations and snapshot publication retains addressing metadata. Actual WARP pixel checks cover both shaders and axes at negative/out-of-range UVs, positive/negative integer seams and in-range samples. Full build/offline gates passed (`build/texture-address-build.log`).
+
+Native opening-car inspection (owned desktop PID 110596, `build/car-address-native.json`) confirmed model 0x1579 has U-mirror/V-clamp, U-mirror/V-wrap, mirror/mirror and clamp/clamp materials; 0x157E also uses U-mirror/V-wrap. Captured packet has 22,269 world and 156 HUD vertices with eight address-mode combinations. Replaying that same packet with captured addressing versus forced wrap shows the windshield/reflection seam changes (`build/car-address-after.png`, `build/car-address-before.png`), with native reference `build/car-address-reference.png`. Cheats were enabled at 4 shots/sec. Owned native process closed normally. No VR launch. Boss materials and final headset appearance remain unverified.
+
+
+Headset verification: user confirmed textures fixed in the session logged by `build/texture-address-vr.log` (game PID 98820, viewer 92896). No claim of exhaustive boss/scene coverage.

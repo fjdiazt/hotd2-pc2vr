@@ -9,6 +9,7 @@ static DWORD texture_flags=DDPF_RGB,texture_bits=32,texture_alpha;
 static HRESULT lock_result=DD_OK;
 static unsigned prompt_fallbacks;
 static DWORD native_cull=1;
+static DWORD native_address_u=D3DTADDRESS_WRAP,native_address_v=D3DTADDRESS_WRAP;
 static int WINAPI fallback_prompt(HWND hwnd,LPCSTR text,LPCSTR caption,UINT flags)
 {(void)hwnd;(void)text;(void)caption;(void)flags;prompt_fallbacks++;return IDNO;}
 static ULONG WINAPI release_surface(IDirectDrawSurface7 *self)
@@ -50,7 +51,12 @@ static HRESULT WINAPI get_render_state(IDirect3DDevice7 *self,D3DRENDERSTATETYPE
     return DD_OK;
 }
 static HRESULT WINAPI get_stage_state(IDirect3DDevice7 *self,DWORD stage,D3DTEXTURESTAGESTATETYPE state,DWORD *out)
-{(void)self;(void)stage;*out=state==D3DTSS_ALPHAOP?D3DTOP_MODULATE:D3DTA_TEXTURE;return DD_OK;}
+{
+    (void)self;(void)stage;
+    *out=state==D3DTSS_ADDRESSU?native_address_u:state==D3DTSS_ADDRESSV?native_address_v:
+        state==D3DTSS_ALPHAOP?D3DTOP_MODULATE:D3DTA_TEXTURE;
+    return DD_OK;
+}
 static HRESULT WINAPI get_material(IDirect3DDevice7 *self,D3DMATERIAL7 *out)
 {(void)self;memset(out,0,sizeof(*out));out->diffuse.a=.5f;return DD_OK;}
 
@@ -106,6 +112,16 @@ int main(void)
         (vertex.style&(HOTD_WORLD|HOTD_SHOT|HOTD_SHOT_GROUP_MASK))==capture_kind);
     capture_kind=0;
     assert((vertex.style&HOTD_DIFFUSE_ALPHA) && (vertex.style&HOTD_ALPHA_TEST));
+    source[6]=-1.0f/3;source[7]=4.0f/3;
+    for(native_address_u=1;native_address_u<=3;native_address_u++)
+        for(native_address_v=1;native_address_v<=3;native_address_v++) {
+            DrawStyle addressing=read_draw_style(&device,0x112);
+            assert(addressing.address==(native_address_u-1)+4*(native_address_v-1));
+            assert(convert_vertex((const BYTE *)source,0x112,NULL,addressing,&vertex));
+            assert(vertex.address==addressing.address);
+        }
+    native_address_u=native_address_v=D3DTADDRESS_WRAP;
+    assert(!hotd_address(0,99));
     for(i=0;i<128*128;i++)pixels[i]=0x123456;
     for(i=0;i<1600;i++){surfaces[i].iface.lpVtbl=&surface_vt;surfaces[i].refs=1;}
     texture_flags=DDPF_RGB|DDPF_ALPHAPIXELS;texture_alpha=0xFF000000;
