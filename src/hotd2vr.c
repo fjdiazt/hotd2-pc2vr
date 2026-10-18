@@ -237,12 +237,16 @@ static unsigned readCheats(const char *path)
 {
     return (GetPrivateProfileIntA("vr","infinite_ammo",0,path)?HOTD_CHEAT_AMMO:0) |
         (GetPrivateProfileIntA("vr","infinite_lives",0,path)?HOTD_CHEAT_LIVES:0) |
+        (GetPrivateProfileIntA("vr","invincibility",0,path)?HOTD_CHEAT_INVINCIBILITY:0) |
+        (GetPrivateProfileIntA("vr","infinite_continues",0,path)?HOTD_CHEAT_CONTINUES:0) |
         (GetPrivateProfileIntA("vr","rapid_fire",0,path)?HOTD_CHEAT_RAPID:0);
 }
 static unsigned cheatArg(const char *arg)
 {
     if(!strcmp(arg,"--infinite-ammo"))return HOTD_CHEAT_AMMO;
     if(!strcmp(arg,"--infinite-lives"))return HOTD_CHEAT_LIVES;
+    if(!strcmp(arg,"--invincibility"))return HOTD_CHEAT_INVINCIBILITY;
+    if(!strcmp(arg,"--infinite-continues"))return HOTD_CHEAT_CONTINUES;
     if(!strcmp(arg,"--rapid-fire"))return HOTD_CHEAT_RAPID;
     return 0;
 }
@@ -3648,7 +3652,7 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
     note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
@@ -3657,8 +3661,9 @@ int main(int argc, char **argv)
     if (!g_frame) { note("No HOTD2 bridge. Start through Start-HOTD2.ps1.\n"); return 1; }
     if (seconds > 0) g_stopAt = GetTickCount() + (DWORD)seconds*1000;
     note("Bridge connected; input profile %s\n", g_frame->input_supported ? "verified" : "unavailable");
-    note("Cheats requested: ammo=%u lives=%u rapid_fire=%u (up to %u shots/sec; native weapon handling applies)\n",
-        !!(g_cheatFlags&HOTD_CHEAT_AMMO),!!(g_cheatFlags&HOTD_CHEAT_LIVES),!!(g_cheatFlags&HOTD_CHEAT_RAPID),g_cfgRapidRate);
+    note("Cheats requested: ammo=%u lives=%u invincibility=%u continues=%u rapid_fire=%u (up to %u shots/sec; native weapon handling applies)\n",
+        !!(g_cheatFlags&HOTD_CHEAT_AMMO),!!(g_cheatFlags&HOTD_CHEAT_LIVES),
+        !!(g_cheatFlags&HOTD_CHEAT_INVINCIBILITY),!!(g_cheatFlags&HOTD_CHEAT_CONTINUES),!!(g_cheatFlags&HOTD_CHEAT_RAPID),g_cfgRapidRate);
     if (stereo) runStereo(); else if (window) runWindow(); else runVR();
     g_cheatFlags=0;
     pushCheats();

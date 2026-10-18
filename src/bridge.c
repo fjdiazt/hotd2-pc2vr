@@ -34,6 +34,8 @@ static unsigned buttons[2];
 static int cheats_supported;
 static unsigned cheat_owned;
 static BYTE saved_cheats[2][2];
+static int continues_supported,invincibility_ready;
+static DWORD saved_freeplay;
 static HotdRapid rapid_fire[2];
 static char ini_path[MAX_PATH];
 static IDirect3DDevice7 *active_device;
@@ -109,10 +111,36 @@ static int native_cheat_profile(const BYTE *base)
         !memcmp(base+0x149D9,ammo,sizeof(ammo)) && !memcmp(base+0x14C47,ammo_original,sizeof(ammo_original));
 }
 
+static int native_continues_profile(const BYTE *base)
+{
+    static const BYTE shared[]={0x8B,0x0D,0x70,0x8E,0x9C,0x00,0x83,0xF9,0x01};
+    static const BYTE separate[]={0x8B,0x15,0x70,0x8E,0x9C,0x00,0x8B,0x44,0x24,0x08,0x83,0xFA,0x01};
+    static const BYTE available[]={0x8B,0x0D,0x70,0x8E,0x9C,0x00,0xB8,0x01,0x00,0x00,0x00};
+    return !memcmp(base+0x6E1F,shared,sizeof(shared)) &&
+        !memcmp(base+0x6E74,separate,sizeof(separate)) && !memcmp(base+0x6ED0,available,sizeof(available));
+}
+static unsigned requested_cheats(void)
+{
+    return frame && (DWORD)(GetTickCount()-frame->cheat_tick)<500 ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
+}
+static void (__cdecl *native_damage_original)(int,int,int);
+static void (__cdecl *native_damage_forced_original)(int,int,int,int,int);
+static void __cdecl native_damage(int player,int hit,int kind)
+{
+    if(!invincibility_ready || !(requested_cheats()&HOTD_CHEAT_INVINCIBILITY))
+        native_damage_original(player,hit,kind);
+}
+static void __cdecl native_damage_forced(int player,int hit,int kind,int force,int timer)
+{
+    if(!invincibility_ready || !(requested_cheats()&HOTD_CHEAT_INVINCIBILITY))
+        native_damage_forced_original(player,hit,kind,force,timer);
+}
+
 static void native_cheats(unsigned requested)
 {
     const unsigned bits[]={HOTD_CHEAT_LIVES,HOTD_CHEAT_AMMO};
-    requested=cheats_supported ? requested&(HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO):0;
+    requested&=(cheats_supported ? HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO:0) |
+        (continues_supported ? HOTD_CHEAT_CONTINUES:0);
     for(unsigned kind=0;kind<2;kind++)for(unsigned p=0;p<2;p++) {
         BYTE *flag=game_base+0x5C9FD8+p*0x7C+kind;
         if(requested&bits[kind]) {
@@ -120,7 +148,13 @@ static void native_cheats(unsigned requested)
             *flag=1; /* Use native cheats, including item weapons and civilian penalties. */
         } else if(cheat_owned&bits[kind])*flag=saved_cheats[p][kind];
     }
-    if(requested!=cheat_owned)logline("native cheats: ammo=%u lives=%u",!!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES));
+    DWORD *freeplay=(DWORD *)(game_base+0x5C8E70);
+    if(requested&HOTD_CHEAT_CONTINUES) {
+        if(!(cheat_owned&HOTD_CHEAT_CONTINUES))saved_freeplay=*freeplay;
+        *freeplay=1; /* Native free play admits starts/continues without spending either credit pool. */
+    } else if(cheat_owned&HOTD_CHEAT_CONTINUES)*freeplay=saved_freeplay;
+    if(requested!=cheat_owned)logline("native cheats: ammo=%u lives=%u continues=%u",
+        !!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES),!!(requested&HOTD_CHEAT_CONTINUES));
     cheat_owned=requested;
 }
 
@@ -170,7 +204,7 @@ static DWORD __cdecl native_input(void)
     static unsigned previous[2];
     unsigned p;
     DWORD result=native_input_original();
-    unsigned requested=(DWORD)(GetTickCount()-frame->cheat_tick)<500 ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
+    unsigned requested=requested_cheats();
     update_input();
     native_cheats(requested);
     for(p=0;p<2;p++) {
@@ -622,19 +656,29 @@ static DWORD __cdecl native_list(const void *v,DWORD n)
 static DWORD __cdecl native_tl(const void *v,DWORD n)
 {return native_draw(v,n,D3DPT_TRIANGLESTRIP,0x1C4,native_tl_original);}
 
-static int detour9(DWORD rva,const BYTE signature[9],void *hook,void **original)
+/* Callers supply whole, non-relative instructions (5-byte damage or 9-byte draw/input prologues). */
+static int detour(DWORD rva,const BYTE *signature,unsigned n,void *hook,void **original)
 {
     BYTE *at=game_base+rva,*trampoline,patch[9];DWORD jump;
-    if(memcmp(at,signature,9))return 0;
-    trampoline=VirtualAlloc(NULL,14,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
+    if(n<5 || n>sizeof(patch) || memcmp(at,signature,n))return 0;
+    trampoline=VirtualAlloc(NULL,n+5,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);
     if(!trampoline)return 0;
-    memcpy(trampoline,at,9);trampoline[9]=0xE9;
-    jump=(DWORD)((at+9)-(trampoline+14));memcpy(trampoline+10,&jump,4);
-    memset(patch,0x90,sizeof(patch));patch[0]=0xE9;
+    memcpy(trampoline,at,n);trampoline[n]=0xE9;
+    jump=(DWORD)((at+n)-(trampoline+n+5));memcpy(trampoline+n+1,&jump,4);
+    FlushInstructionCache(GetCurrentProcess(),trampoline,n+5);
+    memset(patch,0x90,n);patch[0]=0xE9;
     jump=(DWORD)((BYTE *)hook-(at+5));memcpy(patch+1,&jump,4);
     *original=trampoline;
-    if(!write_code(at,patch,sizeof(patch))){VirtualFree(trampoline,0,MEM_RELEASE);*original=NULL;return 0;}
+    if(!write_code(at,patch,n)){VirtualFree(trampoline,0,MEM_RELEASE);*original=NULL;return 0;}
     return 1;
+}
+static int install_invincibility(void)
+{
+    static const BYTE signature[]={0x56,0x8B,0x74,0x24,0x08}; /* push esi; mov esi,[esp+8] */
+    if(!native_cheat_profile(game_base) || memcmp(game_base+0x15300,signature,sizeof(signature)) ||
+       memcmp(game_base+0x15430,signature,sizeof(signature)))return 0;
+    return detour(0x15300,signature,sizeof(signature),native_damage,(void **)&native_damage_original) &&
+        detour(0x15430,signature,sizeof(signature),native_damage_forced,(void **)&native_damage_forced_original);
 }
 
 static HRESULT (WINAPI *original_present)(void *,DWORD);
@@ -816,17 +860,21 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
     cheats_supported=native_cheat_profile(game_base);
     logline("native cheat profile: %s",cheats_supported?"verified":"unsupported; native flags unchanged");
+    continues_supported=native_continues_profile(game_base);
+    logline("native continues profile: %s",continues_supported?"verified":"unsupported; free play unchanged");
+    invincibility_ready=install_invincibility();
+    logline("native invincibility hooks: %s",invincibility_ready?"ready":"unavailable; damage unchanged");
     logline("native mesh screen-edge culling: %s",relax_mesh_culling(game_base+0xA7F81)?"relaxed":"unsupported; unchanged");
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};
         static const BYTE model_signature[]={0x83,0xEC,0x1C,0xA1,0x74,0xEB,0x7D,0x00,0x53};
-        if(!detour9(0xCBB0,input_signature,native_input,(void **)&native_input_original) ||
-           !detour9(0xA7EF0,model_signature,native_model,(void **)&native_model_original) ||
-           !detour9(0xA8440,model_signature,native_model_alt,(void **)&native_model_alt_original) ||
-           !detour9(0xA59C0,draw_signature,native_strip,(void **)&native_strip_original) ||
-           !detour9(0xA5A00,draw_signature,native_tl,(void **)&native_tl_original) ||
-           !detour9(0xA5A40,draw_signature,native_list,(void **)&native_list_original)) {
+        if(!detour(0xCBB0,input_signature,sizeof(input_signature),native_input,(void **)&native_input_original) ||
+           !detour(0xA7EF0,model_signature,sizeof(model_signature),native_model,(void **)&native_model_original) ||
+           !detour(0xA8440,model_signature,sizeof(model_signature),native_model_alt,(void **)&native_model_alt_original) ||
+           !detour(0xA59C0,draw_signature,sizeof(draw_signature),native_strip,(void **)&native_strip_original) ||
+           !detour(0xA5A00,draw_signature,sizeof(draw_signature),native_tl,(void **)&native_tl_original) ||
+           !detour(0xA5A40,draw_signature,sizeof(draw_signature),native_list,(void **)&native_list_original)) {
             logline("native submission/input hook failed");return FALSE;
         }
         logline("native polygon submission hooks ready");

@@ -1,0 +1,27 @@
+# Native cheat implementation and checks
+
+These addresses apply to the executable hash documented in the README. Unsupported signatures leave the affected feature unavailable.
+
+## Invincibility
+
+The native damage functions at `0x415300` (three cdecl arguments) and `0x415430` (five cdecl arguments) decrement lives and queue player hit events. The existing native infinite-lives byte skips the deduction inside those functions, but execution still reaches the hit-event and damage-cooldown writes. Hit events feed the camera-shake routine at `0x415270`.
+
+Invincibility detours both entries before that work. Their first five bytes are complete, non-relative instructions: `56 8B 74 24 08` (`push esi; mov esi,[esp+8]`). Both entries and the existing native cheat signatures are checked before installation. Each trampoline preserves those instructions and returns to the original body. Damage passes through when the option is off, the heartbeat is at least 500 ms old, or installation did not complete. Enemy AI, attack animations and NPC health are untouched.
+
+## Infinite continues
+
+The native free-play DWORD at `0x9C8E70` controls credit admission. With value `1`, shared-pool admission at `0x406E10`, per-player admission at `0x406E70`, and availability at `0x406ED0` accept play without deducting credits. The bridge validates the corresponding reads/comparisons before owning this value.
+
+The first enable saves the original DWORD. Active requests refresh free play to `1`; disable, viewer exit and heartbeat expiry restore the saved value. The mod does not refill credit pools, change lives, synthesize Start presses or alter the continue countdown.
+
+## Verification
+
+- `tests/test_protection.c` executes real five- and nine-byte trampoline probes; verifies both damage dispatchers for both player indices; checks stale/unsupported pass-through, native free-play signatures, credit/life preservation, option combinations and restoration of prior free-play values.
+- `tests/test_frame_snapshot.c` verifies default-off INI parsing, individual CLI flags, combined requests and delivery without gun ownership. The normal build runs both suites.
+- Owned desktop test PID **64192** passed: both players retained three lives and zero native hit-event flags for 18 seconds (165 samples) with invincibility enabled. Disabling it allowed a natural enemy attack to reduce P1 to two lives. Native infinite-lives bytes were explicitly cleared in this owned test session to make damage observable.
+- The same session forced a zero-life state to exercise normal continue handling: P1 continued twice with shared credits at zero; P2 continued with both per-player credit pools at zero. Each returned to three lives through native Start confirmation, with credit counts still zero. These were controlled deaths, not a full-game enemy-damage run.
+- Disable and watchdog expiry restored free play from `1` to its original `0`. A real desktop viewer with all five CLI cheat flags activated the requests and restored native flags/free play on exit. The owned game closed normally.
+
+The final combined desktop check (PID **60044**, protocol **12**) repeated these checks successfully. Its continue test waited for the native countdown task before sending Start; all three continues were accepted on the first press. An earlier combined attempt sent P2's press before confirming countdown readiness and did not continue; its report is retained with the evidence.
+
+Current runtime evidence is under ignored `build/`: `protection-live.json`, `protection-live.log` and `protection-cli.log`. The full source-integration snapshot, build log and earlier reports are retained under `build/protection-integrate-20261018-034114/`. These captures record their exact protocol/layout; matching bridge and viewer builds are required. Installed `Hod2.exe` and `Hod2.ini` hashes were unchanged after the final check. Headset behavior, every boss/attack path and full-game compatibility remain unverified. No VR session was launched for these checks.

@@ -158,14 +158,24 @@ Native renderer and quit questions remain in this comparison mode. Starting `Hod
 All default off. Enable for a session:
 
 ```powershell
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -InfiniteLives -InfiniteAmmo -RapidFire -RapidFireRate 4
+.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -InfiniteLives -InfiniteAmmo -Invincibility -InfiniteContinues -RapidFire -RapidFireRate 4
 ```
 
-For a viewer reconnect, use `--infinite-lives --infinite-ammo --rapid-fire --rapid-fire-rate 4`. Persistent INI keys are `[vr] infinite_lives`, `infinite_ammo`, `rapid_fire` and `rapid_fire_rate`.
+Use whichever flags you want. For a viewer reconnect, use `--infinite-lives`, `--infinite-ammo`, `--invincibility`, `--infinite-continues`, `--rapid-fire` and `--rapid-fire-rate 4`.
 
-Lives/ammo use the game's native cheat flags for both players, including outside akimbo. Existing flags are restored when the viewer closes or its cheat heartbeat expires after 500 ms. If ammo is already empty when enabling infinite ammo, reload once.
+| Cheat | INI key under `[vr]` | Effect |
+| --- | --- | --- |
+| Infinite lives | `infinite_lives=1` | Prevents life loss and the damage handler's score/rank penalty for both players. |
+| Infinite ammo | `infinite_ammo=1` | Prevents ammunition consumption. Reload once if the gun is already empty when enabling it. |
+| Invincibility | `invincibility=1` | Blocks native player damage, hit reactions and camera shake for both players. Enemies still animate attacks. |
+| Infinite continues | `infinite_continues=1` | Enables native free play: players can start or continue without needing or spending credits. Death, the continue countdown and Start confirmation retain their normal flow. |
+| Rapid fire | `rapid_fire=1` | Repeats a held VR trigger, using `rapid_fire_rate` shots per second. |
 
-Rapid fire repeats a held VR trigger at **4 shots/sec** by default; whole-number rates 1–30 are accepted. Native timing and weapon handling can lower the actual rate. Reload gestures take priority; menus, pause, cutscenes, inactive players and stale input receive no repeated shots. The rate override does not enable rapid fire by itself. Recoil/haptics retain their trigger-press behavior.
+Rapid fire defaults to **4 shots/sec**; whole-number rates 1–30 are accepted. Native timing and weapon handling can lower the actual rate. Reload gestures take priority; menus, pause, cutscenes, inactive players and stale input receive no repeated shots. The rate override does not enable rapid fire by itself. Recoil/haptics retain their trigger-press behavior.
+
+Cheat requests expire after 500 ms without a viewer heartbeat. Native lives/ammo flags and the free-play value return to their previous settings on disable, viewer exit or expiry; invincibility then lets native damage run normally. Credit counts and game files are not rewritten. Unsupported instruction signatures leave the affected feature unavailable and produce a log entry. Rebuild and restart both game and viewer together when updating cheat support. Full-game attack and continue coverage still needs runtime qualification.
+
+Implementation and test evidence: [docs/cheats.md](docs/cheats.md).
 
 ## How it works
 

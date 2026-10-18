@@ -25,6 +25,10 @@ if ($LASTEXITCODE) { throw 'Texture cache test failed.' }
 if ($LASTEXITCODE) { throw 'Reload test build failed.' }
 & "$out\test_reload.exe"
 if ($LASTEXITCODE) { throw 'Reload test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_protection.exe" "$root\tests\test_protection.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Protection test build failed.' }
+& "$out\test_protection.exe"
+if ($LASTEXITCODE) { throw 'Protection test failed.' }
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
 $vs = & $vswhere -latest -property installationPath
 if (!$vs) { throw 'Visual Studio C++ tools required for x64 viewer.' }

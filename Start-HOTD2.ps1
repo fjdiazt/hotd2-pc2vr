@@ -4,6 +4,8 @@ param(
     [int]$Seconds = 0,
     [switch]$InfiniteAmmo,
     [switch]$InfiniteLives,
+    [switch]$Invincibility,
+    [switch]$InfiniteContinues,
     [switch]$RapidFire,
     [ValidateRange(1,30)][int]$RapidFireRate = 4,
     [switch]$SkipSplash,
@@ -33,6 +35,8 @@ if ($Mode -eq 'Stereo') { $viewerArgs += '--stereo' }
 if ($Seconds -gt 0) { $viewerArgs += '--seconds', "$Seconds" }
 if ($InfiniteAmmo) { $viewerArgs += '--infinite-ammo' }
 if ($InfiniteLives) { $viewerArgs += '--infinite-lives' }
+if ($Invincibility) { $viewerArgs += '--invincibility' }
+if ($InfiniteContinues) { $viewerArgs += '--infinite-continues' }
 if ($RapidFire) { $viewerArgs += '--rapid-fire' }
 if ($PSBoundParameters.ContainsKey('RapidFireRate')) { $viewerArgs += '--rapid-fire-rate', "$RapidFireRate" }
 if ($PSBoundParameters.ContainsKey('WorldScale')) { $viewerArgs += '--world-scale', $WorldScale.ToString('G', [Globalization.CultureInfo]::InvariantCulture) }

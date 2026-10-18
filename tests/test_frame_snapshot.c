@@ -156,15 +156,27 @@ int main(void)
     assert(!readRapidRate(ini,&rate));
     assert(cheatArg("--infinite-ammo")==HOTD_CHEAT_AMMO);
     assert(cheatArg("--infinite-lives")==HOTD_CHEAT_LIVES);
+    assert(cheatArg("--invincibility")==HOTD_CHEAT_INVINCIBILITY);
+    assert(cheatArg("--infinite-continues")==HOTD_CHEAT_CONTINUES);
     assert(cheatArg("--rapid-fire")==HOTD_CHEAT_RAPID);
     assert(!cheatArg("--infinite-amm"));
     assert(WritePrivateProfileStringA("vr","infinite_ammo","1",ini));
     assert(readCheats(ini)==HOTD_CHEAT_AMMO);
     assert(WritePrivateProfileStringA("vr","infinite_lives","1",ini));
     assert(WritePrivateProfileStringA("vr","rapid_fire","1",ini));
+    assert(readCheats(ini)==(HOTD_CHEAT_AMMO|HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID));
+    assert(WritePrivateProfileStringA("vr","invincibility","1",ini));
+    assert(readCheats(ini)==(HOTD_CHEAT_AMMO|HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID|HOTD_CHEAT_INVINCIBILITY));
+    assert(WritePrivateProfileStringA("vr","infinite_continues","1",ini));
     assert(readCheats(ini)==HOTD_CHEAT_MASK);
     assert(WritePrivateProfileStringA("vr","infinite_ammo","0",ini));
-    assert(readCheats(ini)==(HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID));
+    assert(readCheats(ini)==(HOTD_CHEAT_MASK&~HOTD_CHEAT_AMMO));
+    assert(WritePrivateProfileStringA("vr","infinite_lives","0",ini));
+    assert(WritePrivateProfileStringA("vr","rapid_fire","0",ini));
+    assert(WritePrivateProfileStringA("vr","invincibility","0",ini));
+    assert(readCheats(ini)==HOTD_CHEAT_CONTINUES);
+    assert(WritePrivateProfileStringA("vr","infinite_continues","0",ini));
+    assert(!readCheats(ini));
     assert(DeleteFileA(ini));
     const XrViewStateFlags tracked=XR_VIEW_STATE_POSITION_VALID_BIT|XR_VIEW_STATE_ORIENTATION_VALID_BIT|
         XR_VIEW_STATE_POSITION_TRACKED_BIT|XR_VIEW_STATE_ORIENTATION_TRACKED_BIT;
