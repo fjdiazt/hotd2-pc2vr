@@ -263,6 +263,34 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes)
     if(interrupt_copy && src==(const void *)g_frame->atlas)g_frame->seq+=2;
 }
 
+static void check_swapped_player_hud(void)
+{
+    float scale=g_cfgWorldScale;int akimbo=g_cfgAkimbo,swap=g_cfgSwapPlayerHud;
+    const float x[12]={-8,-6,6,8,-8,-5,5,8,-2,-4,-6,-7};
+    for(unsigned sc=0;sc<3;sc++)for(unsigned enabled=0;enabled<2;enabled++)for(unsigned two=0;two<2;two++) {
+        g_cfgWorldScale=sc==0?1:sc==1?1.25f:2;g_cfgSwapPlayerHud=enabled;g_cfgAkimbo=two;
+        g_frame->vertex_count=12;g_frame->reserved[0]=0;g_frame->reserved[2]=1;g_frame->units_per_metre=10;
+        for(unsigned i=0;i<12;i++)g_frame->verts[i]=(Vc2Vertex){.x=x[i],.y=-5,.z=-20,.depth=1,
+            .address=i<8?((i/2)+1)<<HOTD_PLAYER_HUD_SHIFT:0,.colour=0xFFAC1234,.u=.25f,.v=.75f};
+        g_frame->verts[9].style=HOTD_WORLD;g_frame->verts[9].address=1<<HOTD_PLAYER_HUD_SHIFT;
+        g_frame->verts[10].address=HOTD_GFILE;g_frame->verts[11].address=7<<HOTD_PLAYER_HUD_SHIFT;
+        for(unsigned repeat=0;repeat<2;repeat++) {
+            g_frame->seq+=2;assert(pullFrame());
+            const float changed[8]={6,8,-8,-6,5,8,-8,-5};float units=g_unitsPerMetre/10;
+            for(unsigned i=0;i<8;i++) {
+                assert(fabsf(g_local[i].x-(enabled?changed[i]:x[i])*units)<.0001f);
+                assert(g_local[i].u==.25f && g_local[i].v==.75f && g_local[i].colour==0xFFAC1234);
+                assert(g_local[i].address==g_frame->verts[i].address && g_frame->verts[i].x==x[i]);
+                assert(g_local[i].y==-5*units && g_local[i].z==-20*units && g_local[i].depth==1);
+            }
+            assert(fabsf(g_local[8].x-x[8]*units)<.0001f); /* Caption/menu untagged. */
+            assert(fabsf(g_local[9].x-x[9]*units)<.0001f); /* World, even if tag is corrupt. */
+            assert(fabsf(g_local[11].x-x[11]*units)<.0001f); /* Unknown group retained. */
+        }
+    }
+    g_cfgWorldScale=scale;g_cfgAkimbo=akimbo;g_cfgSwapPlayerHud=swap;
+}
+
 int main(void)
 {
     char temp[MAX_PATH],ini[MAX_PATH];
@@ -379,6 +407,7 @@ int main(void)
     check_controller_modes();
     check_head_relative_reload();
     check_shot_haptics();
+    check_swapped_player_hud();
     g_cheatFlags=0;menuPocInit();
     g_menuPocEnabled=g_menuPocOpen=g_menuPocArmed=1;g_menuPocPage=-1;g_menuPocRow=0;
     g_menuPocPrevious=0;g_menuPocBlock=0;g_nativePaused=0;

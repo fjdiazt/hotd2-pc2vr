@@ -57,6 +57,7 @@
 
 #include "hotd_share.h"
 #include "game_input.h"
+#include "player_hud.h"
 #include "audio_control.h"
 
 #define NEAR_M 0.05f
@@ -184,6 +185,7 @@ static int g_cfgExpandWorld;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
 static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_menuPocEnabled;
+static int g_cfgSwapPlayerHud=1;
 static int g_cfgBrightness = 90;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
@@ -223,6 +225,7 @@ static unsigned readAudioVolume(const char *path,const char *key)
 }
 static void readGraphicsFlags(const char *path)
 {
+    g_cfgSwapPlayerHud=GetPrivateProfileIntA("vr","swap_player_hud",1,path)!=0;
     g_cfgLaser=GetPrivateProfileIntA("vr","laser",1,path)!=0;
     g_cfgCrosshair=GetPrivateProfileIntA("vr","crosshair",1,path)!=0;
     g_cfgWindow=GetPrivateProfileIntA("vr","window",0,path)!=0;
@@ -454,6 +457,7 @@ static int pullFrame(void)
                 double half=fov*3.14159265358979/360.0;
                 g_gfx=(float)(320.0/tan(half));g_gfy=1.125f*g_gfx;
             }
+            if(g_cfgSwapPlayerHud)hotd_swap_player_hud(g_local,ovStart,n);
             g_addStart=addStart;g_nativePaused=paused;g_ovStart=ovStart;
             g_localCount = n;
             g_lastFrame = frameNo;
@@ -3784,6 +3788,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--menu") || !strcmp(argv[i], "--menu-poc")) g_menuPocEnabled = 1;
         else if (!strcmp(argv[i], "--no-menu")) g_menuPocEnabled = 0;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
+        else if (!strcmp(argv[i], "--swap-player-hud")) g_cfgSwapPlayerHud=1;
+        else if (!strcmp(argv[i], "--no-swap-player-hud")) g_cfgSwapPlayerHud=0;
         else if (!strcmp(argv[i], "--expand-meshes")) g_cfgExpandMeshes = 1;
         else if (!strcmp(argv[i], "--no-expand-meshes")) g_cfgExpandMeshes = 0;
         else if (!strcmp(argv[i], "--expand-world")) g_cfgExpandWorld = 1;
@@ -3819,7 +3825,7 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
     if(g_menuPocEnabled && !menuPocLoadFont()) {
@@ -3828,6 +3834,7 @@ int main(int argc, char **argv)
     }
     menuPocInit();
     note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
+    note("Player HUD: swap=%d (akimbo=%d)\n",g_cfgSwapPlayerHud,g_cfgAkimbo);
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
     note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
     note("Scene brightness: %d%%\n",g_cfgBrightness);

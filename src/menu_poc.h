@@ -24,7 +24,8 @@ static MenuPocItem menuPocItems[6][16]={
      MI("Brightness percent","brightness",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
      MI("Gamma percent","gamma",&g_cfgGamma,0,300,5,MENU_INT,MENU_SHADER,220),
      MB("Laser","laser",&g_cfgLaser,1),MB("Crosshair","crosshair",&g_cfgCrosshair,1),
-     MB("Sharp HUD","hudsharp",&g_cfgHudSharp,1),MB("Zoom HUD","hudzoom",&g_cfgHudZoom,0)},
+     MB("Sharp HUD","hudsharp",&g_cfgHudSharp,1),MB("Zoom HUD","hudzoom",&g_cfgHudZoom,0),
+     MB("Swap player HUD","swap_player_hud",&g_cfgSwapPlayerHud,1)},
     {MI("Native lighting","native_lighting",&g_cfgNativeLighting,0,1,1,MENU_INT,MENU_CAPTURE,1),
      MI("Expand meshes","expand_meshes",&g_cfgExpandMeshes,0,1,1,MENU_INT,MENU_CAPTURE,1),
      MI("Expand world","expand_world",&g_cfgExpandWorld,0,1,1,MENU_INT,MENU_CAPTURE,1),
@@ -63,7 +64,7 @@ static MenuPocItem menuPocItems[6][16]={
 #undef MI
 #undef MB
 #undef MC
-static const unsigned menuPocCounts[]={7,7,3,16,6,6};
+static const unsigned menuPocCounts[]={8,7,3,16,6,6};
 static const char *g_menuPocError;
 #define MENU_TOGGLE 0x80000000u
 

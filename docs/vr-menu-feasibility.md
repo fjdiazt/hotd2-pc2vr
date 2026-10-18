@@ -99,7 +99,7 @@ started separately with `--preview-only --menu-poc` for desktop review.
 ## Settings wiring
 
 The user confirmed the POC's appearance and operation in VR, then authorized
-real option wiring. The viewer now presents 45 existing numeric/boolean options
+real option wiring. The viewer now presents 46 existing numeric/boolean options
 from its effective launch configuration, grouped and paginated. Live options
 update their existing variables/heartbeat; brightness/gamma swap their three
 affected pixel shaders as one successful set. Resource/startup settings stage
@@ -142,3 +142,6 @@ WM_CLOSE. The existing quit-confirmation handler accepts the native prompt;
 no additional hook or process termination is involved. A live desktop test
 selected the new row and verified both native game and viewer exited normally,
 with cheats off and an unedited mod INI unchanged.
+
+Main integration retains protocol 18 and the independent player-HUD swap.
+Swap player HUD is available live in Display and included in Reset Defaults.

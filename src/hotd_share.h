@@ -7,7 +7,7 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 17
+#define VC2_SHARE_VERSION 18
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960
@@ -39,7 +39,7 @@ typedef struct {
     uint32_t colour;
     float u, v, depth;
     float atlas_x, atlas_y, atlas_w, atlas_h;
-    uint32_t style, address; /* Native U/V addressing plus HOTD_GFILE presentation provenance. */
+    uint32_t style, address; /* Native U/V addressing plus HOTD_GFILE / player-HUD provenance. */
     uint32_t specular, fog_colour; /* RGBA; fog alpha stores mode 0/off, 1/linear, 2/exp, 3/exp2. */
     float fog; /* Native camera fog coordinate; evaluated after texturing/specular. */
 } Vc2Vertex;

@@ -18,6 +18,7 @@
 #include "lighting.h"
 #include "capture_visibility.h"
 #include "crosshair_capture.h"
+#include "player_hud.h"
 #include "audio_control.h"
 #include "desktop_pause.h"
 
@@ -44,7 +45,13 @@ static HotdStageRecords stage_records;
 static HotdStageRecords gfile_records;
 static const BYTE *gfile_immediate;
 static int gfile_ready,capture_gfile;
-static HotdCrosshairRecords crosshair_records;
+static HotdSpriteRecords crosshair_records,player_hud_records[4];
+static unsigned player_hud_owner,capture_player_hud;
+static int player_hud_ready;
+static const BYTE *player_hud_immediate;
+static unsigned player_hud_immediate_group;
+static void (__cdecl *native_hud_ammo_original)(const BYTE *);
+static DWORD (__cdecl *native_hud_lives_original)(const BYTE *);
 static int crosshair_ready;
 static const BYTE *crosshair_definition,*crosshair_immediate;
 static unsigned crosshair_draw_depth,crosshair_draw_base_skip;
@@ -725,7 +732,7 @@ static int convert_vertex(const BYTE *v,DWORD fvf,Texture *tex,DrawStyle style,V
         out->specular=out->fog_colour=0;out->fog=1;
     }
     out->style=style.style|capture_kind;
-    out->address=style.address|(capture_gfile?HOTD_GFILE:0);
+    out->address=style.address|(capture_gfile?HOTD_GFILE:0)|capture_player_hud;
     out->u=out->v=-1;out->depth=0;
     out->atlas_x=out->atlas_y=out->atlas_w=out->atlas_h=0;
     if(tex && (fvf&D3DFVF_TEXCOUNT_MASK)) {
@@ -964,27 +971,32 @@ static void __cdecl native_submit_alt(const BYTE *record,float alpha)
 {native_submit_model(record,alpha,1);}
 static void __cdecl native_sprite_submit(const BYTE *record)
 {
-    const BYTE *previous=crosshair_immediate;
+    const BYTE *previous=crosshair_immediate,*previous_hud=player_hud_immediate;
+    unsigned hud_group=player_hud_owner,previous_group=player_hud_immediate_group;
     int owned=crosshair_ready && crosshair_definition!=NULL;
     int deferred=(*(const DWORD *)record&0x80000000u)!=0,tracked=0;
     HotdNativeQueue before={0};
     if(capture_world_enabled() && (*(const DWORD *)record&0x80000000u) && !native_queue_room()) {
         visibility_queue_drops++;return;
     }
-    if(owned && deferred) {
+    if((owned || hud_group) && deferred) {
         before=native_capture_queue();
         tracked=hotd_native_queue_room(before,(uintptr_t)game_base+0x3E814C);
     }
     crosshair_immediate=owned && !deferred?record:NULL;
+    player_hud_immediate=hud_group && !deferred?record:NULL;player_hud_immediate_group=hud_group;
     native_sprite_submit_original(record);
-    crosshair_immediate=previous;
+    crosshair_immediate=previous;player_hud_immediate=previous_hud;player_hud_immediate_group=previous_group;
     if(tracked) {
         HotdNativeQueue after=native_capture_queue();
         if(hotd_native_queue_valid(after,(uintptr_t)game_base+0x3E814C) &&
            after.list==before.list && after.capacity==before.capacity && after.count==before.count+1 &&
            after.cursor==before.cursor+HOTD_SPRITE_RECORD_SIZE &&
            *(const DWORD *)(after.list+before.count*4)==before.cursor)
-            hotd_remember_crosshair(&crosshair_records,(const BYTE *)before.cursor);
+        {
+            if(owned)hotd_remember_sprite(&crosshair_records,(const BYTE *)before.cursor);
+            if(hud_group)hotd_remember_sprite(player_hud_records+(hud_group>>HOTD_PLAYER_HUD_SHIFT)-1,(const BYTE *)before.cursor);
+        }
     }
 }
 
@@ -1000,10 +1012,16 @@ static void __cdecl native_bitmap(const BYTE *definition)
 static void __cdecl native_sprite_draw(const BYTE *record)
 {
     unsigned previous_skip=capture_skip,previous_depth=crosshair_draw_depth,previous_base=crosshair_draw_base_skip;
-    unsigned base=crosshair_draw_depth?crosshair_draw_base_skip:capture_skip;
+    unsigned base=crosshair_draw_depth?crosshair_draw_base_skip:capture_skip,previous_hud=capture_player_hud;
+    capture_player_hud=0;
+    if(player_hud_ready) {
+        if(player_hud_immediate==record)capture_player_hud=player_hud_immediate_group;
+        for(unsigned g=0;g<4;g++)if(hotd_take_sprite(player_hud_records+g,record))
+            capture_player_hud=(g+1)<<HOTD_PLAYER_HUD_SHIFT;
+    }
     int owned=0;
     if(crosshair_ready) {
-        owned=hotd_take_crosshair(&crosshair_records,record);
+        owned=hotd_take_sprite(&crosshair_records,record);
         owned|=crosshair_immediate==record;
     }
     if(owned) {
@@ -1013,8 +1031,21 @@ static void __cdecl native_sprite_draw(const BYTE *record)
     crosshair_draw_depth++;crosshair_draw_base_skip=base;capture_skip=base|owned;
     native_sprite_draw_original(record);
     capture_skip=previous_skip;crosshair_draw_depth=previous_depth;crosshair_draw_base_skip=previous_base;
+    capture_player_hud=previous_hud;
 }
 
+static void __cdecl native_hud_ammo(const BYTE *task)
+{
+    unsigned previous=player_hud_owner;
+    player_hud_owner=player_hud_ready?hotd_player_hud_group(task,0):0;
+    native_hud_ammo_original(task);player_hud_owner=previous;
+}
+static DWORD __cdecl native_hud_lives(const BYTE *task)
+{
+    unsigned previous=player_hud_owner;
+    player_hud_owner=player_hud_ready?hotd_player_hud_group(task,1):0;
+    DWORD result=native_hud_lives_original(task);player_hud_owner=previous;return result;
+}
 static int native_stage_visibility(int visible,float radius,uintptr_t caller)
 {
     return visible || (capture_world_enabled() && native_queue_room() &&
@@ -1160,6 +1191,15 @@ static int install_capture_visibility(void)
         detour(0x6310,sphere,sizeof(sphere),native_visibility,(void **)&native_visibility_original);
     return visibility_hooks_ready;
 }
+static int install_player_hud(void)
+{
+    static const BYTE ammo[]={0x83,0xEC,0x14,0x8B,0x44,0x24,0x18};
+    static const BYTE lives[]={0x8B,0x44,0x24,0x04,0x56,0x57};
+    return crosshair_ready && hotd_player_hud_profile(game_base) &&
+        detour(0x177D0,ammo,sizeof(ammo),native_hud_ammo,(void **)&native_hud_ammo_original) &&
+        detour(0x174A0,lives,sizeof(lives),native_hud_lives,(void **)&native_hud_lives_original);
+}
+
 static int install_crosshair_capture(int profile_valid)
 {
     static const BYTE bitmap[]={0x8B,0x44,0x24,0x04,0x83,0xEC,0x38,0x8B,0x08};
@@ -1260,7 +1300,7 @@ static void publish_frame(void)
     texture_failures=0;
     count=hud_count=calls=dropped=shot_group=0;
     memset(&stage_records,0,sizeof(stage_records));memset(&crosshair_records,0,sizeof(crosshair_records));
-    memset(&gfile_records,0,sizeof(gfile_records));
+    memset(&gfile_records,0,sizeof(gfile_records));memset(player_hud_records,0,sizeof(player_hud_records));
     visibility_queue_drops=0;visibility_flags_latched=0;
 }
 static HRESULT (WINAPI *original_create_device)(IDirect3D7 *,REFCLSID,IDirectDrawSurface7 *,IDirect3DDevice7 **);
@@ -1408,6 +1448,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     gfile_ready=visibility_hooks_ready && native_gfile_profile();
     logline("G's File presentation capture: %s",gfile_ready?"ready":"unavailable; native depth retained");
     logline("native crosshair capture hooks: %s",install_crosshair_capture(crosshair_profile_valid)?"ready":"unavailable; native crosshairs retained");
+    player_hud_ready=install_player_hud();
+    logline("player HUD provenance: %s",player_hud_ready?"ready":"unavailable; original HUD positions retained");
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};

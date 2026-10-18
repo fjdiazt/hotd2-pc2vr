@@ -90,9 +90,17 @@ With both outputs enabled, the preview uses the existing independent desktop cam
 | Right thumbstick click | Recenter the VR view |
 | Left thumbstick click | Open/close VR Settings, save edits on close |
 
-Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-17 bridge/viewer builds are required.
+Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-18 bridge/viewer builds are required.
 
 Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Grip supplies Reload only; B/Y supplies Skip/Cancel only. Two signature-checked weapon input reads preserve native reload rules while separating those commands. Physical Ctrl retains native behavior. Both sticks navigate native menus; right click recenters once per press. Left click toggles VR Settings. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload, right trackpad click for recenter and left trackpad click for VR Settings.
+
+### Player HUD placement
+
+`[vr] swap_player_hud=1` (default) moves converted gameplay ammo and lives rows to match the fixed gun assignments: P1 on the right, P2 on the left. Player labels, Original-mode weapon counts and reload messages/hints move with their row. Text, digit order, artwork, animation and HUD depth stay intact. Each row is aligned to the opposite side using its complete bounds; its width can vary with ammo/lives or messages.
+
+Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwapPlayerHud` to retain the native layout. `--swap-player-hud` / `-SwapPlayerHud` enable it. Last direct CLI switch wins; the launcher rejects opposing switches. The flag works independently of `akimbo` and never changes controller/player assignments.
+
+Ownership comes from the native player ammo/lives draw routines, including deferred sprite copies. Shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 18 bridge/viewer builds are required. Akimbo headset placement is user-confirmed; non-akimbo placement still needs runtime confirmation.
 
 ### Pausing
 
@@ -106,9 +114,9 @@ Only left thumbstick click opens/closes the native-font settings panel. It start
 
 The menu background is 50% opaque, with fully visible text and selection accents over the game scene.
 
-Display, Rendering, Audio, Controls, Cheats and Advanced expose 45 existing numeric/boolean settings. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale, focus and output changes require a viewer restart; bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
+Display, Rendering, Audio, Controls, Cheats and Advanced expose 46 existing numeric/boolean settings. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale, focus and output changes require a viewer restart; bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
 
-**Reset defaults**, after Advanced, restores all 45 menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
+**Reset defaults**, after Advanced, restores all 46 menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
 
 **Quit game** is the final root row, after Reset defaults. It saves pending options, then sends the connected native game window its normal close request. The existing bridge handles the native quit confirmation, and the viewer exits when the game closes. A missing/mismatched window or failed INI save keeps the menu open; read-only companion previews cannot quit the game.
 
@@ -118,7 +126,7 @@ Closing the panel saves only edited keys to `HOTD2VR.ini` beside that viewer. No
 
 Desktop preview: arrows navigate, Enter selects, Backspace returns, F8 opens/closes. A simultaneous companion preview is read-only and cannot save or change gameplay settings. The native desktop game window does not render the VR Settings panel.
 
-The bridge and viewer must both be rebuilt for the current protocol 17; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 17 combines those changes with separate VR Pause and Reload/Cancel inputs. Details and verification: [docs/pause.md](docs/pause.md).
+The bridge and viewer must both be rebuilt for the current protocol 18; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 18 combines separate VR Pause and Reload/Cancel inputs with player-HUD ownership; it rejects the incompatible protocol-17 builds from the separate branches. Details and verification: [docs/pause.md](docs/pause.md).
 
 ### Two hands and akimbo
 

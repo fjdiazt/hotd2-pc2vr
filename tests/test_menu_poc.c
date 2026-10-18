@@ -127,6 +127,7 @@ int main(void)
     assert(WritePrivateProfileStringA("other","unknown","keep",g_vrIniPath));
     g_cfgLaser=1;g_cfgMsaa=2;menuPocInit();
     assert(menuPocSet(&menuPocItems[0][0],200));
+    assert(menuPocSet(&menuPocItems[0][7],0) && !g_cfgSwapPlayerHud);
     assert(menuPocSet(&menuPocItems[4][0],1));
     g_menuPocOpen=1;g_menuPocPage=-1;g_menuPocRow=5;
     g_menuPocBlock=g_menuPocArmed=0;g_menuPocPrevious=0;g_nativePaused=1;
@@ -136,6 +137,7 @@ int main(void)
     g_previewOnly=0;press(VC2_BTN_START);
     assert(g_menuPocPage==-1 && g_menuPocRow==6 && g_menuPocOpen && g_nativePaused);
     assert(g_menuPocResetPending && g_cfgWorldScale==1.25f && g_cfgBrightness==90 && g_cfgGamma==220);
+    assert(g_cfgSwapPlayerHud);
     assert(!g_cheatFlags && !g_frame->cheat_flags && g_frame->audio_levels==hotd_pack_audio(100,100,100));
     assert(g_cfgMsaa==2 && menuPocItems[1][3].value==4); /* Resource setting waits for restart. */
     assert(GetPrivateProfileIntA("vr","laser",-1,g_vrIniPath)==0); /* Save only on close. */

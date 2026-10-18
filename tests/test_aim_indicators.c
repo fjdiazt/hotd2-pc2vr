@@ -28,6 +28,11 @@ int main(void)
     assert(WritePrivateProfileStringA("vr","brightness","bad",ini));
     assert(!readBrightness(ini,&brightness));
     readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting && g_cfgExpandMeshes && !g_cfgExpandWorld && !g_cfgWindow && g_cfgVrWindow);
+    assert(g_cfgSwapPlayerHud);
+    assert(WritePrivateProfileStringA("vr","swap_player_hud","0",ini));
+    readGraphicsFlags(ini);assert(!g_cfgSwapPlayerHud);
+    assert(WritePrivateProfileStringA("vr","swap_player_hud","1",ini));
+    readGraphicsFlags(ini);assert(g_cfgSwapPlayerHud);
     assert(WritePrivateProfileStringA("vr","vrwindow","1",ini));
     readGraphicsFlags(ini);assert(g_cfgVrWindow);
     assert(WritePrivateProfileStringA("vr","vrwindow","0",ini));
@@ -48,6 +53,10 @@ int main(void)
     readGraphicsFlags(ini);assert(!g_cfgExpandMeshes && g_cfgExpandWorld);
     assert(DeleteFileA(ini));
 
+    char *hud_off[]={"viewer","--swap-player-hud","--no-swap-player-hud","--stop-before-bridge"};
+    char *hud_on[]={"viewer","--no-swap-player-hud","--swap-player-hud","--stop-before-bridge"};
+    assert(viewer_application_main(4,hud_off)==2 && !g_cfgSwapPlayerHud);
+    assert(viewer_application_main(4,hud_on)==2 && g_cfgSwapPlayerHud);
     char *light_off[]={"viewer","--native-lighting","--no-native-lighting","--stop-before-bridge"};
     char *volumes[]={"viewer","--master-volume","80","--music-volume","0","--effects-volume","35","--master-volume","60","--stop-before-bridge"};
     assert(viewer_application_main(10,volumes)==2 && g_cfgMasterVolume==60 && !g_cfgMusicVolume && g_cfgEffectsVolume==35);
