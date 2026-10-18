@@ -59,8 +59,49 @@ static void reset(void)
     *(DWORD *)(game_base+0x3E793C)=0;*(DWORD *)(game_base+0x3E78C0)=(DWORD)(list+4096);
     memset(&crosshair_records,0,sizeof(crosshair_records));memset(request,0,sizeof(request));memset(other,0,sizeof(other));
     native_bitmaps=native_submits=native_sprites=suppressed=hud_count=count=calls=dropped=0;
+    memset(player_hud_records,0,sizeof(player_hud_records));player_hud_owner=capture_player_hud=0;
+    player_hud_immediate=NULL;player_hud_immediate_group=0;player_hud_ready=0;
     crosshair_ready=1;crosshair_definition=crosshair_immediate=NULL;capture_skip=crosshair_draw_depth=0;
     nested_bitmap=nested_sprite=append_bad=0;
+}
+static const BYTE *hud_task_seen;
+static void __cdecl hud_ammo(const BYTE *task)
+{hud_task_seen=task;native_sprite_submit(request);}
+static DWORD __cdecl hud_lives(const BYTE *task)
+{hud_task_seen=task;native_sprite_submit(request);return 37;}
+static void test_player_hud(void)
+{
+    const BYTE ammo[]={0x83,0xEC,0x14,0x8B,0x44,0x24,0x18},lives[]={0x8B,0x44,0x24,4,0x56,0x57};
+    BYTE task[0x38]={0},alias[HOTD_SPRITE_RECORD_SIZE],saved[HOTD_SPRITE_RECORD_SIZE];
+    assert(!hotd_player_hud_profile(game_base));
+    memcpy(game_base+0x177D0,ammo,sizeof(ammo));memcpy(game_base+0x174A0,lives,sizeof(lives));
+    assert(hotd_player_hud_profile(game_base));
+    const unsigned addresses[]={0x177D0,0x174A0},sizes[]={7,6};
+    for(unsigned h=0;h<2;h++)for(unsigned b=0;b<sizes[h];b++) {
+        game_base[addresses[h]+b]^=1;assert(!hotd_player_hud_profile(game_base));game_base[addresses[h]+b]^=1;
+    }
+    native_hud_ammo_original=hud_ammo;native_hud_lives_original=hud_lives;
+    for(unsigned kind=0;kind<2;kind++)for(unsigned p=0;p<2;p++)for(unsigned deferred=0;deferred<2;deferred++) {
+        reset();player_hud_ready=1;*(DWORD *)(task+0x34)=p;*(DWORD *)request=deferred?0x80000000:0;
+        if(kind)assert(native_hud_lives(task)==37);else native_hud_ammo(task);
+        assert(hud_task_seen==task && !player_hud_owner && !capture_player_hud);
+        if(deferred)native_sprite_draw(queued(0));
+        assert(native_submits==1 && native_sprites==1 && hud_count==6 && !suppressed);
+        for(unsigned v=0;v<6;v++)assert((hud_vertices[v].address&HOTD_PLAYER_HUD_MASK)==((kind*2+p+1)<<HOTD_PLAYER_HUD_SHIFT));
+        native_sprite_draw(other);assert(!(hud_vertices[6].address&HOTD_PLAYER_HUD_MASK));
+    }
+    reset();player_hud_ready=1;*(DWORD *)(task+0x34)=0;*(DWORD *)request=0x80000000;
+    native_hud_ammo(task);memcpy(alias,queued(0),sizeof(alias));memcpy(saved,queued(0),sizeof(saved));
+    native_sprite_draw(alias);assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
+    queued(0)[20]^=1;native_sprite_draw(queued(0));memcpy(queued(0),saved,sizeof(saved));native_sprite_draw(queued(0));
+    assert(!(hud_vertices[6].address&HOTD_PLAYER_HUD_MASK) && !(hud_vertices[12].address&HOTD_PLAYER_HUD_MASK));
+    reset();player_hud_ready=1;*(DWORD *)(task+0x34)=2;native_hud_ammo(task);
+    assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
+    reset();player_hud_ready=0;*(DWORD *)(task+0x34)=0;native_hud_ammo(task);
+    assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
+    reset();player_hud_ready=1;*(DWORD *)request=0x80000000;native_hud_ammo(task);
+    BYTE *copy=queued(0);publish_frame();native_sprite_draw(copy);
+    assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
 }
 static void test_profile(void)
 {
@@ -122,17 +163,18 @@ int main(void)
     native_sprite_draw(queued(0));native_sprite_draw(queued(0));assert(suppressed==1&&hud_count==6);
     /* Saturation keeps accepted tags; overflow visible. Consumed holes never duplicate recycled addresses. */
     reset();*(DWORD *)request=0x80000000;
-    for(unsigned i=0;i<HOTD_CROSSHAIR_RECORDS+2;i++)native_bitmap_draw(definition(1,i%4),0x16AE7);
-    for(unsigned i=0;i<HOTD_CROSSHAIR_RECORDS+2;i++)native_sprite_draw(queued(i));
-    assert(suppressed==HOTD_CROSSHAIR_RECORDS&&hud_count==12);
-    hotd_remember_crosshair(&crosshair_records,queued(0));hotd_remember_crosshair(&crosshair_records,queued(1));
-    assert(hotd_take_crosshair(&crosshair_records,queued(0)));hotd_remember_crosshair(&crosshair_records,queued(1));
-    assert(hotd_take_crosshair(&crosshair_records,queued(1))&&!hotd_take_crosshair(&crosshair_records,queued(1)));
+    for(unsigned i=0;i<HOTD_SPRITE_RECORDS+2;i++)native_bitmap_draw(definition(1,i%4),0x16AE7);
+    for(unsigned i=0;i<HOTD_SPRITE_RECORDS+2;i++)native_sprite_draw(queued(i));
+    assert(suppressed==HOTD_SPRITE_RECORDS&&hud_count==12);
+    hotd_remember_sprite(&crosshair_records,queued(0));hotd_remember_sprite(&crosshair_records,queued(1));
+    assert(hotd_take_sprite(&crosshair_records,queued(0)));hotd_remember_sprite(&crosshair_records,queued(1));
+    assert(hotd_take_sprite(&crosshair_records,queued(1))&&!hotd_take_sprite(&crosshair_records,queued(1)));
     /* Bad append metadata cannot earn ownership; publication clears outstanding tags. */
     reset();append_bad=1;*(DWORD *)request=0x80000000;native_bitmap_draw(definition(1,0),0x16AE7);
     native_sprite_draw(queued(0));assert(!suppressed&&hud_count==6);
     reset();*(DWORD *)request=0x80000000;native_bitmap_draw(definition(1,0),0x16AE7);
     BYTE *copy=queued(0);publish_frame();native_sprite_draw(copy);assert(!suppressed&&hud_count==6);
-    puts("crosshair capture: both players/styles, native calls, scoped ownership, queue aliases/profile/reset passed");
+    test_player_hud();
+    puts("Sprite capture: both crosshairs and player HUD, native calls, scoped ownership, queue aliases/profile/reset passed");
     return 0;
 }
