@@ -7,9 +7,9 @@
 int main(void)
 {
     char temp[MAX_PATH],ini[MAX_PATH];float scale=0;
-    assert(g_cfgWorldScale==1.4f);
+    assert(g_cfgWorldScale==1.25f);
     assert(GetTempPathA(MAX_PATH,temp) && GetTempFileNameA(temp,"hws",0,ini));
-    assert(readWorldScale(ini,&scale) && scale==1.4f);
+    assert(readWorldScale(ini,&scale) && scale==1.25f);
     assert(WritePrivateProfileStringA("vr","worldscale","2",ini));
     assert(readWorldScale(ini,&scale) && scale==2);
     assert(WritePrivateProfileStringA("vr","worldscale","invalid",ini));
@@ -31,7 +31,7 @@ int main(void)
     assert(viewer_application_main(3,bad)==2);
     /* Deliberately stop parsing before any bridge connection or graphics startup. */
     assert(viewer_application_main(4,override)==2 && g_cfgWorldScale==1.2f);
-    g_cfgWorldScale=1.4f;
+    g_cfgWorldScale=1.25f;
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
     g_frame->magic=VC2_SHARE_MAGIC;g_frame->version=VC2_SHARE_VERSION;
     g_frame->seq=g_frame->atlas_seq=2;g_frame->units_per_metre=10;
@@ -44,9 +44,9 @@ int main(void)
     g_frame->shot_origins[0][2]=-1;
     for(unsigned i=6;i<9;i++)g_frame->verts[i]=(Vc2Vertex){.x=-10,.y=7.5f,.z=-20,.depth=1};
     assert(pullFrame());
-    assert(fabsf(g_local[0].z/g_unitsPerMetre+2.8f)<.0001f);
+    assert(fabsf(g_local[0].z/g_unitsPerMetre+2.5f)<.0001f);
     assert(fabsf(g_local[6].z/g_unitsPerMetre+2.0f)<.0001f);
-    const float scales[]={1.0f,1.4f,2.0f};
+    const float scales[]={1.0f,1.25f,2.0f};
     const float origin[3]={.14f,0,-.14f},forward[3]={0,0,-1};
     for(unsigned i=0;i<sizeof(scales)/sizeof(scales[0]);i++) {
         float sx,sy,hit[3],metres=2.0f*scales[i];
@@ -70,6 +70,6 @@ int main(void)
         g_scrVisible=g_scrHave=0;
     }
     free(g_frame);g_frame=NULL;
-    puts("World scale: multiplier INI/CLI, bounds, 1/1.4/2x geometry, aim, shot placement and fixed HUD/menu size passed.");
+    puts("World scale: multiplier INI/CLI, bounds, 1/1.25/2x geometry, aim, shot placement and fixed HUD/menu size passed.");
     return 0;
 }

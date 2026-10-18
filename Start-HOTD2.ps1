@@ -8,7 +8,7 @@ param(
     [ValidateRange(1,30)][int]$RapidFireRate = 4,
     [switch]$SkipSplash,
     [switch]$ShowSplash,
-    [ValidateRange(0.1,10.0)][double]$WorldScale = 1.4,
+    [ValidateRange(0.1,10.0)][double]$WorldScale = 1.25,
     [switch]$Laser,
     [switch]$NoLaser,
     [switch]$Crosshair,

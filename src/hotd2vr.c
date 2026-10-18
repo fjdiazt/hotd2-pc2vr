@@ -175,7 +175,7 @@ static int g_cfgDepthBias = 2;      /* [vr] depthbias: per-quad paint-order bias
 static int g_cfgHaptic = 1;             /* [vr] haptic: buzz on every shot */
 static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
 static int g_cfgSuper = 140;      /* eye buffer scale in percent */
-static float g_cfgWorldScale = 1.4f; /* world size multiplier; 1 preserves the native unit conversion */
+static float g_cfgWorldScale = 1.25f; /* world size multiplier; 1 preserves the native unit conversion */
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
@@ -224,7 +224,7 @@ static int parseWorldScale(const char *text,float *scale)
 static int readWorldScale(const char *path,float *scale)
 {
     char text[32];
-    GetPrivateProfileStringA("vr","worldscale","1.4",text,sizeof(text),path);
+    GetPrivateProfileStringA("vr","worldscale","1.25",text,sizeof(text),path);
     return parseWorldScale(text,scale);
 }
 static int readRapidRate(const char *path,unsigned *rate)
@@ -259,7 +259,7 @@ static void loadCfg(void)
         note("Invalid rapid_fire_rate; using 4 shots/sec (allowed 1..30).\n");g_cfgRapidRate=4;
     }
     if(!readWorldScale(path,&g_cfgWorldScale)) {
-        note("Invalid worldscale; using 1.4x (allowed 0.1..10).\n");g_cfgWorldScale=1.4f;
+        note("Invalid worldscale; using 1.25x (allowed 0.1..10).\n");g_cfgWorldScale=1.25f;
     }
     g_cfgMsaa  = (int)GetPrivateProfileIntA("vr", "msaa", 4, path);
     g_cfgDepth = (int)GetPrivateProfileIntA("vr", "depth", 0, path);
@@ -3644,7 +3644,7 @@ int main(int argc, char **argv)
         }
         else if(!strcmp(argv[i],"--world-scale")) {
             if(i+1>=argc || !parseWorldScale(argv[++i],&g_cfgWorldScale)) {
-                note("--world-scale requires a multiplier from 0.1 to 10 (for example 1.4).\n");return 2;
+                note("--world-scale requires a multiplier from 0.1 to 10 (for example 1.25).\n");return 2;
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
