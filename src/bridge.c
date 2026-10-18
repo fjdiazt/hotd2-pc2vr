@@ -65,7 +65,7 @@ static int input_ready;
 static DWORD aim_seq, aim_tick;
 static unsigned buttons[2];
 static int cheats_supported;
-static unsigned cheat_owned;
+static unsigned cheat_owned,cheat_applied;
 static BYTE saved_cheats[2][2];
 static int continues_supported,invincibility_ready;
 static DWORD saved_freeplay;
@@ -237,9 +237,13 @@ static int native_continues_profile(const BYTE *base)
     return !memcmp(base+0x6E1F,shared,sizeof(shared)) &&
         !memcmp(base+0x6E74,separate,sizeof(separate)) && !memcmp(base+0x6ED0,available,sizeof(available));
 }
+static int cheat_request_active(void)
+{
+    return frame && frame->cheat_tick && (DWORD)(GetTickCount()-frame->cheat_tick)<500;
+}
 static unsigned requested_cheats(void)
 {
-    return frame && (DWORD)(GetTickCount()-frame->cheat_tick)<500 ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
+    return cheat_request_active() ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
 }
 static void (__cdecl *native_damage_original)(int,int,int);
 static void (__cdecl *native_damage_forced_original)(int,int,int,int,int);
@@ -257,23 +261,25 @@ static void __cdecl native_damage_forced(int player,int hit,int kind,int force,i
 static void native_cheats(unsigned requested)
 {
     const unsigned bits[]={HOTD_CHEAT_LIVES,HOTD_CHEAT_AMMO};
-    requested&=(cheats_supported ? HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO:0) |
-        (continues_supported ? HOTD_CHEAT_CONTINUES:0);
+    unsigned owned=cheat_request_active() ?
+        (cheats_supported ? HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO:0) |
+        (continues_supported ? HOTD_CHEAT_CONTINUES:0):0;
+    requested&=owned;
     for(unsigned kind=0;kind<2;kind++)for(unsigned p=0;p<2;p++) {
         BYTE *flag=game_base+0x5C9FD8+p*0x7C+kind;
-        if(requested&bits[kind]) {
+        if(owned&bits[kind]) {
             if(!(cheat_owned&bits[kind]))saved_cheats[p][kind]=*flag;
-            *flag=1; /* Use native cheats, including item weapons and civilian penalties. */
+            *flag=!!(requested&bits[kind]); /* Explicit off overrides native saved cheats too. */
         } else if(cheat_owned&bits[kind])*flag=saved_cheats[p][kind];
     }
     DWORD *freeplay=(DWORD *)(game_base+0x5C8E70);
-    if(requested&HOTD_CHEAT_CONTINUES) {
+    if(owned&HOTD_CHEAT_CONTINUES) {
         if(!(cheat_owned&HOTD_CHEAT_CONTINUES))saved_freeplay=*freeplay;
-        *freeplay=1; /* Native free play admits starts/continues without spending either credit pool. */
+        *freeplay=!!(requested&HOTD_CHEAT_CONTINUES);
     } else if(cheat_owned&HOTD_CHEAT_CONTINUES)*freeplay=saved_freeplay;
-    if(requested!=cheat_owned)logline("native cheats: ammo=%u lives=%u continues=%u",
-        !!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES),!!(requested&HOTD_CHEAT_CONTINUES));
-    cheat_owned=requested;
+    if(requested!=cheat_applied || owned!=cheat_owned)logline("native cheats: ammo=%u lives=%u continues=%u override=%u",
+        !!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES),!!(requested&HOTD_CHEAT_CONTINUES),!!owned);
+    cheat_owned=owned;cheat_applied=requested;
 }
 
 static void update_input(void)

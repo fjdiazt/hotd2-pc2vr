@@ -85,7 +85,10 @@ int main(void)
     *freeplay=0;request(HOTD_CHEAT_CONTINUES);assert(*freeplay==1); /* Native reinitialization. */
     frame->cheat_tick=GetTickCount()-500;native_cheats(requested_cheats());assert(*freeplay==7);
     *freeplay=0;request(HOTD_CHEAT_CONTINUES);request(0);assert(!*freeplay);
-    *freeplay=1;request(HOTD_CHEAT_CONTINUES);request(0);assert(*freeplay==1);
+    frame->cheat_tick=GetTickCount()-500;native_cheats(0);assert(!*freeplay);
+    *freeplay=1;request(0);assert(!*freeplay); /* Native free play must not defeat explicit off. */
+    request(HOTD_CHEAT_CONTINUES);request(0);assert(!*freeplay);
+    frame->cheat_tick=GetTickCount()-500;native_cheats(0);assert(*freeplay==1);
     *freeplay=0;continues_supported=0;request(HOTD_CHEAT_CONTINUES);assert(!*freeplay);
     frame->cheat_flags=~HOTD_CHEAT_MASK;assert(!requested_cheats());
     free(frame);frame=NULL;assert(!requested_cheats());

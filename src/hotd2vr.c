@@ -3774,6 +3774,7 @@ int main(int argc, char **argv)
     g_cheatFlags=0;
     pushCheats();
     pushAim(320, 240, 0); pushAim2(320, 240, 0);
+    if(!g_previewOnly)g_frame->cheat_tick=GetTickCount()-500; /* Release overrides on normal exit. */
     if (g_gameProc) CloseHandle(g_gameProc);
     UnmapViewOfFile(g_frame); CloseHandle(g_map);
     return 0;

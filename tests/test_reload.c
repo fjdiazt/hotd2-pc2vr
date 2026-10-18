@@ -69,15 +69,21 @@ int main(void)
     frame->aim_x=frame->aim2_x=320;frame->aim_y=frame->aim2_y=240;
     *(DWORD *)(game_base+0x5C9F6C+0x7C+20)=0x20000;
     cheats_supported=1;
+    game_base[0x5C9FD8]=game_base[0x5C9FD9]=1;
     game_base[0x5C9FD8+0x7C]=2;game_base[0x5C9FD9+0x7C]=3;
+    native_cheats(0); /* Explicit off overrides pre-enabled native settings for both players. */
+    for(unsigned p=0;p<2;p++)assert(!game_base[0x5C9FD8+p*0x7C] && !game_base[0x5C9FD9+p*0x7C]);
     native_cheats(HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO);
     for(unsigned p=0;p<2;p++)assert(game_base[0x5C9FD8+p*0x7C]==1 && game_base[0x5C9FD9+p*0x7C]==1);
     native_cheats(HOTD_CHEAT_AMMO);
-    assert(!game_base[0x5C9FD8] && game_base[0x5C9FD8+0x7C]==2 && game_base[0x5C9FD9]==1);
+    assert(!game_base[0x5C9FD8] && !game_base[0x5C9FD8+0x7C] && game_base[0x5C9FD9]==1);
     native_cheats(0);
-    assert(!game_base[0x5C9FD9] && game_base[0x5C9FD9+0x7C]==3);
-    cheats_supported=0;native_cheats(HOTD_CHEAT_MASK);
-    assert(!game_base[0x5C9FD8] && !game_base[0x5C9FD9]);
+    for(unsigned p=0;p<2;p++)assert(!game_base[0x5C9FD8+p*0x7C] && !game_base[0x5C9FD9+p*0x7C]);
+    frame->cheat_tick=GetTickCount()-500;native_cheats(0);
+    assert(game_base[0x5C9FD8]==1 && game_base[0x5C9FD9]==1);
+    assert(game_base[0x5C9FD8+0x7C]==2 && game_base[0x5C9FD9+0x7C]==3);
+    cheats_supported=0;frame->cheat_tick=GetTickCount();native_cheats(HOTD_CHEAT_MASK);
+    assert(game_base[0x5C9FD8]==1 && game_base[0x5C9FD9]==1);
     cheats_supported=1;
 
     *(DWORD *)(game_base+0x5C8E00)=1;
@@ -116,7 +122,7 @@ int main(void)
     native_input();
     assert(!gun1->fire && !gun2->fire && game_base[0x5C9FD8] && game_base[0x5C9FD9]);
     frame->cheat_tick=GetTickCount()-501;native_input();
-    assert(!gun1->fire && !gun2->fire && !game_base[0x5C9FD8] && !game_base[0x5C9FD9]);
+    assert(!gun1->fire && !gun2->fire && game_base[0x5C9FD8]==1 && game_base[0x5C9FD9]==1);
     assert(game_base[0x5C9FD8+0x7C]==2 && game_base[0x5C9FD9+0x7C]==3);
     tick(0,0);
 
