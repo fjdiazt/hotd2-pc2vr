@@ -17,20 +17,31 @@ Evidence is retained under ignored `build/clean-pause-evidence/` in the main che
 
 ## Separate Start and Pause input
 
-Protocol 14 adds `VC2_BTN_PAUSE=128` without changing the frame layout. Trigger sends Fire and Start; A/X sends the existing native Reload/Cancel, including eligible cutscene skip; B/Y sends Pause. Index uses A/B on each hand; Vive uses trackpad click for Reload/Cancel and menu click for Pause. The simple-controller menu button pauses.
+Protocol 14 introduced `VC2_BTN_PAUSE=128`; protocol 15 separates Reload from Skip/Cancel without changing the frame layout. Current bindings:
 
-The native pause-input predicate at `0x40E9C0` has one direct caller, the unchanged pause routine at `0x40E500`. Its signature-checked hook temporarily replaces only the synthetic Start bits seen by that predicate with per-player Pause press edges, then restores the native input word before other game handlers run. Physical keyboard Start remains available, including simultaneous physical Start and VR trigger. Native pause eligibility, pause ownership, focus/device-disconnect handling and pause/resume side effects remain in the original routines. The bridge never writes the pause-state flag itself.
+- Trigger: Fire and Start/confirm; existing tilted-gun reload gesture remains.
+- A/X: Start/confirm and Pause/resume.
+- B/Y: Skip/Cancel only.
+- Grip: Reload only.
+- Right thumbstick click: Recenter once per press.
+- Left thumbstick click: Unmapped and reserved. Both sticks retain four-way navigation.
 
-This separates inputs without menu/gameplay classification. Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases the override. Original game files remain unchanged; restart the game without this worktree's bridge to remove the hook.
+Index uses A/B on each hand. Vive uses menu for Start/Pause, grip for Reload and right trackpad click for Recenter. The simple-controller menu supplies Start/Pause.
+
+The native pause-input predicate at `0x40E9C0` has one direct caller, the unchanged pause routine at `0x40E500`. Its signature-checked hook temporarily replaces synthetic Start bits with per-player Pause press edges, then restores native input before other game handlers run. Physical keyboard Start remains available. A/X supplies both commands; Trigger supplies no Pause command. Native pause eligibility, ownership, focus/device-disconnect handling and pause/resume effects remain unchanged. The bridge never writes the pause-state flag.
+
+Normal and Original weapon reload reads at `0x414A9A` and `0x414DD0` now read a separate input word. Both original instruction signatures are checked before changing either operand. Each native input poll copies physical/native input into that word, excludes synthetic Cancel and adds keyboard-profile Reload presses there. Gun profiles retain their native offscreen-trigger reload path. Skip readers at `0x414AF7` and `0x414E0E`, menu consumers, reload routines and native eligibility checks remain unchanged. Physical Ctrl is preserved, including simultaneous Ctrl and VR Cancel. No menu classifier or direct ammo/event-state writes are used.
+
+Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases overrides. Original game files remain unchanged; restart without this bridge to remove the in-memory input changes. Protocol 15 prevents older viewers from sending the former combined Reload/Cancel mapping.
 
 Verification in the `feat/input-mapping` worktree:
 
-- The viewer regression first failed because a hidden hand's trigger did not send Start, then passed with the new mapping. Controller checks cover both hands, hidden-player joining, independent Fire/Start, Reload/Cancel and Pause actions, and existing stick navigation. Bridge checks cover pause press edges, paired Start masking, physical keyboard Start, input-word restoration and watchdog expiry. The full build/offline suite passed; existing MSVC CRT deprecation warnings remain.
-- Owned desktop session PID **89676** reached the title/mode menus through trigger Start, joined P1 and then P2 independently, and verified each player's ammo `6 -> 5 -> 6` through Trigger then Reload/Cancel. Trigger did not pause play or resume a paused game. B/Y paused/resumed, holding it did not repeat, an inactive player could not pause, and the other player could not resume the owner's pause.
-- That session requested zero cheats. The game's native lives/ammo flags were initially enabled, so the test cleared those flags only in its owned process before checking firing/reload/pause. Both players' native flags were verified off. The game closed normally and original `Hod2.exe`/`Hod2.ini` hashes stayed unchanged. Evidence: ignored `build/input-mapping-live.json`, `build/input-mapping-live.log` and `build/input-mapping-build.log` in this worktree.
+- Initial Trigger/A/B mapping passed native desktop checks and user headset confirmation before these follow-up changes.
+- The new Cancel-without-reload regression failed against the previous bridge. Updated checks cover separate Reload/Cancel words, physical Ctrl, per-player Pause edges, native input restoration, signature rejection before either reload operand changes, held inputs and watchdog expiry.
+- Viewer checks cover A/X Start/Pause, Trigger Start/Fire, Grip Reload, B/Y Cancel, hidden-player joining, right-only Recenter, left-click reservation and existing stick navigation.
 
-No headset session was launched. Physical controller bindings, complete menu coverage, eligible cutscene skip and full-game behavior still need runtime acceptance; the existing native Cancel route remains unchanged.
+- Full build and offline checks passed (`build/reload-split-build.log`). Existing MSVC CRT warnings remain.
+- Owned native desktop session PID **53068**, protocol 15: Trigger reached the mode menu; A/X confirmed the game. Grip did not skip the opening event; B/Y skipped it. Both players fired `6 -> 5`, B/Y left ammo at 5, and Grip reloaded `5 -> 6`. A/X paused/resumed for the owning player without held-button repeats; Trigger and the other player's A/X could not resume that pause. P1 used native gun control and P2 keyboard control, exercising both reload input routes.
+- No cheats requested; both players' native lives/ammo flags were verified off. The owned game closed normally; original `Hod2.exe` and `Hod2.ini` hashes stayed unchanged. Evidence: ignored `build/reload-split-live.json`, `build/reload-split-live.log`, `build/reload-split-bridge.log` and `build/check_reload_split_live.py`.
 
-The user subsequently confirmed the initial Trigger/A/B mapping works in the headset. A follow-up binds grip directly to the same per-hand OpenXR Reload/Cancel action as A/X and moves recenter to thumbstick click (Vive trackpad click). Stick tilt retains native menu arrows, and holding click recenters only once until release. No additional native hook or protocol change is needed. Grip/click headset acceptance remains pending.
-
-A/X is not also bound to Start: native calibration adjusts its value from Reload (`0x4885F1`) before processing Start to accept (`0x4884D2`). Sending both would adjust and accept together. Separating those actions by screen would require the special handling the user excluded.
+Latest physical controller mapping, complete menu coverage and Original-mode item weapons still need runtime acceptance. Offline/native desktop results do not establish headset acceptance.

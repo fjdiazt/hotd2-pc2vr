@@ -50,6 +50,8 @@ static int input_ready;
 static DWORD aim_seq, aim_tick;
 static unsigned buttons[2];
 static unsigned physical_start_keys;
+static unsigned physical_back_keys;
+static DWORD reload_input;
 static int cheats_supported;
 static unsigned cheat_owned;
 static BYTE saved_cheats[2][2];
@@ -223,7 +225,7 @@ static int native_reload(unsigned player,HotdGunInput *gun)
     if(profile[1]==0) {
         unsigned scheme=profile[0]==1 ? 2u:profile[0]==2 ? 3u:1u;
         DWORD mask=*(DWORD *)(game_base+0x5C9F6C+player*0x7C+scheme*20);
-        *(DWORD *)(game_base+0x5C9028)|=mask;
+        reload_input|=mask;
         return mask!=0;
     }
     return 0;
@@ -236,16 +238,17 @@ static DWORD __cdecl native_input(void)
     DWORD result=native_input_original();
     unsigned requested=requested_cheats();
     update_input();
+    reload_input=*(DWORD *)(game_base+0x5C9028);
+    for(p=0;p<2;p++)
+        if((buttons[p]&VC2_BTN_BACK) && !(physical_back_keys&(1u<<p)))
+            reload_input&=~(2u<<(p*16)); /* Synthetic Cancel reaches skip/menus, never weapon reload. */
     native_cheats(requested);
     for(p=0;p<2;p++) {
         if(active_input() && (!p || frame->akimbo)) {
             HotdGunInput *gun=(HotdGunInput *)(game_base+0x5C8FC0+p*0x28);
-            unsigned cancel_pressed=(buttons[p]&VC2_BTN_BACK)&~previous[p];
             unsigned action=hotd_apply_gun_buttons(gun,buttons[p],previous+p);
-            previous[p]|=buttons[p]&VC2_BTN_BACK;
-            if(cancel_pressed)action=VC2_BTN_RELOAD;
             if(hotd_rapid_fire(rapid_fire+p,
-                (buttons[p]&VC2_BTN_FIRE) && !(buttons[p]&VC2_BTN_RELOAD) && !cancel_pressed,
+                (buttons[p]&VC2_BTN_FIRE) && !(buttons[p]&VC2_BTN_RELOAD),
                 (requested&HOTD_CHEAT_RAPID) && *(DWORD *)(game_base+0x5C8E98)==6 &&
                 *(short *)(game_base+0x5A5C62+p*0x130)==5 && *(DWORD *)(game_base+0x5C8E00) &&
                 !*(short *)(game_base+0x5A1A00),frame->rapid_fire_rate,GetTickCount())) {
@@ -280,6 +283,7 @@ static HRESULT WINAPI keyboard_state(void *self,DWORD size,void *out)
     if(size==256) {
         BYTE *keys=out;
         physical_start_keys=SUCCEEDED(hr) ? ((keys[DIK_RETURN]&0x80?1u:0u)|(keys[DIK_TAB]&0x80?2u:0u)):0;
+        physical_back_keys=SUCCEEDED(hr) ? ((keys[DIK_RCONTROL]&0x80?1u:0u)|(keys[DIK_LCONTROL]&0x80?2u:0u)):0;
     }
     update_input();
     if(FAILED(hr) && size==256 && active_input()) {
@@ -906,6 +910,19 @@ static int detour(DWORD rva,const BYTE *signature,unsigned n,void *hook,void **o
     if(!write_code(at,patch,n)){VirtualFree(trampoline,0,MEM_RELEASE);*original=NULL;return 0;}
     return 1;
 }
+static int install_reload_input(void)
+{
+    const DWORD sites[]={0x14A9A,0x14DD0};
+    const BYTE signature[]={0xA1,0x28,0x90,0x9C,0x00};
+    DWORD address=(DWORD)(uintptr_t)&reload_input;
+    /* Only the two weapon reload reads change source; skip and menu reads stay native. */
+    for(unsigned i=0;i<2;i++)
+        if(memcmp(game_base+sites[i],signature,sizeof(signature)))return 0;
+    for(unsigned i=0;i<2;i++)
+        if(!write_code(game_base+sites[i]+1,(const BYTE *)&address,sizeof(address)))return 0;
+    return 1;
+}
+
 static int install_invincibility(void)
 {
     static const BYTE signature[]={0x56,0x8B,0x74,0x24,0x08}; /* push esi; mov esi,[esp+8] */
@@ -1142,7 +1159,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};
         static const BYTE model_signature[]={0x83,0xEC,0x1C,0xA1,0x74,0xEB,0x7D,0x00,0x53};
         static const BYTE pause_signature[]={0x66,0x83,0x3D,0x00,0x1A,0x9A,0x00,0x00};
-        if(!detour(0xE9C0,pause_signature,sizeof(pause_signature),native_pause,(void **)&native_pause_original) ||
+        if(!install_reload_input() ||
+           !detour(0xE9C0,pause_signature,sizeof(pause_signature),native_pause,(void **)&native_pause_original) ||
            !detour(0xCBB0,input_signature,sizeof(input_signature),native_input,(void **)&native_input_original) ||
            !detour(0xA7EF0,model_signature,sizeof(model_signature),native_model,(void **)&native_model_original) ||
            !detour(0xA8440,model_signature,sizeof(model_signature),native_model_alt,(void **)&native_model_alt_original) ||
@@ -1153,6 +1171,7 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
         }
         logline("native polygon submission hooks ready");
         logline("native pause input separated from VR Start");
+        logline("native reload input separated from VR Cancel/Skip");
         void **slot=(void **)(game_base+0x172304);
         if(*slot==game_base+0xBA3FF)
             logline("native frame presentation hook: %d",replace_pointer(slot,native_present,(void **)&original_present));

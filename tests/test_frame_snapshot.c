@@ -10,7 +10,7 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes);
 #undef main
 
 static int interrupt_copy;
-static unsigned controller_pauses,controller_backs,controller_fires,controller_lost,controller_recentres;
+static unsigned controller_pauses,controller_backs,controller_reloads,controller_fires,controller_lost,controller_recentres;
 static float controller_sticks[2][2];
 static int controller_sticks_active;
 static XrResult XRAPI_CALL controller_sync(XrSession session,const XrActionsSyncInfo *info)
@@ -19,7 +19,7 @@ static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionSt
 {
     unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
     (void)session;out->isActive=XR_TRUE;out->changedSinceLastSync=XR_TRUE;
-    unsigned held=info->action==g_actRecentre?controller_recentres:info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actFire?controller_fires:0;
+    unsigned held=info->action==g_actRecentre?controller_recentres:info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actReload?controller_reloads:info->action==g_actFire?controller_fires:0;
     out->currentState=info->subactionPath==XR_NULL_PATH ? held!=0:(held&(1u<<hand))!=0;
     return XR_SUCCESS;
 }
@@ -113,6 +113,7 @@ static void check_controller_modes(void)
     g_aimSpace[0]=(XrSpace)(uintptr_t)1;g_aimSpace[1]=(XrSpace)(uintptr_t)2;
     g_actPause=(XrAction)(uintptr_t)3;g_actFire=(XrAction)(uintptr_t)4;
     g_actBack=(XrAction)(uintptr_t)5;
+    g_actReload=(XrAction)(uintptr_t)9;
     g_actMenu=(XrAction)(uintptr_t)6;g_actMenuX=(XrAction)(uintptr_t)7;
     g_cfgHaptic=0;g_localCount=0;g_unitsPerMetre=10;g_cfgAkimbo=0;g_resetControls=1;
     g_activePlayers=0;
@@ -153,11 +154,14 @@ static void check_controller_modes(void)
     controller_fires=0;g_activePlayers=0;
     controller_backs=2;controller_pauses=1;controller_tick();
     assert((g_frame->aim_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_BACK);
-    assert((g_frame->aim2_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_PAUSE);
+    assert((g_frame->aim2_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==(VC2_BTN_START|VC2_BTN_PAUSE));
     controller_backs=1;controller_pauses=2;controller_tick();
-    assert((g_frame->aim_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_PAUSE);
+    assert((g_frame->aim_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==(VC2_BTN_START|VC2_BTN_PAUSE));
     assert((g_frame->aim2_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_BACK);
     controller_backs=controller_pauses=0;
+    controller_reloads=3;controller_tick();
+    assert(g_frame->aim_buttons==VC2_BTN_RELOAD && g_frame->aim2_buttons==VC2_BTN_RELOAD);
+    controller_reloads=0;controller_tick();
     /* Both sticks navigate independently of gun visibility or player joining. */
     controller_fires=0;g_activePlayers=0;controller_sticks_active=1;
     const unsigned directions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_RIGHT,VC2_BTN_LEFT};
@@ -175,8 +179,7 @@ static void check_controller_modes(void)
     /* Stick click recenters once; tilting down remains a native menu arrow. */
     g_actRecentre=(XrAction)(uintptr_t)8;
     controller_recentres=1;
-    assert(handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0));
-    controller_tick();
+    controller_tick(); /* Left click reserved, including runtime remaps. */
     controller_recentres=0;controller_tick();
     controller_recentres=2;g_nativePaused=1;
     assert(handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0));

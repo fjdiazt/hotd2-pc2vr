@@ -7,7 +7,7 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 14
+#define VC2_SHARE_VERSION 15
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960

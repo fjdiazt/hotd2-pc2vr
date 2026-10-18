@@ -2,10 +2,11 @@
 #include <assert.h>
 #include "../src/bridge.c"
 
+static DWORD polled_input=0x100;
 static DWORD __cdecl poll_input(void)
 {
     memset(game_base+0x5C8FC0,0,2*sizeof(HotdGunInput));
-    *(DWORD *)(game_base+0x5C9028)=0x100;
+    *(DWORD *)(game_base+0x5C9028)=polled_input;
     return 123;
 }
 static unsigned physical_keys;
@@ -16,6 +17,8 @@ static HRESULT WINAPI poll_keyboard(void *self,DWORD size,void *out)
         BYTE *keys=out;
         if(physical_keys&1)keys[DIK_RETURN]=0x80;
         if(physical_keys&2)keys[DIK_TAB]=0x80;
+        if(physical_keys&4)keys[DIK_RCONTROL]=0x80;
+        if(physical_keys&8)keys[DIK_LCONTROL]=0x80;
     }
     return DI_OK;
 }
@@ -65,6 +68,39 @@ static void tick(unsigned p1,unsigned p2)
     frame->rapid_fire_rate=10;
     frame->aim_buttons=p1&~HOTD_CHEAT_MASK;frame->aim2_buttons=p2;frame->aim_seq++;
     assert(native_input()==123);
+}
+static void check_reload_input(void)
+{
+    BYTE keys[256];
+    *(DWORD *)(game_base+0x5C8E98)=6;
+    *(short *)(game_base+0x5A5C62)=*(short *)(game_base+0x5A5D92)=5;
+    const BYTE reader[]={0xA1,0x28,0x90,0x9C,0x00};
+    const DWORD sites[]={0x14A9A,0x14DD0};
+    for(unsigned i=0;i<2;i++)memcpy(game_base+sites[i],reader,sizeof(reader));
+    game_base[sites[1]]^=1;
+    assert(!install_reload_input() && !memcmp(game_base+sites[0],reader,sizeof(reader)));
+    game_base[sites[1]]^=1;
+    assert(install_reload_input());
+    for(unsigned i=0;i<2;i++) {
+        DWORD address;
+        memcpy(&address,game_base+sites[i]+1,4);
+        assert(game_base[sites[i]]==0xA1 && address==(DWORD)(uintptr_t)&reload_input);
+    }
+    tick(0,0);polled_input=0x20102;
+    tick(VC2_BTN_BACK,VC2_BTN_BACK);
+    assert(reload_input==0x100 && *(DWORD *)(game_base+0x5C9028)==polled_input);
+    physical_keys=12;assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && physical_back_keys==3);
+    tick(VC2_BTN_BACK,VC2_BTN_BACK);
+    assert(reload_input==polled_input); /* Physical Ctrl retains native reload, even with VR Cancel. */
+    physical_keys=0;assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !physical_back_keys);
+    tick(0,0);polled_input=0x100;
+    tick(0,VC2_BTN_RELOAD);
+    assert(reload_input==0x20100 && *(DWORD *)(game_base+0x5C9028)==0x100);
+    tick(0,VC2_BTN_RELOAD);assert(reload_input==0x100); /* One reload per press. */
+    tick(VC2_BTN_BACK,VC2_BTN_BACK);polled_input=0x20102;
+    aim_tick=GetTickCount()-501;native_input();
+    assert(reload_input==polled_input); /* Stale viewer stops masking native input. */
+    polled_input=0x100;tick(0,0);
 }
 int main(void)
 {
@@ -173,19 +209,19 @@ int main(void)
     tick(0,0);
     tick(VC2_BTN_FIRE,VC2_BTN_RELOAD);
     assert(gun1->valid && gun1->fire && !gun2->valid && !gun2->fire);
-    assert(*(DWORD *)(game_base+0x5C9028)==0x20100); /* Native reload mask + physical input. */
+    assert(reload_input==0x20100 && *(DWORD *)(game_base+0x5C9028)==0x100); /* Reload cannot reach skip/cancel. */
     tick(VC2_BTN_FIRE,VC2_BTN_RELOAD);
     assert(*(DWORD *)(game_base+0x5C9028)==0x100);
     tick(0,0);
     tick(VC2_BTN_BACK,VC2_BTN_FIRE);
-    assert(!gun1->valid && gun1->fire && gun2->valid && gun2->fire);
+    assert(gun1->valid && !gun1->fire && gun2->valid && gun2->fire); /* Cancel never reloads. */
     tick(VC2_BTN_BACK,VC2_BTN_FIRE);
     assert(!gun1->fire && !gun2->fire);
     tick(VC2_BTN_BACK|VC2_BTN_FIRE,0);
     assert(gun1->valid && gun1->fire); /* Held cancel does not suppress a fresh shot. */
     tick(0,0);
     tick(VC2_BTN_FIRE,VC2_BTN_BACK);
-    assert(gun1->valid && gun1->fire && *(DWORD *)(game_base+0x5C9028)==0x20100);
+    assert(gun1->valid && gun1->fire && *(DWORD *)(game_base+0x5C9028)==0x100);
     tick(0,0);
     *(DWORD *)(game_base+0x5C8E98)=1; /* Menu, not gameplay. */
     tick(VC2_BTN_RELOAD,VC2_BTN_RELOAD);
@@ -250,6 +286,7 @@ int main(void)
     assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN] &&
         !keys[DIK_LEFT] && !keys[DIK_RIGHT]);
     check_pause_input();
+    check_reload_input();
     free(game_base);free(frame);
     puts("Input/cheats: separate pause edges, preserved Start, reload, rapid fire and watchdogs passed.");
     return 0;

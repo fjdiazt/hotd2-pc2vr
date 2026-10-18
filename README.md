@@ -45,7 +45,7 @@ The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun 
 1. Close any existing `Hod2.exe` session.
 2. Start your OpenXR runtime and connect the headset.
 3. Run `Start-HOTD2.ps1` with your game path.
-4. Face forward while the headset becomes focused and tracked. Thumbstick click recenters afterward.
+4. Face forward while the headset becomes focused and tracked. Right thumbstick click recenters afterward.
 
 Keep the bridge and viewer from the same build together: their shared-memory formats must match. No DLL needs to be copied into the game directory.
 
@@ -68,22 +68,22 @@ Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the
 | --- | --- |
 | Trigger | Native Start/confirm and fire, or reload while the gun is tilted beyond the reload threshold |
 | Gun up at least 50° or down at least 45°, then trigger | Reload that hand's gun |
-| A / X or grip | Native Reload/Cancel; reload during play and skip eligible cutscenes |
-| B / Y | Native pause/resume, separate from Start |
+| A / X | Native Start/confirm and pause/resume |
+| B / Y | Native Skip/Cancel, without reload |
+| Grip | Reload that hand's gun, without skip/cancel |
 | Thumbstick four-way | Navigate native menus and adjust options |
-| Thumbstick click | Recenter the VR view |
+| Right thumbstick click | Recenter the VR view |
+| Left thumbstick click | Unmapped; reserved |
 
-Trigger supplies Start and Fire together; the native game consumes them in its own interfaces. A pause-only input hook separates VR Start from pause/resume, retaining the game's pause eligibility, player ownership and automatic device-disconnect pause. If one player pauses, that player's B/Y resumes. Physical keyboard Enter/Tab keep their native Start/pause behavior. There is no menu classifier. Matching protocol-14 bridge/viewer builds are required.
+Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-15 bridge/viewer builds are required.
 
-This mapping passed offline and native desktop input checks for both players. Headset button routing, complete menu coverage and eligible cutscene skip still need acceptance.
-
-Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms firing until release. Holding A/X or grip does not block a later trigger pull. Grip and A/X share the same native action per hand; changing between them while one remains held does not create another reload press. Thumbstick tilt supplies native arrow keys, while clicking either stick recenters once per press, including in menus and while paused. On Vive, grip reloads/skips and trackpad click recenters.
+Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms firing until release. Grip supplies the existing Reload command. Two signature-checked weapon input reads separate Reload from Skip/Cancel, preserving native reload eligibility, ammo limits and weapon effects. Physical Ctrl retains its native behavior. Thumbstick tilt retains menu arrows; right click recenters once per press, including menus and pause. Left click is unbound and ignored. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload and right trackpad click for recenter.
 
 ### Pausing
 
-B/Y uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press the same player's B/Y again to resume. The native desktop window retains its original pause display.
+A/X uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press the same player's A/X again to resume. The native desktop window retains its original pause display.
 
-The bridge and viewer must both be rebuilt for protocol 14; older builds cannot exchange the new pause input. Details and verification: [docs/pause.md](docs/pause.md).
+Rebuild and restart both bridge and viewer for protocol 15. Details and verification: [docs/pause.md](docs/pause.md).
 
 ### Two hands and akimbo
 
