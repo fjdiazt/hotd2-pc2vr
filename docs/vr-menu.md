@@ -37,7 +37,7 @@ an existing in-game VR menu.
 Left stick click opens/closes VR Settings. The panel starts closed and preserves
 native pause state. A/X retains native Start/Pause while the panel stays open;
 Trigger selects, stick directions navigate/change values and B/Y returns to groups.
-Right click recenters. Desktop F8 toggles the panel; companion previews are read-only.
+Right click recenters. F8 toggles the panel in headset or desktop preview mode, with either the native game or viewer focused. Arrows navigate/change values; Enter/Right Ctrl confirm/back, with native P2 Tab/Left Ctrl and Backspace/Escape aliases. Keyboard Back closes from the root; controller B/Y keeps its existing root behavior. Menu-owned keyboard keys are masked in the bridge until closing keys release, with the existing 500 ms input watchdog releasing ownership if the viewer disconnects. Other applications do not control the panel. Without a headset, use `--window --no-vrwindow`; no panel is drawn in native-only mode. Companion previews remain read-only and listen only while their own window has focus.
 
 | Group | Existing settings |
 | --- | --- |
@@ -101,7 +101,7 @@ menu or pause integration. The panel starts closed. Left stick click (left
 trackpad click on Vive) opens/closes it; desktop F8 does the same. Native pause
 and resume never open/close the panel; stick-click toggles never pause/resume the game.
 A/X retains native Start/Pause while the panel stays open or closed. B/Y backs
-out to the group list without closing. Only stick click toggles the VR panel.
+out to the group list without closing. Stick click or keyboard F8 toggles the VR panel.
 The original native Options entry remains unchanged. Gun model selection stays in the INI;
 diagnostic flags and the menu's own enable switch are not editable panel rows.
 The launcher generates the native font before starting a game when absent.

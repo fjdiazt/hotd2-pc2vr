@@ -662,12 +662,18 @@ static GetDeviceState original_keyboard_state;
 static HRESULT WINAPI keyboard_state(void *self,DWORD size,void *out)
 {
     HRESULT hr = original_keyboard_state(self,size,out);
+    update_input();
+    if(SUCCEEDED(hr) && size==256 && (buttons[0]&VC2_BTN_MENU)) {
+        BYTE *keys=out;
+        const unsigned menu_keys[]={DIK_F8,DIK_UP,DIK_DOWN,DIK_LEFT,DIK_RIGHT,DIK_RETURN,DIK_TAB,
+            DIK_RCONTROL,DIK_LCONTROL,DIK_BACK,DIK_ESCAPE};
+        for(unsigned k=0;k<sizeof(menu_keys)/sizeof(menu_keys[0]);k++)keys[menu_keys[k]]=0;
+    }
     if(size==256) {
         BYTE *keys=out;
         physical_start_keys=SUCCEEDED(hr) ? ((keys[DIK_RETURN]&0x80?1u:0u)|(keys[DIK_TAB]&0x80?2u:0u)):0;
         physical_back_keys=SUCCEEDED(hr) ? ((keys[DIK_RCONTROL]&0x80?1u:0u)|(keys[DIK_LCONTROL]&0x80?2u:0u)):0;
     }
-    update_input();
     if(FAILED(hr) && size==256 && active_input()) {
         memset(out,0,size);hr=DI_OK;
     }

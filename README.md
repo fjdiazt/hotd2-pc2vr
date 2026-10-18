@@ -62,7 +62,7 @@ Keep the bridge and viewer from the same build together: their shared-memory for
 
 To attach a new viewer to an already injected game, run `build\HOTD2VR.exe` directly, optionally with `--window --no-vrwindow` or `--stereo`. Closing the viewer leaves the game running; closing the connected game ends the viewer. `-Seconds 20` limits the viewer session without closing the game.
 
-Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the floating panel through auto/on/off, and Escape closes the viewer.
+Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the floating panel through auto/on/off, and Escape closes the viewer when VR Settings is closed. F8 toggles VR Settings; arrows navigate, Enter confirms and Right Ctrl goes back/closes.
 
 Under `[vr]`, `window` controls the existing reconstructed desktop preview and `vrwindow` controls headset rendering independently. The native game window stays available in every combination; `[bridge] windowed` only selects its windowed/fullscreen mode.
 
@@ -144,7 +144,7 @@ Closing the panel saves only edited keys to `HOTD2VR.ini` beside that viewer. No
 
 `[vr] menu=0` or `--no-menu` disables the panel; `--menu` enables it. The launcher extracts `menu-font.rgba` from your supported game once; no original artwork is distributed. A missing/invalid font disables the panel with a log message. Native Game Options remain unchanged; their existing entry does not open VR Settings yet.
 
-Desktop preview: arrows navigate, Enter selects, Backspace returns, F8 opens/closes. A simultaneous companion preview is read-only and cannot save or change gameplay settings. The native desktop game window does not render the VR Settings panel.
+Keyboard works in VR and desktop preview while either the native game or viewer window has focus: **F8** opens/closes, **arrows** navigate/change values, **Enter** confirms and **Right Ctrl** goes back (closes at the root), matching native P1 confirm/cancel keys. Native P2 keys **Tab/Left Ctrl** also work; **Backspace/Escape** are back aliases. Menu keys do not reach native menus while this panel owns input. Without a headset, enable desktop preview (`--window --no-vrwindow`); the native game window itself does not render the panel. A simultaneous companion preview is read-only and cannot save or change gameplay settings; focus the native game to control the headset's editable menu.
 
 The bridge and viewer must both be rebuilt for the current protocol 22; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 18 combined separate VR Pause and Reload/Cancel inputs with player-HUD ownership. Protocol 19 added acknowledged manual-save requests. Protocol 20 appends Save/Load/New actions and live Autosave control; Protocol 21 adds read-only current/saved stage and scene previews under the frame seqlock; Protocol 22 appends an explicit selected destination and native scene catalogs for Stage select; all earlier fields retain their offsets. Details and verification: [docs/pause.md](docs/pause.md).
 

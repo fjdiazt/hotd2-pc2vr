@@ -26,6 +26,7 @@
 #define VC2_BTN_PAUSE 128u
 #define VC2_BTN_LEFT 2048u
 #define VC2_BTN_RIGHT 4096u
+#define VC2_BTN_MENU 32768u /* Menu owns physical navigation until its closing keys release. */
 #define HOTD_CHEAT_AMMO 256u
 #define HOTD_CHEAT_LIVES 512u
 #define HOTD_CHEAT_RAPID 1024u

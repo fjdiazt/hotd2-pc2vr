@@ -77,6 +77,22 @@ static VrMenuItem vrMenuItems[6][16]={
 static const unsigned vrMenuCounts[]={8,7,3,16,6,7};
 static const char *g_vrMenuError;
 #define MENU_TOGGLE 0x80000000u
+#define MENU_KEY_BACK 0x40000000u
+
+static unsigned vrMenuKeyboardInput(void)
+{
+    if(!g_vrMenuEnabled)return 0;
+    DWORD owner=0;
+    HWND foreground=GetForegroundWindow();
+    if(!foreground || !GetWindowThreadProcessId(foreground,&owner) || !owner)return 0;
+    if(owner!=GetCurrentProcessId() && (g_previewOnly || !g_frame || owner!=g_frame->game_pid))return 0;
+    const int keys[]={VK_F8,VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,VK_RETURN,VK_TAB,VK_RCONTROL,VK_LCONTROL,VK_BACK,VK_ESCAPE};
+    const unsigned actions[]={MENU_TOGGLE,VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_LEFT,VC2_BTN_RIGHT,
+        VC2_BTN_START,VC2_BTN_START,MENU_KEY_BACK,MENU_KEY_BACK,MENU_KEY_BACK,MENU_KEY_BACK};
+    unsigned input=0;
+    for(unsigned k=0;k<sizeof(keys)/sizeof(keys[0]);k++)if(GetAsyncKeyState(keys[k])&0x8000)input|=actions[k];
+    return input;
+}
 
 static void vrMenuInit(void)
 {
@@ -323,12 +339,13 @@ static int vrMenuControl(unsigned input)
     }
     if(!g_vrMenuOpen)return 0;
     if(g_vrMenuArmed){if(!input)g_vrMenuArmed=0;return 1;}
-    if(!g_vrMenuRequest && (pressed&(VC2_BTN_UP|VC2_BTN_DOWN|VC2_BTN_LEFT|VC2_BTN_RIGHT|VC2_BTN_BACK)))
+    if(!g_vrMenuRequest && (pressed&(VC2_BTN_UP|VC2_BTN_DOWN|VC2_BTN_LEFT|VC2_BTN_RIGHT|VC2_BTN_BACK|MENU_KEY_BACK)))
         g_vrMenuStatus[0]=0;
-    if(pressed&VC2_BTN_BACK) {
+    if(pressed&(VC2_BTN_BACK|MENU_KEY_BACK)) {
         if(g_vrMenuPage==MENU_SCENES){g_vrMenuRow=(int)g_vrMenuStage-1;g_vrMenuPage=MENU_STAGES;g_vrMenuError=NULL;}
         else if(g_vrMenuPage==MENU_STAGES){g_vrMenuRow=MENU_STAGE_SELECT;g_vrMenuPage=-1;g_vrMenuError=NULL;}
         else if(g_vrMenuPage>=0){g_vrMenuRow=g_vrMenuPage+MENU_GROUP_FIRST;g_vrMenuPage=-1;}
+        else if(pressed&MENU_KEY_BACK)vrMenuClose();
         g_vrMenuDirty=1;return 1;
     }
     unsigned count=vrMenuCount();if(!count)return 1;
@@ -356,6 +373,13 @@ static int vrMenuControl(unsigned input)
     }
     if(pressed)g_vrMenuDirty=1;
     return 1;
+}
+
+static void vrMenuKeyboard(void)
+{
+    int previous=g_vrMenuOwnsInput;
+    int owned=g_vrMenuOwnsInput=vrMenuControl(vrMenuKeyboardInput());
+    if(owned || previous){pushAim(320,240,0);pushAim2(320,240,0);}
 }
 
 static void vrMenuRect(int x,int y,int width,int height,DWORD colour)

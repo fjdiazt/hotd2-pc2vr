@@ -1,5 +1,19 @@
 /* Real settings, input isolation, restart staging and atomic INI persistence. */
 #include <assert.h>
+#define COBJMACROS
+#include <windows.h>
+static int keyboard_fixture;
+static SHORT keyboard_keys[256];
+static DWORD keyboard_owner;
+static SHORT WINAPI menu_key_state(int key)
+{return keyboard_fixture?keyboard_keys[key]:GetAsyncKeyState(key);}
+static HWND WINAPI menu_foreground(void)
+{return keyboard_fixture?(HWND)(ULONG_PTR)1:GetForegroundWindow();}
+static DWORD WINAPI menu_window_owner(HWND window,LPDWORD owner)
+{if(!keyboard_fixture)return GetWindowThreadProcessId(window,owner);*owner=keyboard_owner;return 1;}
+#define GetAsyncKeyState menu_key_state
+#define GetForegroundWindow menu_foreground
+#define GetWindowThreadProcessId menu_window_owner
 #define main viewer_application_main
 #include "../src/hotd2vr.c"
 #undef main
@@ -20,6 +34,40 @@ static void image(const char *path)
     }
     assert(!fclose(out));
 }
+static void check_keyboard(void)
+{
+    keyboard_fixture=1;keyboard_owner=GetCurrentProcessId();
+    g_vrMenuEnabled=1;g_vrMenuOpen=g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;
+    keyboard_keys[VK_F8]=(SHORT)0x8000;
+    vrMenuKeyboard();assert(g_vrMenuOpen && g_vrMenuOwnsInput && (g_frame->aim_buttons&VC2_BTN_MENU));
+    vrMenuKeyboard();assert(g_vrMenuOpen); /* Held toggle does not bounce. */
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_DOWN]=(SHORT)0x8000;vrMenuKeyboard();vrMenuKeyboard();assert(g_vrMenuRow==1);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    g_vrMenuRow=MENU_GROUP_FIRST;
+    keyboard_keys[VK_RETURN]=(SHORT)0x8000;vrMenuKeyboard();assert(g_vrMenuPage==0);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;vrMenuKeyboard();assert(g_vrMenuPage==-1 && g_vrMenuOpen);
+    vrMenuKeyboard();assert(g_vrMenuOpen); /* Held Back cannot close the parent page too. */
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;vrMenuKeyboard();assert(!g_vrMenuOpen && g_vrMenuOwnsInput);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();vrMenuKeyboard();
+    assert(!g_vrMenuOwnsInput && !(g_frame->aim_buttons&VC2_BTN_MENU));
+    keyboard_keys[VK_F8]=(SHORT)0x8000;
+    keyboard_owner=123456;g_frame->game_pid=123457;
+    vrMenuKeyboard();assert(!g_vrMenuOpen); /* Other applications cannot toggle or navigate. */
+    keyboard_owner=g_frame->game_pid;vrMenuKeyboard();assert(g_vrMenuOpen); /* Native window focus. */
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_TAB]=(SHORT)0x8000;assert(vrMenuKeyboardInput()==VC2_BTN_START);
+    keyboard_keys[VK_TAB]=0;keyboard_keys[VK_LCONTROL]=(SHORT)0x8000;assert(vrMenuKeyboardInput()==MENU_KEY_BACK);
+    keyboard_keys[VK_LCONTROL]=0;keyboard_keys[VK_ESCAPE]=(SHORT)0x8000;vrMenuKeyboard();assert(!g_vrMenuOpen);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();vrMenuKeyboard();
+    g_previewOnly=1;keyboard_keys[VK_F8]=(SHORT)0x8000;assert(!vrMenuKeyboardInput());
+    keyboard_owner=GetCurrentProcessId();assert(vrMenuKeyboardInput()==MENU_TOGGLE);
+    g_previewOnly=0;g_vrMenuEnabled=0;assert(!vrMenuKeyboardInput());g_vrMenuEnabled=1;
+    g_frame->game_pid=0;keyboard_fixture=0;memset(keyboard_keys,0,sizeof(keyboard_keys));
+    g_vrMenuPage=-1;g_vrMenuRow=0;g_vrMenuPrevious=0;
+}
 int main(void)
 {
     char temp[MAX_PATH],directory[MAX_PATH],pattern[MAX_PATH],file[MAX_PATH];
@@ -34,6 +82,7 @@ int main(void)
     fputs("; keep this comment\r\n[vr]\r\nlaser=1\r\nworldscale=1.25\r\n[other]\r\nunknown=preserved\r\n",ini);
     assert(!fclose(ini));
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
+    check_keyboard();
     g_vrMenuEnabled=1;assert(vrMenuControl(0)==0 && !g_vrMenuOpen);
     g_nativePaused=1;assert(vrMenuControl(0)==0 && !g_vrMenuOpen);
     g_nativePaused=0;assert(vrMenuControl(0)==0);

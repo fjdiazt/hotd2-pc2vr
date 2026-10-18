@@ -511,3 +511,27 @@ chapter 2 scene 0, rejected stage 20 and unavailable scene 255, and preserved th
 save with Autosave off. Save/Load/New, pause and live Autosave regression checks
 also passed. Both native runtime sessions were closed; no VR launch occurred.
 Headset menu acceptance and full scene prerequisite coverage remain unverified.
+
+## Keyboard control of VR Settings
+
+F8 now uses the same edge/arming path as left-stick click, in desktop preview
+and headset modes. Keyboard input is accepted only while the viewer or connected
+native game's process has foreground focus. Arrows navigate/change values;
+Enter/Right Ctrl confirm/back, matching native P1 bindings. Tab/Left Ctrl are P2
+aliases; Backspace/Escape also back out. Keyboard Back closes at the root;
+controller B/Y keeps its prior behavior. A simultaneous read-only companion
+preview accepts keyboard input only with its own window focused.
+
+VR combines keyboard and controllers before advancing menu edges once per frame,
+including a keyboard fallback when action sync/tracking is unavailable. The
+existing input heartbeat carries VC2_BTN_MENU while the panel owns input and
+until closing keys release. The bridge masks those physical menu keys before
+tracking native Start/Cancel; unrelated keys remain native. Input expiry releases
+ownership through the existing 500 ms watchdog. No frame layout or INI changes.
+
+Bridge/viewer builds and all offline/WARP checks passed. Added tests cover held
+toggle/navigation/back, foreground gating, native P1/P2 key aliases, mixed VR
+keyboard/controller input, failed action sync, immediate close-release publication,
+native keyboard suppression and watchdog restoration. No game or VR session was
+launched for this change; another session remained untouched. Native-only output
+has no panel renderer; without a headset, desktop preview must be enabled.
