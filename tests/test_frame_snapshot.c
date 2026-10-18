@@ -249,7 +249,7 @@ static void check_swapped_player_hud(void)
             g_frame->seq+=2;assert(pullFrame());
             const float changed[8]={6,8,-8,-6,5,8,-8,-5};float units=g_unitsPerMetre/10;
             for(unsigned i=0;i<8;i++) {
-                assert(fabsf(g_local[i].x-((enabled&&two)?changed[i]:x[i])*units)<.0001f);
+                assert(fabsf(g_local[i].x-(enabled?changed[i]:x[i])*units)<.0001f);
                 assert(g_local[i].u==.25f && g_local[i].v==.75f && g_local[i].colour==0xFFAC1234);
                 assert(g_local[i].address==g_frame->verts[i].address && g_frame->verts[i].x==x[i]);
                 assert(g_local[i].y==-5*units && g_local[i].z==-20*units && g_local[i].depth==1);

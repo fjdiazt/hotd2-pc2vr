@@ -455,7 +455,7 @@ static int pullFrame(void)
                 double half=fov*3.14159265358979/360.0;
                 g_gfx=(float)(320.0/tan(half));g_gfy=1.125f*g_gfx;
             }
-            if(g_cfgSwapPlayerHud && g_cfgAkimbo)hotd_swap_player_hud(g_local,ovStart,n);
+            if(g_cfgSwapPlayerHud)hotd_swap_player_hud(g_local,ovStart,n);
             g_addStart=addStart;g_nativePaused=paused;g_ovStart=ovStart;
             g_localCount = n;
             g_lastFrame = frameNo;

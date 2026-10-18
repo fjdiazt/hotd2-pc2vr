@@ -91,11 +91,11 @@ Reload direction is measured from each tracked gun relative to the current heads
 
 ### Player HUD placement
 
-`[vr] swap_player_hud=1` (default) moves converted gameplay ammo and lives rows to match the fixed gun assignments in akimbo: P1 on the right, P2 on the left. Player labels, Original-mode weapon counts and reload messages/hints move with their row. Text, digit order, artwork, animation and HUD depth stay intact. Each row is aligned to the opposite side using its complete bounds; its width can vary with ammo/lives or messages.
+`[vr] swap_player_hud=1` (default) moves converted gameplay ammo and lives rows to match the fixed gun assignments: P1 on the right, P2 on the left. Player labels, Original-mode weapon counts and reload messages/hints move with their row. Text, digit order, artwork, animation and HUD depth stay intact. Each row is aligned to the opposite side using its complete bounds; its width can vary with ammo/lives or messages.
 
-Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwapPlayerHud` to retain the native layout. `--swap-player-hud` / `-SwapPlayerHud` enable it. Last direct CLI switch wins; the launcher rejects opposing switches. The flag takes effect only with `akimbo=1` and never changes controller/player assignments.
+Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwapPlayerHud` to retain the native layout. `--swap-player-hud` / `-SwapPlayerHud` enable it. Last direct CLI switch wins; the launcher rejects opposing switches. The flag works independently of `akimbo` and never changes controller/player assignments.
 
-Ownership comes from the native player ammo/lives draw routines, including deferred sprite copies. Shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 17 bridge/viewer builds are required. Headset placement remains unverified.
+Ownership comes from the native player ammo/lives draw routines, including deferred sprite copies. Shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 17 bridge/viewer builds are required. Akimbo headset placement is user-confirmed; non-akimbo placement still needs runtime confirmation.
 
 ### Pausing
 
