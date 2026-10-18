@@ -200,12 +200,12 @@ These controls already cover VC2VR's main picture settings. Its extra scene-reco
 ```ini
 [vr]
 expand_meshes=1
-expand_world=0
+expand_world=1
 ```
 
 `expand_meshes=1` preserves the existing normal-model screen-edge expansion, helping retain offscreen body parts. Set it to `0` to restore native normal-model mesh rejection. Alternative-model draws retain their native visibility checks by default.
 
-`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. Headset testing captured rear scenery but showed jerkiness and artifacts; world expansion stays experimental and off by default. Full rear coverage and forward-wall parity remain unverified.
+`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. The shipped INI enables world expansion for new players; existing INIs stay unchanged, and a missing key still falls back to off. Earlier headset testing captured rear scenery but showed jerkiness and artifacts. Full rear coverage and forward-wall parity remain unverified.
 
 Session overrides, without changing the INI:
 
@@ -225,7 +225,7 @@ These are the values in the shipped INI; an existing active file can differ.
 | `[vr] akimbo` | `1` | Paired joining; `0` uses independent player joining |
 | `[vr] gunmodel` / `gunscale` | `gun.obj` / `100` | Gun asset and its size in percent |
 | `[vr] depth` / `depthbias` | `2` / `0` | Reconstructed depth buffer and optional sort bias |
-| `[vr] expand_meshes` / `expand_world` | `1` / `0` | Normal-model side expansion; experimental loaded-stage rear capture |
+| `[vr] expand_meshes` / `expand_world` | `1` / `1` | Normal-model side expansion; experimental loaded-stage rear capture |
 | `[vr] msaa` | `4` | Antialiasing samples: 1, 2, 4 or 8 |
 | `[vr] supersample` | `100` | Eye-buffer resolution in percent; separate from world size |
 | `[vr] gamma` | `220` | sRGB eye-buffer compensation in percent; `100` disables it |
