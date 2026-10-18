@@ -57,17 +57,32 @@ static void check_effect(DWORD colour,unsigned style,int textured,int expected,i
 static void brightness_shaders(int brightness,float gamma)
 {
     g_cfgBrightness=brightness;g_gammaOut=gamma;
-    for(int sharp=0;sharp<2;sharp++) {
-        ID3DBlob *blob=NULL,*error=NULL;
-        ID3D11PixelShader **shader=sharp?&g_psOv:&g_ps;
-        HRESULT result=compileG(sharp?SRC_OV:SRC,"ps","ps_4_0",&blob,&error);
-        if(FAILED(result) && error)fprintf(stderr,"%s\n",(const char *)ID3D10Blob_GetBufferPointer(error));
-        assert(SUCCEEDED(result));
-        ID3D11PixelShader_Release(*shader);*shader=NULL;
-        assert(SUCCEEDED(ID3D11Device_CreatePixelShader(g_dev,ID3D10Blob_GetBufferPointer(blob),
-            ID3D10Blob_GetBufferSize(blob),NULL,shader)));
-        ID3D10Blob_Release(blob);if(error)ID3D10Blob_Release(error);
-    }
+    assert(vrMenuShaders());
+}
+
+static void check_menu_alpha(float x,float y,const int expected[3])
+{
+    TexVtx quad[]={{-1,1,.5f,0,0},{1,1,.5f,0,0},{-1,-1,.5f,0,0},
+                  {-1,-1,.5f,0,0},{1,1,.5f,0,0},{1,-1,.5f,0,0}};
+    for(unsigned i=0;i<6;i++){quad[i].u=(x+.5f)/640;quad[i].v=(y+.5f)/480;}
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    assert(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_scrVB,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)));
+    memcpy(mapped.pData,quad,sizeof(quad));ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_scrVB,0);
+    float identity[16],clear[]={.4f,.4f,.4f,1};mIdent(identity);
+    assert(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_cb,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)));
+    memcpy(mapped.pData,identity,sizeof(identity));ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_cb,0);
+    ID3D11DeviceContext_VSSetConstantBuffers(g_ctx,0,1,&g_cb);
+    ID3D11DeviceContext_OMSetRenderTargets(g_ctx,1,&rtv,NULL);
+    ID3D11DeviceContext_ClearRenderTargetView(g_ctx,rtv,clear);
+    g_vrMenuEnabled=g_vrMenuOpen=g_vrMenuDirty=1;g_vrMenuPage=-1;g_vrMenuRow=0;
+    vrMenuDraw();
+    ID3D11BlendState *blend=NULL;ID3D11DeviceContext_OMGetBlendState(g_ctx,&blend,NULL,NULL);assert(!blend);
+    ID3D11DeviceContext_CopyResource(g_ctx,(ID3D11Resource *)staging,(ID3D11Resource *)target);
+    assert(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)staging,0,D3D11_MAP_READ,0,&mapped)));
+    BYTE *pixel=(BYTE *)mapped.pData+4*mapped.RowPitch+4*4;
+    for(unsigned c=0;c<3;c++)assert(abs(pixel[c]-expected[c])<=2);
+    ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)staging,0);
+    g_vrMenuEnabled=g_vrMenuOpen=0;
 }
 
 int main(void)
@@ -192,8 +207,13 @@ int main(void)
         check_effect(0xFF808080,0,0,64,sharp);
         sample_depth=0;
     }
+    brightness_shaders(100,1);
+    memset(g_vrMenuFont['V'][0][0],255,4);
+    const int background[]={65,63,62},text[]={232,232,232};
+    check_menu_alpha(630,470,background); /* 50% dark panel over 40% grey scene. */
+    check_menu_alpha(42,24,text);         /* Title glyph remains opaque. */
     ID3D11RenderTargetView_Release(rtv);ID3D11DepthStencilView_Release(dsv);
     ID3D11Texture2D_Release(target);ID3D11Texture2D_Release(staging);releaseGraphics();
-    puts("Effect rendering: shadows, opacity, alpha test, blending, culling, secondary specular, fog, U/V wrap/mirror/clamp and scene brightness passed (world/sharp).");
+    puts("Effect rendering: world/sharp effects, brightness, 50% menu background and opaque text passed.");
     return 0;
 }

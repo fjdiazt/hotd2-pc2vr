@@ -19,6 +19,7 @@ Your existing game installation stays in place. No HOTD2 game files are included
 - Your own working Windows PC copy of The House of the Dead 2.
 - Windows x64, a Direct3D 11-capable GPU, and a PC VR headset with an active OpenXR runtime.
 - PowerShell, 32-bit MinGW GCC (`i686-w64-mingw32`), and Visual Studio C++ x64 build tools with a Windows SDK.
+- Python 3 for the first launch's native menu font extraction (standard library only).
 - The x64 `openxr_loader.dll` beside the built viewer. OpenXR headers are included in this repository.
 
 Only this `Hod2.exe` build is currently supported:
@@ -87,11 +88,11 @@ With both outputs enabled, the preview uses the existing independent desktop cam
 | Grip | Reload that hand's gun, without skip/cancel |
 | Thumbstick four-way | Navigate native menus and adjust options |
 | Right thumbstick click | Recenter the VR view |
-| Left thumbstick click | Unmapped; reserved |
+| Left thumbstick click | Open/close VR Settings, save edits on close |
 
 Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-19 bridge/viewer builds are required.
 
-Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Grip supplies Reload only; B/Y supplies Skip/Cancel only. Two signature-checked weapon input reads preserve native reload rules while separating those commands. Physical Ctrl retains native behavior. Both sticks navigate native menus; right click recenters once per press. Left click is unbound and reserved. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload and right trackpad click for recenter.
+Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Grip supplies Reload only; B/Y supplies Skip/Cancel only. Two signature-checked weapon input reads preserve native reload rules while separating those commands. Physical Ctrl retains native behavior. Both sticks navigate native menus; right click recenters once per press. Left click toggles VR Settings. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload, right trackpad click for recenter and left trackpad click for VR Settings.
 
 ### Player HUD placement
 
@@ -119,9 +120,27 @@ This is a debugging checkpoint facility, **not a full save state**. Scene IDs ar
 
 ### Pausing
 
-A/X uses the game's normal pause. Both the VR view and the injected game's desktop window retain the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue in VR, so you can look around the frozen scene. Press the same player's A/X again to resume.
+A/X retains native Start/Pause with VR Settings open or closed. Both the VR view and the injected game's desktop window retain the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue in VR, so you can look around the frozen scene. Press the same player's A/X again to resume. Pausing never opens/closes VR Settings.
 
 The desktop window redraws the retained geometry and native textures through Direct3D 7; it does not display a saved screenshot. This requires the injected bridge and a prior gameplay scene. Rendering continues while paused, but gameplay stays frozen. The native desktop view does not apply the viewer's brightness, gamma or world-scale settings.
+
+### VR Settings
+
+Only left thumbstick click opens/closes the native-font settings panel. It starts closed; toggling it never changes native pause state: running stays running, paused stays paused. Stick up/down selects rows across pages; left/right changes values; Trigger selects a group or changes its selected value. B/Y returns to groups and stays there. A/X retains its native Start/Pause action while the panel stays open. Right stick click still recenters. Other menu input cannot fire, reload, join or skip behind the panel. Use A/X if you want gameplay frozen while editing.
+
+The menu background is 50% opaque, with fully visible text and selection accents over the game scene.
+
+Display, Rendering, Audio, Controls, Cheats and Advanced expose 46 existing numeric/boolean settings. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale, focus and output changes require a viewer restart; bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
+
+**Reset defaults**, after Advanced, restores all 46 menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
+
+**Quit game** is the final root row, after Reset defaults. It saves pending options, then sends the connected native game window its normal close request. The existing bridge handles the native quit confirmation, and the viewer exits when the game closes. A missing/mismatched window or failed INI save keeps the menu open; read-only companion previews cannot quit the game.
+
+Closing the panel saves only edited keys to `HOTD2VR.ini` beside that viewer. Normal viewer exit also saves pending edits. Each save stages a copy and atomically replaces the INI, keeping a timestamped `.menu-*.bak` backup. Untouched keys, comments and launch overrides remain unchanged. A failed close/save keeps the menu open for retry; changes already applied live remain active. Viewer exit attempts a save and logs failures. Opening or closing without edits writes nothing. Cheats start from INI/explicit launch flags; the menu enables none automatically.
+
+`[vr] menu=0` or `--no-menu` disables the panel; `--menu` enables it. The launcher extracts `menu-font.rgba` from your supported game once; no original artwork is distributed. A missing/invalid font disables the panel with a log message. Native Game Options remain unchanged; their existing entry does not open VR Settings yet.
+
+Desktop preview: arrows navigate, Enter selects, Backspace returns, F8 opens/closes. A simultaneous companion preview is read-only and cannot save or change gameplay settings. The native desktop game window does not render the VR Settings panel.
 
 The bridge and viewer must both be rebuilt for the current protocol 19; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 18 combined separate VR Pause and Reload/Cancel inputs with player-HUD ownership. Protocol 19 appends acknowledged manual-checkpoint requests; all earlier fields retain their offsets. Details and verification: [docs/pause.md](docs/pause.md).
 
