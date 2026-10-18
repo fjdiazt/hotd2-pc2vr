@@ -35,6 +35,21 @@ static void start_arcade(void)
     *(short *)(game_base+0x5A2BC0)=0;
     checkpoint_start(&expected_out,0);
 }
+static void disk_tables(char *directory)
+{
+    char file[MAX_PATH+64],evt[MAX_PATH+16];DWORD common[6]={0},stage[70]={0};
+    assert(GetTempFileNameA(directory,"hcs",0,file));assert(DeleteFileA(file) && CreateDirectoryA(file,NULL));
+    strcpy(directory,file);snprintf(evt,sizeof(evt),"%s\\evt",directory);assert(CreateDirectoryA(evt,NULL));
+    common[0]=common[1]=0x0CEB5A00; /* Relocates to the stage table at 0x977400. */
+    for(int i=0;i<20;i++)stage[i]=0x0CEB5B00;
+    stage[20]=0xFFFFFFFFu;stage[64]=stage[65]=0x0CEB5B10;stage[68]=0x4D;
+    snprintf(file,sizeof(file),"%s\\comevtbl.bin",evt);FILE *out=fopen(file,"wb");assert(out);
+    assert(fwrite(common,sizeof(common),1,out)==1 && !fclose(out));
+    for(int i=1;i<=2;i++) {
+        snprintf(file,sizeof(file),"%s\\st%devtbl.bin",evt,i);out=fopen(file,"wb");assert(out);
+        assert(fwrite(stage,sizeof(stage),1,out)==1 && !fclose(out));
+    }
+}
 int main(void)
 {
     char temporary[MAX_PATH],path[MAX_PATH];HotdCheckpoint point;
@@ -125,10 +140,53 @@ int main(void)
     *(DWORD *)(game_base+0x5C8E98)=4;frame->checkpoint_request=4;checkpoint_manual(1);
     assert(frame->checkpoint_response==4 && frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE);
     assert(hotd_checkpoint_read(path,&point) && point.scene==6);
+    /* Live autosave overrides expire with the viewer heartbeat. */
+    frame->cheat_tick=GetTickCount();frame->checkpoint_autosave=2;
+    assert(checkpoint_auto_enabled());frame->checkpoint_autosave=1;checkpoint_continue=1;
+    assert(!checkpoint_auto_enabled());frame->cheat_tick=GetTickCount()-1000;assert(checkpoint_auto_enabled());
+    checkpoint_continue=0;frame->checkpoint_autosave=0;
+    /* Real disk preflight, pending ACK, paused load, explicit-start precedence and new game. */
+    char directory[MAX_PATH],fixture[MAX_PATH+32];strcpy(directory,temporary);disk_tables(directory);
+    strcpy(checkpoint_game_directory,directory);
+    assert(hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,6}));
+    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,20}));
+    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){3,0}));
+    checkpoint_ready=1;checkpoint_stage=6;checkpoint_scene=4;
+    *(DWORD *)(game_base+0x5C8E98)=6;*(int *)(game_base+0x3C17A0)=-1;
+    frame->checkpoint_action=HOTD_CHECKPOINT_LOAD;frame->checkpoint_request=5;
+    checkpoint_manual(1);assert(checkpoint_pending==5 && frame->checkpoint_response==4);
+    assert(*(int *)(game_base+0x3C17A0)==6 && checkpoint_unpause);
+    assert(native_pause()==1 && !checkpoint_unpause); /* Native pause routine performs the actual resume. */
+    assert(*(short *)(game_base+0x5A5C62)==0 && *(short *)(game_base+0x5A5C62+0x130)==9);
+    checkpoint_manual(1);assert(frame->checkpoint_response==4); /* Old scene cannot ACK. */
+    *(int *)(game_base+0x3C17A0)=-1;start_arcade();
+    assert(loaded_mode==1 && started_scene==6 && checkpoint_entered);
+    checkpoint_manual(1);assert(!checkpoint_pending && frame->checkpoint_response==5 && frame->checkpoint_result==HOTD_SAVE_OK);
+    assert(frame->checkpoint_stage==2 && frame->checkpoint_scene==6);
+    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,255}));
+    frame->checkpoint_request=6;checkpoint_manual(1);
+    assert(frame->checkpoint_response==6 && frame->checkpoint_result==HOTD_SAVE_INVALID && *(int *)(game_base+0x3C17A0)==-1);
+    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,6}));scripts(1,20);
+    frame->checkpoint_request=7;frame->checkpoint_action=HOTD_CHECKPOINT_NEW;checkpoint_manual(3);
+    assert(checkpoint_pending==7 && !checkpoint_entered);
+    *(int *)(game_base+0x3C17A0)=-1;start_arcade();checkpoint_manual(3);
+    assert(frame->checkpoint_response==7 && frame->checkpoint_result==HOTD_SAVE_OK && frame->checkpoint_stage==1 && !frame->checkpoint_scene);
+    assert(hotd_checkpoint_read(path,&point) && point.stage==2 && point.scene==6); /* No deletion/overwrite. */
+    *(DWORD *)(game_base+0x5C8E98)=3;frame->akimbo=1;
+    frame->checkpoint_request=8;frame->checkpoint_action=HOTD_CHECKPOINT_LOAD;checkpoint_manual(0);
+    assert(checkpoint_pending==8);checkpoint_deadline=GetTickCount()-1;checkpoint_manual(1);
+    assert(*(short *)(game_base+0x5A5C62)==0 && *(short *)(game_base+0x5A5C62+0x130)==0);
+    assert(!checkpoint_pending && frame->checkpoint_response==8 && frame->checkpoint_result==HOTD_SAVE_LOAD_FAILED);
+    for(int i=0;i<3;i++) {
+        if(i)snprintf(fixture,sizeof(fixture),"%s\\evt\\st%devtbl.bin",directory,i);
+        else snprintf(fixture,sizeof(fixture),"%s\\evt\\comevtbl.bin",directory);
+        assert(DeleteFileA(fixture));
+    }
+    snprintf(fixture,sizeof(fixture),"%s\\evt",directory);assert(RemoveDirectoryA(fixture) && RemoveDirectoryA(directory));
     free(frame);frame=NULL;
-    /* Startup configuration is opt-in; every call site validates before either changes. */
+    /* All three pass-through entry hooks validate before any instruction changes. */
     strcpy(ini_path,path);checkpoint_ready=checkpoint_continue=checkpoint_stage=0;checkpoint_scene=-1;
-    assert(install_checkpoints() && !checkpoint_ready);
+    assert(!install_checkpoints() && !checkpoint_ready);
     assert(SetEnvironmentVariableW(L"HOTD2VR_START_STAGE",L"7"));assert(!install_checkpoints());
     assert(SetEnvironmentVariableW(L"HOTD2VR_START_STAGE",L"2"));
     memcpy(game_base+0x5FF0A,(BYTE[]){0xE8,0x51,0x32,0xFB,0xFF},5);
@@ -142,7 +200,10 @@ int main(void)
     assert(SetEnvironmentVariableW(L"HOTD2VR_CONTINUE_GAME",L"0"));
     checkpoint_stage=0;checkpoint_scene=-1;checkpoint_ready=0;
     assert(WritePrivateProfileStringA("vr","continue_game","1",ini_path));
-    assert(install_checkpoints() && !checkpoint_ready && !checkpoint_continue);
+    memcpy(game_base+0x5FF0A,(BYTE[]){0xE8,0x51,0x32,0xFB,0xFF},5);
+    memcpy(game_base+0x5FFD4,(BYTE[]){0xE8,0x57,0,0,0},5);
+    memcpy(game_base+0x60710,(BYTE[]){0xE8,0xAB,0xE4,0xFF,0xFF},5);
+    assert(install_checkpoints() && checkpoint_ready && !checkpoint_continue);
     assert(SetEnvironmentVariableW(L"HOTD2VR_CONTINUE_GAME",NULL));
     assert(!checkpoint_continue);free(game_base);assert(DeleteFileA(path));
     puts("Checkpoints: stage/scene selection, Arcade guards, strict files, atomic replacement, autosave changes and fallback passed.");

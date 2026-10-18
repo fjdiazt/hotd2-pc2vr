@@ -2,6 +2,7 @@
 #define HOTD_CHECKPOINT_H
 #include <windows.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
 
@@ -40,6 +41,42 @@ static inline int hotd_checkpoint_read(const char *path,HotdCheckpoint *point)
         if(!hotd_checkpoint_number(wide,i==2?0:1,i==0?1:i==1?6:HOTD_CHECKPOINT_MAX_SCENE,&numbers[i]))return 0;
     }
     *point=(HotdCheckpoint){numbers[1],numbers[2]};return 1;
+}
+/* Validate destination scripts on disk before unloading the running scene. */
+static inline int hotd_checkpoint_file_scene(const char *directory,HotdCheckpoint point)
+{
+    const unsigned capacity=0x2A800;unsigned lengths[2]={0};int ok=0;
+    BYTE *tables=calloc(1,capacity);char path[MAX_PATH];FILE *file;
+    if(!tables || !hotd_checkpoint_valid(point))goto done;
+    for(unsigned i=0;i<2;i++) {
+        int n=i?snprintf(path,sizeof(path),"%s\\evt\\st%devtbl.bin",directory,point.stage):
+            snprintf(path,sizeof(path),"%s\\evt\\comevtbl.bin",directory);
+        if(n<0 || n>=(int)sizeof(path))goto done;
+        file=fopen(path,"rb");if(!file)goto done;
+        unsigned limit=i?capacity-0x200:0x200;
+        lengths[i]=(unsigned)fread(tables+(i?0x200:0),1,limit,file);
+        int valid=!ferror(file) && fgetc(file)==EOF;fclose(file);
+        if(!valid || lengths[i]<4)goto done;
+    }
+    for(unsigned offset=0;offset+4<=capacity;offset+=4) {
+        DWORD word;memcpy(&word,tables+offset,4);
+        if((word&0xFFF80000u)==0x0CE80000u){word+=0xF3AC1A00u;memcpy(tables+offset,&word,4);}
+    }
+    DWORD address;memcpy(&address,tables+(point.stage-1)*4,4);
+    /* Follow scene, variant 1, then its first opcode. Bound every disk-derived pointer. */
+    for(int step=0;step<point.scene+3;step++) {
+        unsigned offset=address-0x977200u;
+        if((address&3) || offset>capacity-4 ||
+           !(offset+4<=lengths[0] || (offset>=0x200 && offset+4<=0x200+lengths[1])))goto done;
+        DWORD word;memcpy(&word,tables+offset,4);
+        if(step<=point.scene) {
+            if(!word || word==0xFFFFFFFFu)goto done;
+            if(step<point.scene)address+=4;else address=word+4;
+        } else if(step==point.scene+1)address=word;
+        else ok=word>0 && word<0x60 && word!=0x2A && word!=0x34 && word!=0x3C && word!=0x4C;
+    }
+done:
+    free(tables);return ok;
 }
 static inline int hotd_checkpoint_write(const char *path,HotdCheckpoint point)
 {

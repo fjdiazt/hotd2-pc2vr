@@ -409,7 +409,7 @@ int main(void)
     check_shot_haptics();
     check_swapped_player_hud();
     g_cheatFlags=0;vrMenuInit();
-    g_vrMenuEnabled=g_vrMenuOpen=g_vrMenuArmed=1;g_vrMenuPage=-1;g_vrMenuRow=0;
+    g_vrMenuEnabled=g_vrMenuOpen=g_vrMenuArmed=1;g_vrMenuPage=-1;g_vrMenuRow=MENU_GROUP_FIRST;
     g_vrMenuPrevious=0;g_vrMenuBlock=0;g_nativePaused=0;
     controller_fires=controller_pauses=controller_backs=controller_reloads=0;controller_tick();
     controller_fires=3;controller_tick();

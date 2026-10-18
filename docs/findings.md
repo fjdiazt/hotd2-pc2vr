@@ -410,3 +410,42 @@ The bridge validates active Arcade mode/sub-state, player activity and scene-scr
 Full build/offline/GPU checks passed before adapter removal (`build/manual-checkpoint-build.log`); the hook-only rebuild is recorded in `build/checkpoint-hook-only-build.log`. Retained native callback/file regressions cover manual saving with automatic recording and scene hooks disabled, pause eligibility, unavailable/menu requests, preservation on failed writes, acknowledgments and no duplicate service of the same request. Temporary viewer/PowerShell adapter tests were removed with those adapters; bridge behavior and its protocol remain unchanged.
 
 After user authorization to close the separate vr-menu session, owned desktop-only tests rejected save requests at the title/menu without altering the old file, then successfully saved chapter 1/scene 4 while paused with autosave off. Native logs confirm section 7 and the manual save acknowledgment (`build/checkpoint-manual.log` / `.json`). A second default-start case, with no scene-entry hooks and autosave off, saved chapter 1/scene 0 (`build/checkpoint-manual-default.log` / `.json`). Both used all convenience cheats at 10 shots/sec and closed their owned game afterward. No VR launch occurred for this addition; headset regression, all scene prerequisites and measured write latency remain unverified.
+
+
+## Runtime Save game and Load game integration
+
+Protocol 20 extends the protocol-19 foundation with `checkpoint_action` at offset
+87,385,036 and heartbeat-owned `checkpoint_autosave` at 87,385,040. Frame size is
+87,385,044. All previous offsets stay unchanged. Actions are Save (0), Load (1)
+and New game (2). Results additionally include invalid destination (4) and load
+initialization failure (5). The existing settings panel invokes this hook;
+there is no save CLI. Autosave updates through the existing heartbeat, with
+startup/CLI configuration restored after heartbeat expiry.
+
+Loads preflight the saved destination against bounded native `comevtbl.bin` and
+`stNevtbl.bin` files using the native pointer relocation. Before mutating game
+state, each scene/variant/script pointer must be aligned, in a loaded file's
+bounds and lead to an advancing Arcade opcode. This checks structural validity,
+not dependencies on earlier scripts, actors or route state.
+
+The bridge queues native mode request 6 at `0x7C17A0`; `Game_ApplyState`
+(`0x40E860`) performs task/resource cleanup and resets the mode/sub-state before
+normal `Game6_Start` initialization. The existing scene-entry hooks prioritize
+the pending Load/New target over CLI/auto-resume. New game selects chapter 1,
+scene 0. Existing players restart in their native joining state; title/menu
+loads choose P1, or both with akimbo. Paused loads request the existing native
+pause predicate so the native pause routine resumes audio/resources itself.
+No direct task teardown or pause-flag assignment is used.
+
+Load ACK requires destination root initialization, active Arcade sub-state 2,
+and matching stage/scene. Until then autosave is suppressed. Bridge timeout is
+30 seconds; viewer timeout is 45 seconds and cannot release an outstanding
+request. Invalid-file rejection occurs before native state changes. Later native
+initialization failure cannot promise restoration of the previous scene.
+
+Native desktop smoke tests passed paused Save/Load at chapter 1 scene 4,
+cross-chapter Load to chapter 2 scene 0, New game despite explicit startup scene,
+title-screen Load with autosave off, live Autosave on/off and invalid scene 255
+rejection. Tests restore the save and leave the personal INI unchanged. Build,
+controller/menu regression and WARP rendering checks passed. Headset UI/load
+integration and full scene prerequisites remain unverified.
