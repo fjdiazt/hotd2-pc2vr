@@ -266,6 +266,18 @@ int main(void)
     g_frame->verts[3]=(Vc2Vertex){.x=-10,.y=7.5f,.z=-20,.depth=1};
     assert(pullFrame() && g_localCount==6 && g_ovStart==3);
     assert(g_local[3].z==-HOTD_PANEL_DISTANCE_M*g_unitsPerMetre && !(g_local[3].style&HOTD_WORLD));
+    /* Shared crosshair artwork in an Options/HUD quad near either aim must survive byte-for-byte. */
+    {
+        const float xy[6][2]={{-.2f,.2f},{.2f,.2f},{-.2f,-.2f},{-.2f,-.2f},{.2f,.2f},{.2f,-.2f}};
+        Vc2Vertex preview[6];float scale=g_cfgWorldScale;g_cfgWorldScale=1;
+        memset(preview,0,sizeof(preview));
+        for(unsigned v=0;v<6;v++)preview[v]=(Vc2Vertex){.x=xy[v][0],.y=xy[v][1],.z=-20,.depth=1,.colour=0xFF40A0FF};
+        g_frame->reserved[0]=0;g_frame->reserved[2]=1;g_frame->vertex_count=6;
+        g_frame->lens=(HotdLens){500,500,320,240};g_frame->lens_valid=1;
+        memcpy(g_frame->verts,preview,sizeof(preview));g_aimSX=320;g_aimSY=240;
+        g_frame->seq+=2;assert(pullFrame() && !memcmp(g_local,preview,sizeof(preview)));
+        g_cfgWorldScale=scale;
+    }
     check_world_aim();
     check_near_aim_and_splashes();
     check_controller_modes();

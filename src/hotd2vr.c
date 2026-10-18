@@ -26,9 +26,9 @@
  * otherwise leave the headset in a void. Point at the screen and the ray maps
  * straight onto it for aiming. Menus use thumbstick arrow keys.
  *
- * Two modes:
- *      HOTD2VR.exe              headset (default)
- *      HOTD2VR.exe --window     ordinary window, for checking the pipe alone
+ * Independent outputs ([vr] window=0, vrwindow=1 by default):
+ *      HOTD2VR.exe --window --no-vrwindow    ordinary desktop preview
+ *      HOTD2VR.exe --window --vrwindow       desktop preview plus headset
  *
  * --window exists so that a failure can be pinned down. If the window shows the
  * scene but the headset does not, the problem is OpenXR; if neither shows it,
@@ -56,6 +56,7 @@
 
 #include "hotd_share.h"
 #include "game_input.h"
+#include "audio_control.h"
 
 #define NEAR_M 0.05f
 #define FAR_M  4000.0f
@@ -152,7 +153,6 @@ static float     g_gfx = 554.3f, g_gfy = 623.6f;   /* the game's projection */
 static float     g_gcx = 320.0f, g_gcy = 240.0f;   /* and its centre        */
 static int       g_projLive;        /* projection read out of the game itself */
 static float     g_aimSX = 320.0f, g_aimSY = 240.0f;   /* last aim we pushed */
-static void hideCrosshair(void);
 static void placeShotEffects(void);
 
 static unsigned  g_addStart;            /* first translucent vertex        */
@@ -181,6 +181,7 @@ static int g_cfgExpandMeshes = 1;
 static int g_cfgExpandWorld;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
+static int g_cfgWindow, g_cfgVrWindow, g_previewOnly;
 static int g_cfgBrightness = 90;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
@@ -192,8 +193,6 @@ static float g_gammaOut = 1.0f;
 static int g_cfgZoomX = 400;      /* zoom magnification in percent (400 = 4x) */
 static int g_cfgZoomSpd = 4;      /* zoom glide, percent of the gap per frame */
 static int g_cfgReach = 6;        /* metres to the aim point when the ray misses */
-static int g_cfgHideCross = 48;   /* hide the game's crosshair sprite within this
-                                   * many pixels of our own aim; 0 keeps it */
 static int g_cfgAutoZoom = 1;     /* follow the game's own camera zoom */
 static int g_cfgFocus = 1;        /* pull the game window to the front on start */
 static int g_cfgAkimbo = 0;       /* Show/join both together, or each player independently. */
@@ -212,10 +211,20 @@ static int  g_cfgGunScale = 100;  /* percent */
 static int  g_cfgReloadMs = 180;  /* reload flick, ms */
 static unsigned g_cheatFlags;
 static unsigned g_cfgRapidRate=4;
+static unsigned g_cfgMasterVolume=100,g_cfgMusicVolume=100,g_cfgEffectsVolume=100;
+static unsigned readAudioVolume(const char *path,const char *key)
+{
+    char text[32];unsigned volume;
+    DWORD n=GetPrivateProfileStringA("vr",key,"100",text,sizeof(text),path);
+    if(n<sizeof(text)-1 && hotd_parse_volume(text,&volume))return volume;
+    note("Invalid %s; using 100%% (allowed 0..100).\n",key);return 100;
+}
 static void readGraphicsFlags(const char *path)
 {
     g_cfgLaser=GetPrivateProfileIntA("vr","laser",1,path)!=0;
     g_cfgCrosshair=GetPrivateProfileIntA("vr","crosshair",1,path)!=0;
+    g_cfgWindow=GetPrivateProfileIntA("vr","window",0,path)!=0;
+    g_cfgVrWindow=GetPrivateProfileIntA("vr","vrwindow",1,path)!=0;
     g_cfgNativeLighting=GetPrivateProfileIntA("vr","native_lighting",1,path)!=0;
     g_cfgExpandMeshes=GetPrivateProfileIntA("vr","expand_meshes",1,path)!=0;
     g_cfgExpandWorld=GetPrivateProfileIntA("vr","expand_world",0,path)!=0;
@@ -280,6 +289,9 @@ static void loadCfg(void)
     lstrcpyA(path + n, "HOTD2VR.ini");
     readGraphicsFlags(path);
     g_cheatFlags=readCheats(path);
+    g_cfgMasterVolume=readAudioVolume(path,"master_volume");
+    g_cfgMusicVolume=readAudioVolume(path,"music_volume");
+    g_cfgEffectsVolume=readAudioVolume(path,"effects_volume");
     if(!readBrightness(path,&g_cfgBrightness)) {
         note("Invalid brightness; using 90%% (allowed 25..400).\n");g_cfgBrightness=90;
     }
@@ -300,9 +312,6 @@ static void loadCfg(void)
     g_cfgZoomX   = (int)GetPrivateProfileIntA("vr", "zoom", 400, path);
     g_cfgZoomSpd = (int)GetPrivateProfileIntA("vr", "zoomspeed", 4, path);
     g_cfgReach   = (int)GetPrivateProfileIntA("vr", "aimreach", 6, path);
-    /* superseded: the DLL now drops the crosshair sprites by texture id
-     * (1361..1376), which cannot miss and cannot eat a nearby HUD quad */
-    g_cfgHideCross = (int)GetPrivateProfileIntA("vr", "hidecross", 0, path);
     g_cfgAutoZoom  = (int)GetPrivateProfileIntA("vr", "autozoom", 1, path);
     g_cfgAkimbo    = (int)GetPrivateProfileIntA("vr", "akimbo", 0, path);
     g_cfgFocus     = (int)GetPrivateProfileIntA("vr", "focusgame", 1, path);
@@ -339,7 +348,6 @@ static void loadCfg(void)
     if (g_cfgZoomSmooth > 90) g_cfgZoomSmooth = 90;
     if (g_cfgAutoAt < 5)   g_cfgAutoAt = 5;
     if (g_cfgAutoAt > 200) g_cfgAutoAt = 200;
-    if (g_cfgHideCross > 200) g_cfgHideCross = 200;
     if (g_cfgReach < 1)   g_cfgReach = 1;
     if (g_cfgReach > 100) g_cfgReach = 100;
     if (g_cfgZoomX < 110) g_cfgZoomX = 110;
@@ -357,9 +365,10 @@ static int       g_scrHave;         /* capture is alive at all */
 
 static int openShare(void)
 {
-    g_map = OpenFileMappingA(FILE_MAP_ALL_ACCESS, FALSE, VC2_SHARE_NAME);
+    DWORD access=g_previewOnly?FILE_MAP_READ:FILE_MAP_ALL_ACCESS;
+    g_map = OpenFileMappingA(access, FALSE, VC2_SHARE_NAME);
     if (!g_map) return 0;
-    g_frame = (Vc2Frame *)MapViewOfFile(g_map, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(Vc2Frame));
+    g_frame = (Vc2Frame *)MapViewOfFile(g_map, access, 0, 0, sizeof(Vc2Frame));
     if (!g_frame || g_frame->magic != VC2_SHARE_MAGIC || g_frame->version != VC2_SHARE_VERSION) {
         note("bridge protocol mismatch\n");
         if (g_frame) UnmapViewOfFile(g_frame);
@@ -371,11 +380,12 @@ static int openShare(void)
 
 static void pushCheats(void)
 {
-    if(!g_frame)return;
+    if(!g_frame || g_previewOnly)return;
     g_frame->render_flags=(g_cfgNativeLighting?0:HOTD_RENDER_UNLIT) |
         (g_cfgExpandMeshes?0:HOTD_RENDER_NATIVE_MESH_CULLING) |
         (g_cfgExpandWorld?HOTD_RENDER_EXPAND_WORLD:0);
     g_frame->rapid_fire_rate=g_cfgRapidRate;
+    g_frame->audio_levels=hotd_pack_audio(g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
     g_frame->cheat_flags=g_cheatFlags;
     MemoryBarrier();
     g_frame->cheat_tick=GetTickCount();
@@ -426,11 +436,13 @@ static int pullFrame(void)
             }
             if(isfinite(units) && units>1.0f) {
                 g_unitsPerMetre=units/g_cfgWorldScale;
-                /* HUD arrives in native game units; keep its physical canvas fixed. */
-                if(g_cfgWorldScale!=1.0f)for(unsigned v=ovStart;v<n;v++) {
-                    g_local[v].x=g_local[v].x/units*g_unitsPerMetre;
-                    g_local[v].y=g_local[v].y/units*g_unitsPerMetre;
-                    g_local[v].z=g_local[v].z/units*g_unitsPerMetre;
+                for(unsigned v=0;v<n;v++) {
+                    float scale;
+                    /* Native book animation is authored around a one-unit camera plane. */
+                    if(g_local[v].address&HOTD_GFILE)scale=g_unitsPerMetre*HOTD_GFILE_DISTANCE_M;
+                    else if(v>=ovStart && g_cfgWorldScale!=1.0f)scale=g_unitsPerMetre/units;
+                    else continue;
+                    g_local[v].x*=scale;g_local[v].y*=scale;g_local[v].z*=scale;
                 }
             }
             if(!g_projLive && fov>5.0f && fov<170.0f) {
@@ -443,51 +455,10 @@ static int pullFrame(void)
             g_activePlayers=activePlayers;
             memcpy(g_shotOrigins,shotOrigins,sizeof(shotOrigins));
             placeShotEffects();
-            hideCrosshair();
             return 1;
         }
     }
     return 0;
-}
-
-/* The game keeps drawing its own blue crosshair sprite, and it is redundant
- * next to the laser - worse, it trails the laser by the servo loop's few
- * frames. The DLL cannot be told to drop it (the sprite path is shared with
- * the rest of the HUD), but it is easy to recognise here: a small overlay
- * quad (depth exactly 1.0) whose centre reprojects to where we last told the
- * game to aim - the game moves it there for us. Collapse it to a point.
- * The size gate keeps the ammo drum and the hearts alive when the player
- * happens to aim across a corner of the screen. */
-static void hideCrosshair(void)
-{
-    unsigned i;
-    if (!g_cfgHideCross) return;
-    for (i = 0; i + 5 < g_localCount; i += 6) {
-        Vc2Vertex *q = &g_local[i];
-        float cx3, cy3, cz3, ex, ey, px, py, dx, dy;
-        float x0 = 1e30f, x1 = -1e30f, y0 = 1e30f, y1 = -1e30f;
-        int k, over = 1;
-        for (k = 0; k < 6; k++) {
-            if (q[k].depth != 1.0f) { over = 0; break; }
-            if (q[k].x < x0) x0 = q[k].x;
-            if (q[k].x > x1) x1 = q[k].x;
-            if (q[k].y < y0) y0 = q[k].y;
-            if (q[k].y > y1) y1 = q[k].y;
-        }
-        if (!over) continue;
-        ex = x1 - x0; ey = y1 - y0;
-        if (ex > 300.0f || ey > 300.0f) continue;      /* bigger than a sight */
-        cx3 = (x0 + x1) * 0.5f;
-        cy3 = (y0 + y1) * 0.5f;
-        cz3 = -(q[0].z);                               /* overlay: flat in z */
-        if (cz3 < 1.0f) continue;
-        px = g_gcx + cx3 * g_gfx / cz3;
-        py = g_gcy - cy3 * g_gfy / cz3;
-        dx = px - g_aimSX; dy = py - g_aimSY;
-        if (dx * dx + dy * dy > (float)(g_cfgHideCross * g_cfgHideCross))
-            continue;
-        for (k = 1; k < 6; k++) q[k] = q[0];           /* zero area, invisible */
-    }
 }
 
 /* same idea for the captured game screen; a torn frame is retried next time */
@@ -545,7 +516,7 @@ static void gameProjRead(void) { /* Lens is copied under the frame seqlock. */ }
 /* aim result, VR -> game, single writer so a bare bump after the write is fine */
 static void pushAim(float sx, float sy, unsigned buttons)
 {
-    if (!g_frame) return;
+    if (!g_frame || g_previewOnly) return;
     g_aimSX = sx; g_aimSY = sy;
     g_frame->aim_x = sx;
     g_frame->aim_y = sy;
@@ -558,7 +529,7 @@ static void pushAim(float sx, float sy, unsigned buttons)
  * game's joystick id 1 only when g_frame->akimbo is set. */
 static void pushAim2(float sx, float sy, unsigned buttons)
 {
-    if (!g_frame) return;
+    if (!g_frame || g_previewOnly) return;
     g_frame->aim2_x = sx;
     g_frame->aim2_y = sy;
     g_frame->aim2_buttons = buttons;
@@ -3089,7 +3060,8 @@ static int runVR(void)
         ci.height = sh;
         ci.faceCount = 1; ci.arraySize = 1; ci.mipCount = 1;
         ZeroMemory(&eye[i], sizeof(eye[i]));
-        if (XR_FAILED(pxrCreateSwapchain(session, &ci, &eye[i].sc))) die("swapchain");
+        XrResult created=pxrCreateSwapchain(session,&ci,&eye[i].sc);
+        if(XR_FAILED(created))die("swapchain");
         eye[i].w = ci.width; eye[i].h = ci.height;
         pxrEnumerateSwapchainImages(eye[i].sc, 0, &cnt, NULL);
         eye[i].imgCount = cnt;
@@ -3693,13 +3665,49 @@ cleanup:
     return gameEnded;
 }
 
+typedef struct { HANDLE job, process; } DesktopPreview;
+
+static void closeDesktopPreview(DesktopPreview *preview)
+{
+    if(preview->job)CloseHandle(preview->job); /* Kill only our preview, never the game. */
+    if(preview->process)CloseHandle(preview->process);
+    memset(preview,0,sizeof(*preview));
+}
+static int openDesktopPreview(DesktopPreview *preview,const char *command)
+{
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits={0};
+    STARTUPINFOA startup={sizeof(startup)};PROCESS_INFORMATION process={0};
+    char executable[MAX_PATH],*line;
+    size_t length=strlen(command)+sizeof(" --preview-only");
+    if(!GetModuleFileNameA(NULL,executable,sizeof(executable)))return 0;
+    line=malloc(length);if(!line)return 0;
+    snprintf(line,length,"%s --preview-only",command);
+    preview->job=CreateJobObjectA(NULL,NULL);
+    limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    if(!preview->job || !SetInformationJobObject(preview->job,JobObjectExtendedLimitInformation,&limits,sizeof(limits)) ||
+       !CreateProcessA(executable,line,NULL,NULL,FALSE,CREATE_SUSPENDED|CREATE_NO_WINDOW,NULL,NULL,&startup,&process)) {
+        free(line);closeDesktopPreview(preview);return 0;
+    }
+    free(line);preview->process=process.hProcess;
+    if(!AssignProcessToJobObject(preview->job,process.hProcess) || ResumeThread(process.hThread)==(DWORD)-1) {
+        TerminateProcess(process.hProcess,1);CloseHandle(process.hThread);closeDesktopPreview(preview);return 0;
+    }
+    CloseHandle(process.hThread);return 1;
+}
+
 int main(int argc, char **argv)
 {
-    int window = 0, stereo = 0, seconds = 0, i;
+    int stereo = 0, seconds = 0, i;
+    DesktopPreview preview={0};
+    g_previewOnly=0;
     loadCfg();
     for (i = 1; i < argc; i++) {
         unsigned cheat=cheatArg(argv[i]);
-        if (!strcmp(argv[i], "--window")) window = 1;
+        if (!strcmp(argv[i], "--window")) g_cfgWindow = 1;
+        else if (!strcmp(argv[i], "--no-window")) g_cfgWindow = 0;
+        else if (!strcmp(argv[i], "--vrwindow")) g_cfgVrWindow = 1;
+        else if (!strcmp(argv[i], "--no-vrwindow")) g_cfgVrWindow = 0;
+        else if (!strcmp(argv[i], "--preview-only")) g_previewOnly = 1;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
         else if (!strcmp(argv[i], "--expand-meshes")) g_cfgExpandMeshes = 1;
         else if (!strcmp(argv[i], "--no-expand-meshes")) g_cfgExpandMeshes = 0;
@@ -3717,6 +3725,14 @@ int main(int argc, char **argv)
                 note("--brightness requires an integer from 25 to 400 (percent).\n");return 2;
             }
         }
+        else if(!strcmp(argv[i],"--master-volume") || !strcmp(argv[i],"--music-volume") || !strcmp(argv[i],"--effects-volume")) {
+            const char *option=argv[i];
+            unsigned *volume=!strcmp(option,"--master-volume")?&g_cfgMasterVolume:
+                !strcmp(option,"--music-volume")?&g_cfgMusicVolume:&g_cfgEffectsVolume;
+            if(i+1>=argc || !hotd_parse_volume(argv[++i],volume)) {
+                note("%s requires an integer from 0 to 100 (percent).\n",option);return 2;
+            }
+        }
         else if(!strcmp(argv[i],"--rapid-fire-rate")) {
             if(i+1>=argc || !hotd_parse_rapid_rate(argv[++i],&g_cfgRapidRate)) {
                 note("--rapid-fire-rate requires an integer from 1 to 30 (shots/sec).\n");return 2;
@@ -3728,11 +3744,14 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--brightness N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
+    if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
+    note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
     note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
     note("Scene brightness: %d%%\n",g_cfgBrightness);
+    note("Audio volume: master=%u%% music=%u%% effects/voices=%u%%\n",g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
     note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
     note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
@@ -3740,10 +3759,18 @@ int main(int argc, char **argv)
     if (!g_frame) { note("No HOTD2 bridge. Start through Start-HOTD2.ps1.\n"); return 1; }
     if (seconds > 0) g_stopAt = GetTickCount() + (DWORD)seconds*1000;
     note("Bridge connected; input profile %s\n", g_frame->input_supported ? "verified" : "unavailable");
+    pushCheats();
     note("Cheats requested: ammo=%u lives=%u invincibility=%u continues=%u rapid_fire=%u (up to %u shots/sec; native weapon handling applies)\n",
         !!(g_cheatFlags&HOTD_CHEAT_AMMO),!!(g_cheatFlags&HOTD_CHEAT_LIVES),
         !!(g_cheatFlags&HOTD_CHEAT_INVINCIBILITY),!!(g_cheatFlags&HOTD_CHEAT_CONTINUES),!!(g_cheatFlags&HOTD_CHEAT_RAPID),g_cfgRapidRate);
-    if (stereo) runStereo(); else if (window) runWindow(); else runVR();
+    if (stereo) runStereo();
+    else if(g_cfgVrWindow) {
+        if(g_cfgWindow && !openDesktopPreview(&preview,GetCommandLineA()))
+            note("Desktop preview unavailable; headset continues.\n");
+        runVR();
+    } else if(g_cfgWindow)runWindow();
+    else while(!gameExited()) { pushCheats();Sleep(10); }
+    closeDesktopPreview(&preview);
     g_cheatFlags=0;
     pushCheats();
     pushAim(320, 240, 0); pushAim2(320, 240, 0);

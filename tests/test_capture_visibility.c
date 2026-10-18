@@ -67,6 +67,7 @@ static void reset_capture(DWORD flags)
 {
     frame->render_flags=flags;frame->units_per_metre=10;count=calls=dropped=hud_count=0;visibility_flags_latched=0;
     memset(&stage_records,0,sizeof(stage_records));visibility_queue_drops=0;
+    memset(&gfile_records,0,sizeof(gfile_records));
     immediate_models=immediate_sprites=submit_calls=append_calls=0;
     assert(!capture_model && !capture_visibility_planes && !visibility_submit_record);reset_queue(1024);
 }
@@ -101,6 +102,46 @@ static void test_queue_bounds(void)
     bad=q;bad.cursor+=1;assert(!hotd_native_queue_valid(bad,list));
     bad=q;bad.cursor=list+16+3*HOTD_MODEL_RECORD_SIZE+4;assert(!hotd_native_queue_valid(bad,list));
     bad=(HotdNativeQueue){UINTPTR_MAX-3,0,0,4};assert(!hotd_native_queue_valid(bad,bad.list));
+}
+static void test_gfile_capture(BYTE *record,DWORD *task)
+{
+    const unsigned handlers[]={0x37AC0,0x24900};
+    const BYTE signatures[2][16]={
+        {0x8B,0x44,0x24,0x04,0x83,0xEC,0x4C,0x53,0x8B,0x98,0x0C,0x13,0,0,0x55,0x8B},
+        {0x83,0xEC,0x44,0x53,0x55,0x8B,0x6C,0x24,0x50,0x33,0xDB,0x56,0x57,0x66,0x8B,0x8D}};
+    assert(!native_gfile_profile());
+    for(unsigned h=0;h<2;h++)memcpy(game_base+handlers[h],signatures[h],16);
+    assert(native_gfile_profile());
+    for(unsigned h=0;h<2;h++)for(unsigned b=0;b<16;b++) {
+        game_base[handlers[h]+b]^=1;assert(!native_gfile_profile());game_base[handlers[h]+b]^=1;
+    }
+    gfile_ready=1;sphere_result=0;deferred_result=1;
+    for(unsigned h=0;h<2;h++)for(unsigned alt=0;alt<2;alt++) {
+        BYTE alias[HOTD_MODEL_RECORD_SIZE];reset_capture(HOTD_RENDER_NATIVE_MESH_CULLING);
+        task[0]=(DWORD)(ULONG_PTR)(game_base+handlers[h]);
+        if(alt)native_submit_alt(record,.5f);else native_submit(record);
+        assert(count==3 && (vertices[0].address&HOTD_GFILE) && !(vertices[0].style&HOTD_WORLD));
+        assert(gfile_records.count==1 && !capture_gfile && !gfile_immediate);
+        BYTE *copy=queued(0);memcpy(alias,copy,sizeof(alias));task[0]=0x1234;count=0;
+        native_model(alias,1);assert(count==3 && !(vertices[0].address&HOTD_GFILE) && (vertices[0].style&HOTD_WORLD));
+        assert(gfile_records.count==1);count=0;
+        if(alt)native_model_alt(copy,1);else native_model(copy,1);
+        assert(count==3 && (vertices[0].address&HOTD_GFILE) && !(vertices[0].style&HOTD_WORLD));
+        assert(!gfile_records.count && vertices[0].z==5); /* Transport keeps native geometry and native depth state. */
+        assert(!(vertices[0].style&HOTD_NO_ZWRITE));count=0;
+        native_model(copy,1);assert(!(vertices[0].address&HOTD_GFILE));
+    }
+    reset_capture(0);task[0]=(DWORD)(ULONG_PTR)(game_base+handlers[0]);nested_draw=1;
+    native_submit(record);assert(count==6 && !(vertices[0].address&HOTD_GFILE) && (vertices[3].address&HOTD_GFILE));
+    assert(!capture_gfile && !gfile_immediate);
+    BYTE *copy=queued(0);*(DWORD *)copy^=0x04000000;count=0;
+    native_model(copy,1);assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
+    reset_capture(0);gfile_ready=0;native_submit(record);
+    assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
+    gfile_ready=1;task[0]=0x1234;reset_capture(0);native_submit(record);
+    assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
+    task[0]=(DWORD)(ULONG_PTR)(game_base+handlers[0]);native_submit(record);assert(gfile_records.count==1);
+    publish_frame();assert(!gfile_records.count);gfile_ready=0;
 }
 int main(void)
 {
@@ -228,6 +269,7 @@ int main(void)
     for(unsigned i=0;i<3;i++)assert(native_stage_visibility(0,1,(uintptr_t[]){0x1380,0x13CC,0x1413}[i]));
     assert(!native_stage_visibility(0,1,0x1381)&&!native_stage_visibility(0,0,0x1380)&&!native_stage_visibility(0,NAN,0x1380));
     frame->render_flags=0;assert(!native_stage_visibility(0,1,0x1380)&&native_stage_visibility(1,1,0x1381));
+    test_gfile_capture(record,task);
     VirtualFree(frame,0,MEM_RELEASE);VirtualFree(game_base,0,MEM_RELEASE);
-    puts("Capture visibility, provenance and queue-bound checks passed.");return 0;
+    puts("Capture visibility, G's File immediate/deferred provenance, signature and queue-bound checks passed.");return 0;
 }

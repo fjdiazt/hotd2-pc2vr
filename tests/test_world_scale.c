@@ -3,6 +3,7 @@
 #define main viewer_application_main
 #include "../src/hotd2vr.c"
 #undef main
+#include <d3d.h>
 
 int main(void)
 {
@@ -69,7 +70,26 @@ int main(void)
         assert(sx==320 && sy==240 && hit[2]==-2);
         g_scrVisible=g_scrHave=0;
     }
+    /* Book cover/pages retain their 3D animation and projected size at a fixed physical distance. */
+    const float book[3][3]={{-.2f,-.1f,-1},{.3f,-.2f,-.75f},{.1f,.25f,-1.1f}};
+    for(unsigned v=0;v<3;v++)g_frame->verts[3+v]=(Vc2Vertex){
+        .x=book[v][0],.y=book[v][1],.z=book[v][2],.colour=0x89ABCDEF,.u=.3f,.v=.7f,
+        .address=HOTD_GFILE|hotd_address(2,3),.style=2u<<HOTD_CULL_SHIFT};
+    for(unsigned s=0;s<sizeof(scales)/sizeof(scales[0]);s++)for(unsigned repeat=0;repeat<2;repeat++) {
+        float distance;const float centre[3]={0};g_cfgWorldScale=scales[s];assert(pullFrame());
+        for(unsigned v=0;v<3;v++) {
+            const Vc2Vertex *b=g_local+3+v;
+            assert(fabsf(b->z/g_unitsPerMetre-book[v][2]*HOTD_GFILE_DISTANCE_M)<.0001f);
+            assert(fabsf(b->x/b->z-book[v][0]/book[v][2])<.0001f);
+            assert(fabsf(b->y/b->z-book[v][1]/book[v][2])<.0001f);
+            assert(b->colour==0x89ABCDEF && b->u==.3f && b->v==.7f);
+            assert(b->address==(HOTD_GFILE|hotd_address(2,3)) && b->style==(2u<<HOTD_CULL_SHIFT));
+            assert(g_frame->verts[3+v].z==book[v][2]);
+        }
+        assert(g_local[0].z==-20 && fabsf(g_local[6].z/g_unitsPerMetre+2)<.0001f);
+        assert(rayVsScene(centre,forward,&distance) && fabsf(distance-20)<.0001f);
+    }
     free(g_frame);g_frame=NULL;
-    puts("World scale: multiplier INI/CLI, bounds, 1/1.25/2x geometry, aim, shot placement and fixed HUD/menu size passed.");
+    puts("World scale: INI/CLI, 1/1.25/2x geometry, aim, shot placement, fixed HUD/menu and animated G's File depth passed.");
     return 0;
 }
