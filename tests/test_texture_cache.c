@@ -292,6 +292,30 @@ int main(void)
     for(i=0;i<3;i++)hud[i][3]=3;
     capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);publish_frame();
     assert(frame->vertex_count==3 && frame->reserved[2]==1 && frame->verts[0].z==-20);
+    /* A native pause submits no scene: retain the last complete capture and its atlas. */
+    input_ready=1;*(DWORD *)(game_base+0x5C8E98)=6;
+    *(short *)(game_base+0x5A5C62)=5;*(short *)(game_base+0x5A5D92)=9;
+    capture_kind=HOTD_WORLD;native_z_enable=1;
+    capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);publish_frame();
+    Vc2Vertex paused_scene[3];memcpy(paused_scene,frame->verts,sizeof(paused_scene));
+    unsigned old_frame=frame->frame,old_atlas=frame->atlas_seq;
+    HotdLens paused_lens=frame->lens;
+    *(short *)(game_base+0x5A1A00)=1;
+    capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);assert(!count && !hud_count);
+    shot_origins[0][0]=999;lens.fx=999;publish_frame();
+    assert(frame->reserved[1]==1 && frame->frame>old_frame && frame->active_players==1);
+    assert(frame->vertex_count==3 && frame->reserved[2]==4 && !memcmp(frame->verts,paused_scene,sizeof(paused_scene)));
+    assert(frame->atlas_seq==old_atlas && !memcmp(&frame->lens,&paused_lens,sizeof(paused_lens)));
+    assert(frame->shot_origins[0][0]!=999);
+    for(unsigned repeat=0;repeat<3;repeat++){publish_frame();assert(frame->vertex_count==3 && frame->reserved[1]==1);}
+    *(short *)(game_base+0x5A1A00)=0;
+    capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);publish_frame();
+    assert(!frame->reserved[1] && frame->vertex_count==3);
+    /* Never substitute a previous menu for gameplay on a cold pause. */
+    *(DWORD *)(game_base+0x5C8E98)=3;publish_frame();
+    *(short *)(game_base+0x5A1A00)=1;publish_frame();
+    assert(frame->reserved[1]==1 && !frame->vertex_count);
+    *(short *)(game_base+0x5A1A00)=0;input_ready=0;
     while(evict_texture());
     free(game_base);free(frame);
     puts("Texture cache: 1600 surfaces, eviction, pinned live tiles and COM release passed.");

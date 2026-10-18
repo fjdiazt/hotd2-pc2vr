@@ -75,6 +75,12 @@ Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the
 
 Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Holding B/Y does not block a later trigger pull. Thumbstick navigation is restricted to the native mode-selection screen; VR thumbstick zoom and click-to-toggle-screen bindings are removed.
 
+### Pausing
+
+A/X uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press Start again to resume. The native desktop window retains its original pause display.
+
+The bridge and viewer must both be rebuilt for protocol 13; older builds cannot exchange the pause state. Details and verification: [docs/pause.md](docs/pause.md).
+
 ### Two hands and akimbo
 
 Right always controls P1; left always controls P2.
@@ -243,7 +249,7 @@ Implementation and test evidence: [docs/cheats.md](docs/cheats.md).
 
 This differs from VC2VR's `HGL_VIEW.DLL` integration and extra rotated-camera passes. HOTD2 uses an injected capture bridge with configurable mesh/stage visibility expansion. Experimental `expand_world` broadens loaded stage submissions without rotating the camera or retaining scenery across frames. Full 360-degree coverage is not established: other culling, unloaded sections and never-authored surfaces can still leave gaps when you turn or lean.
 
-The bridge also repairs alpha after native bitmap uploads so menu art remains visible. Screen-space UI is captured in every game mode, including tutorial, story, game-over and menus, without a native depth cutoff. It uses a canvas 2 m away and 2 × 1.5 m in size, anchored to the recenter origin. Native transparency and submission order remain; UI draws above world geometry and never becomes an aim or splash target. The captured-screen panel replaces that HUD layer when its texture is available, avoiding duplicate UI. Model geometry, including untagged traveling tracers, keeps its world depth. Native letterbox bars are omitted from VR capture during gameplay; pause dimming and full-screen blackouts remain. These capture changes leave the native game rendering path running.
+The bridge also repairs alpha after native bitmap uploads so menu art remains visible. Screen-space UI is captured in every game mode, including tutorial, story, game-over and menus, without a native depth cutoff. It uses a canvas 2 m away and 2 × 1.5 m in size, anchored to the recenter origin. Native transparency and submission order remain; UI draws above world geometry and never becomes an aim or splash target. The captured-screen panel replaces that HUD layer when its texture is available, avoiding duplicate UI. Model geometry, including untagged traveling tracers, keeps its world depth. Native letterbox bars are omitted from VR capture. During pause, VR retains the last gameplay scene; full-screen blackouts outside pause remain captured. These capture changes leave the native game rendering path running.
 
 Texture capture preserves each material's independent U/V wrap, mirror and clamp modes. World and HUD shaders apply addressing after UV interpolation, preserving the native mapping on mirrored model halves. Opening-car material inspection and offscreen viewer replay passed; boss/headset appearance still needs confirmation. Rebuild and restart both bridge and viewer after capture-format changes.
 

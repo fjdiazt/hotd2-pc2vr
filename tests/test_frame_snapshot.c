@@ -239,6 +239,12 @@ int main(void)
     assert(g_local[0].address==hotd_address(2,3));
     assert(g_local[0].specular==0x00332211 && g_local[0].fog_colour==0x01112233 && g_local[0].fog==.25f);
     assert(g_shotOrigins[0][0]==11);
+    g_frame->reserved[1]=1;g_frame->seq+=2;
+    assert(pullFrame() && g_nativePaused && g_local[0].x==11);
+    g_scrMode=1;assert(!screenVisible());
+    g_scrMode=0;assert(!screenVisible());
+    g_frame->reserved[1]=0;g_frame->seq+=2;
+    assert(pullFrame() && !g_nativePaused && screenVisible());
     Vc2Vertex *oldVertices=g_local;
     unsigned *oldAtlas=g_atlPix;
     g_frame->seq=g_frame->atlas_seq=3;g_frame->frame=2;

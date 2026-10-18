@@ -25,6 +25,7 @@ static Vc2Vertex vertices[VC2_MAX_VERTS];
 #define HOTD_MAX_HUD_VERTS (4096*6)
 static Vc2Vertex hud_vertices[HOTD_MAX_HUD_VERTS];
 static unsigned hud_count;
+static int pause_scene_ready;
 static HotdLens lens;
 static unsigned lens_valid;
 static unsigned capture_kind,shot_group;
@@ -610,7 +611,7 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     Vc2Vertex recent_vertices[3];
     unsigned recent_indices[3]={~0u,~0u,~0u},recent_age[3]={0},vertex_clock=0;
     int hud=0,reuse=indices || type!=D3DPT_TRIANGLELIST;
-    if(capture_skip)return;
+    if(capture_skip || (input_ready && *(short *)(game_base+0x5A1A00)))return;
     calls++;
     if(!frame || !data || !stride || total<3)return;
     read_camera(device);
@@ -948,21 +949,27 @@ static unsigned native_active_players(void)
 static void publish_frame(void)
 {
     if(!frame || !active_device)return;
+    int paused=input_ready && *(short *)(game_base+0x5A1A00)!=0;
+    int retain_scene=paused && pause_scene_ready;
     frame_no++;
     if(!IsWindow(game_window))EnumWindows(find_game_window,0);
-    capture_screen(active_device);
+    if(!paused)capture_screen(active_device);
     if(!atlas_dirty)frame->seq++;
     MemoryBarrier();
-    memcpy(frame->verts,vertices,count*sizeof(vertices[0]));
-    unsigned hud_n=hud_count<VC2_MAX_VERTS-count?hud_count:VC2_MAX_VERTS-count;
-    dropped+=(hud_count-hud_n)/3;
-    memcpy(frame->verts+count,hud_vertices,hud_n*sizeof(hud_vertices[0]));
-    frame->vertex_count=count+hud_n;frame->frame=frame_no;
-    frame->reserved[0]=count;frame->reserved[1]=0;frame->reserved[2]=count+1;
-    frame->lens=lens;frame->lens_valid=lens_valid;
+    if(!retain_scene) {
+        memcpy(frame->verts,vertices,count*sizeof(vertices[0]));
+        unsigned hud_n=hud_count<VC2_MAX_VERTS-count?hud_count:VC2_MAX_VERTS-count;
+        dropped+=(hud_count-hud_n)/3;
+        memcpy(frame->verts+count,hud_vertices,hud_n*sizeof(hud_vertices[0]));
+        frame->vertex_count=count+hud_n;
+        frame->reserved[0]=count;frame->reserved[2]=count+1;
+        frame->lens=lens;frame->lens_valid=lens_valid;
+        memcpy(frame->shot_origins,shot_origins,sizeof(shot_origins));
+        pause_scene_ready=input_ready && !paused && *(DWORD *)(game_base+0x5C8E98)==6 && count>0;
+    }
+    frame->reserved[1]=paused;frame->frame=frame_no;
     frame->draw_calls=calls;frame->dropped_triangles=dropped;frame->texture_count=texture_count;
     frame->active_players=native_active_players();
-    memcpy(frame->shot_origins,shot_origins,sizeof(shot_origins));
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;

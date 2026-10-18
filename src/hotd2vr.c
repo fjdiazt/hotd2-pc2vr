@@ -156,7 +156,7 @@ static void hideCrosshair(void);
 static void placeShotEffects(void);
 
 static unsigned  g_addStart;            /* first translucent vertex        */
-static unsigned  g_l3End;               /* end of the background layer     */
+static unsigned  g_nativePaused;
 /* v8: where the flat overlay starts. The DLL sorts the drum, the lives, the
  * credits line and its own HUD to the tail of the buffer and says so here, so
  * they can be drawn through a second matrix that the zoom never touches. An
@@ -388,7 +388,7 @@ static int pullFrame(void)
     pushCheats();
     for (i = 0; i < 8; i++) {
         HotdLens lens;
-        unsigned lensValid,addStart,l3End,ovStart,frameNo,activePlayers;
+        unsigned lensValid,addStart,paused,ovStart,frameNo,activePlayers;
         float units,fov;
         float shotOrigins[64][3];
         a = g_frame->seq;
@@ -402,7 +402,7 @@ static int pullFrame(void)
         n = g_frame->vertex_count;
         if (n > VC2_MAX_VERTS) n = VC2_MAX_VERTS;
         addStart = g_frame->reserved[0];
-        l3End = g_frame->reserved[1];
+        paused = g_frame->reserved[1];
         {   unsigned r2 = g_frame->reserved[2];
             ovStart = (r2 && r2 - 1u <= n) ? r2 - 1u : n;
         }
@@ -437,7 +437,7 @@ static int pullFrame(void)
                 double half=fov*3.14159265358979/360.0;
                 g_gfx=(float)(320.0/tan(half));g_gfy=1.125f*g_gfx;
             }
-            g_addStart=addStart;g_l3End=l3End;g_ovStart=ovStart;
+            g_addStart=addStart;g_nativePaused=paused;g_ovStart=ovStart;
             g_localCount = n;
             g_lastFrame = frameNo;
             g_activePlayers=activePlayers;
@@ -612,6 +612,10 @@ static float g_scrHalfH = HOTD_PANEL_HALF_HEIGHT_M;
 static int   g_scrMode;                     /* 0 auto, 1 on, 2 off */
 static int   g_scrVisible;
 static int   g_inScope;                     /* drawing INTO the sight, not the world */
+static int screenVisible(void)
+{
+    return !g_nativePaused && ((g_scrMode==1) || (g_scrMode==0 && g_ovStart<900));
+}
 
 #define HOTD_ALPHA_SHADER \
 "float opacity(VOut i,float4 s,bool flat) { return saturate((flat || (i.style & 512u)) ? i.c.a : 1.0) * (flat ? 1.0 : s.a); }\n" \
@@ -3146,8 +3150,7 @@ static int runVR(void)
 
         /* the screen shows itself whenever the 3D scene is nearly empty -
          * that is the menus, the scores, the name entry, the attract mode */
-        g_scrVisible = (g_scrMode == 1) ||
-                       (g_scrMode == 0 && g_ovStart < 900);
+        g_scrVisible = screenVisible();
 
         for (i = 0; i < 2; i++) { ZeroMemory(&views[i], sizeof(views[i])); views[i].type = XR_TYPE_VIEW; }
         vli.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -3443,8 +3446,7 @@ static int runWindow(void)
         }
         pullFrame();
         pullScreen();
-        g_scrVisible = (g_scrMode == 1) ||
-                       (g_scrMode == 0 && g_ovStart < 900);
+        g_scrVisible = screenVisible();
         scale = 1.0f / g_unitsPerMetre;
 
         mIdent(model);
@@ -3612,8 +3614,7 @@ static int runStereo(void)
         }
         pullFrame();
         pullScreen();
-        g_scrVisible = (g_scrMode == 1) ||
-                       (g_scrMode == 0 && g_ovStart < 900);
+        g_scrVisible = screenVisible();
 
         /* a head pose built the way a runtime would report one */
         cy2 = cosf(w_yaw * 0.5f); sy2 = sinf(w_yaw * 0.5f);
