@@ -165,7 +165,7 @@ int main(void)
     sample_specular=sample_fog_colour=0;sample_fog=1;
     for(unsigned y=0;y<2;y++)for(unsigned x=0;x<2;x++)g_atlPix[y*4096+x]=0xFF808080;
     g_atlFresh=1;uploadAtlasTex();
-    const int brightness[]={50,85,100,200};
+    const int brightness[]={50,90,100,200};
     for(unsigned b=0;b<sizeof(brightness)/sizeof(*brightness);b++) {
         float gain=brightness[b]/100.0f;
         brightness_shaders(brightness[b],1);

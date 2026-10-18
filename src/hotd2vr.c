@@ -181,7 +181,7 @@ static int g_cfgExpandMeshes = 1;
 static int g_cfgExpandWorld;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
-static int g_cfgBrightness = 85;
+static int g_cfgBrightness = 90;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
  * The game's texels and shades are already gamma-encoded (a 1997 renderer
@@ -251,7 +251,7 @@ static int parseBrightness(const char *text,int *brightness)
 static int readBrightness(const char *path,int *brightness)
 {
     char text[32];
-    GetPrivateProfileStringA("vr","brightness","85",text,sizeof(text),path);
+    GetPrivateProfileStringA("vr","brightness","90",text,sizeof(text),path);
     return parseBrightness(text,brightness);
 }
 static unsigned readCheats(const char *path)
@@ -281,7 +281,7 @@ static void loadCfg(void)
     readGraphicsFlags(path);
     g_cheatFlags=readCheats(path);
     if(!readBrightness(path,&g_cfgBrightness)) {
-        note("Invalid brightness; using 85%% (allowed 25..400).\n");g_cfgBrightness=85;
+        note("Invalid brightness; using 90%% (allowed 25..400).\n");g_cfgBrightness=90;
     }
     if(!readRapidRate(path,&g_cfgRapidRate)) {
         note("Invalid rapid_fire_rate; using 4 shots/sec (allowed 1..30).\n");g_cfgRapidRate=4;

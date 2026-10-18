@@ -10,7 +10,7 @@ int main(void)
     assert(g_cfgLaser && g_cfgCrosshair);
     assert(GetTempPathA(MAX_PATH,temp) && GetTempFileNameA(temp,"hai",0,ini));
     int brightness=0;
-    assert(readBrightness(ini,&brightness) && brightness==85);
+    assert(readBrightness(ini,&brightness) && brightness==90);
     assert(WritePrivateProfileStringA("vr","brightness","80",ini));
     assert(readBrightness(ini,&brightness) && brightness==80);
     assert(WritePrivateProfileStringA("vr","brightness","bad",ini));

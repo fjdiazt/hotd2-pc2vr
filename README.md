@@ -140,7 +140,7 @@ Use `-NativeLighting` or `--native-lighting` to force it on. Last direct CLI swi
 
 Lighting adds CPU work; actual VR frame-time cost remains unmeasured. Disabling it skips those calculations but retains the same transport format. MSAA, supersampling, gamma, depth and sharp HUD filtering are already available; see the settings table below.
 
-Scene brightness is separate from gamma: `[vr] brightness=100` is neutral; integer values 25–400 darken or brighten the converted scene. Brightness defaults to **85%**. Missing or invalid INI values use 85. Gain applies after fog/specular and before sRGB gamma compensation, with native lighting on or off. HUD, gun/aim graphics, the captured-screen panel and native desktop game stay unchanged.
+Scene brightness is separate from gamma: `[vr] brightness=100` is neutral; integer values 25–400 darken or brighten the converted scene. Brightness defaults to **90%**. Missing or invalid INI values use 90. Gain applies after fog/specular and before sRGB gamma compensation, with native lighting on or off. HUD, gun/aim graphics, the captured-screen panel and native desktop game stay unchanged.
 
 For 80% scene brightness, without changing the INI:
 
@@ -163,7 +163,7 @@ expand_world=0
 
 `expand_meshes=1` preserves the existing normal-model screen-edge expansion, helping retain offscreen body parts. Set it to `0` to restore native normal-model mesh rejection. Alternative-model draws retain their native visibility checks by default.
 
-`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. Opening-street windowed capture and offscreen rear replay passed; full rear coverage, forward-wall parity and headset performance still need testing.
+`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. Headset testing captured rear scenery but showed jerkiness and artifacts; world expansion stays experimental and off by default. Full rear coverage and forward-wall parity remain unverified.
 
 Session overrides, without changing the INI:
 
@@ -187,7 +187,7 @@ These are the values in the shipped INI; an existing active file can differ.
 | `[vr] msaa` | `4` | Antialiasing samples: 1, 2, 4 or 8 |
 | `[vr] supersample` | `100` | Eye-buffer resolution in percent; separate from world size |
 | `[vr] gamma` | `220` | sRGB eye-buffer compensation in percent; `100` disables it |
-| `[vr] brightness` | `85` | Converted-scene brightness in percent, 25–400; HUD and guns unchanged |
+| `[vr] brightness` | `90` | Converted-scene brightness in percent, 25–400; HUD and guns unchanged |
 | `[vr] hudsharp` | `1` (if absent) | Sharp HUD texture filtering |
 | `[vr] haptic` / `focusgame` | `1` / `1` | Shot feedback and initial native-window focus |
 | `[vr] autozoom` | `0` | Automatic cinematic zoom disabled in the shipped configuration |

@@ -33,6 +33,13 @@ static unsigned capture_model;
 static DWORD capture_visibility_planes;
 static HotdStageRecords stage_records;
 static int visibility_hooks_ready,visibility_ready;
+static const BYTE *visibility_submit_record;
+static int visibility_submit_stage;
+static DWORD visibility_frame_flags;
+static int visibility_flags_latched;
+static unsigned visibility_queue_drops;
+static unsigned visibility_pressure;
+static unsigned visibility_last_pressure_log;
 static float shot_origins[64][3];
 static D3DMATRIX world, view, projection;
 static D3DVIEWPORT7 viewport;
@@ -600,9 +607,12 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     Texture *texture;
     DrawStyle style;
     DWORD z_enable=0;
-    int hud=0;
+    Vc2Vertex recent_vertices[3];
+    unsigned recent_indices[3]={~0u,~0u,~0u},recent_age[3]={0},vertex_clock=0;
+    int hud=0,reuse=indices || type!=D3DPT_TRIANGLELIST;
     if(capture_skip)return;
     calls++;
+    if(!frame || !data || !stride || total<3)return;
     read_camera(device);
     for(i=0;i<fvf_count && fvf_logged[i]!=fvf;i++);
     if(i==fvf_count && fvf_count<32) {
@@ -614,7 +624,6 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
             projection._33,projection._34,(unsigned long)viewport.dwX,(unsigned long)viewport.dwY,
             (unsigned long)viewport.dwWidth,(unsigned long)viewport.dwHeight);
     }
-    if(!frame || !data || !stride || total<3)return;
     /* Native sprites/bitmaps are screen-space UI at any sort depth, in every mode. */
     hud=(fvf&D3DFVF_POSITION_MASK)==D3DFVF_XYZRHW && !capture_kind && !capture_model;
     IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_ZENABLE,&z_enable);
@@ -635,7 +644,21 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
         if((hud?hud_count:count)+3>(hud?HOTD_MAX_HUD_VERTS:VC2_MAX_VERTS)){dropped++;break;}
         for(k=0;k<3;k++) {
             unsigned idx=indices?indices[q[k]]:q[k];
-            if(idx>=n || !convert_vertex((const BYTE *)data+idx*stride,fvf,texture,style,tri+k))break;
+            if(idx>=n)break;
+            if(!reuse) {
+                if(!convert_vertex((const BYTE *)data+idx*stride,fvf,texture,style,tri+k))break;
+            } else {
+                unsigned cached=0;
+                while(cached<3 && recent_indices[cached]!=idx)cached++;
+                if(cached<3)tri[k]=recent_vertices[cached];
+                else {
+                    if(!convert_vertex((const BYTE *)data+idx*stride,fvf,texture,style,tri+k))break;
+                    cached=0;
+                    for(unsigned c=1;c<3;c++)if(recent_age[c]<recent_age[cached])cached=c;
+                    recent_indices[cached]=idx;recent_vertices[cached]=tri[k];
+                }
+                recent_age[cached]=++vertex_clock;
+            }
             if(hud) {
                 const float *v=(const float *)((const BYTE *)data+idx*stride);
                 float sx=(v[0]-viewport.dwX)*640/viewport.dwWidth,sy=(v[1]-viewport.dwY)*480/viewport.dwHeight;
@@ -682,40 +705,76 @@ static NativeModel native_model_original,native_model_alt_original;
 typedef void (__cdecl *NativeSubmit)(const BYTE *);
 typedef void (__cdecl *NativeSubmitAlt)(const BYTE *,float);
 static NativeSubmit native_submit_original;
+static NativeSubmit native_sprite_submit_original;
 static NativeSubmitAlt native_submit_alt_original;
 static int (__cdecl *native_visibility_original)(float,float,float,float);
 static HRESULT (WINAPI *original_sphere_visibility)(IDirect3DDevice7 *,D3DVECTOR *,D3DVALUE *,DWORD,DWORD,DWORD *);
 
+static DWORD capture_render_flags(void)
+{return visibility_flags_latched?visibility_frame_flags:frame?frame->render_flags:0;}
+static int capture_world_enabled(void)
+{return visibility_ready && frame && (capture_render_flags()&HOTD_RENDER_EXPAND_WORLD);}
+static HotdNativeQueue native_capture_queue(void)
+{
+    HotdNativeQueue q;
+    q.list=*(DWORD *)(game_base+0x3E78C4);q.cursor=*(DWORD *)(game_base+0x3E78C0);
+    q.count=*(DWORD *)(game_base+0x3E793C);q.capacity=*(DWORD *)(game_base+0x3E78C8);
+    return q;
+}
+static int native_queue_room(void)
+{return hotd_native_queue_room(native_capture_queue(),(uintptr_t)game_base+0x3E814C);}
 static int native_stage_task(void)
 {
     const DWORD *task=*(const DWORD **)(game_base+0x3DF8B0);
     return task && task[0]==(DWORD)(ULONG_PTR)(game_base+0x1260);
 }
-static int remember_stage_record(const BYTE *record)
+static int native_stage_submission(const BYTE *record)
 {
     DWORD model,black;
+    if(!capture_world_enabled() || !native_queue_room() || stage_records.overflow || stage_records.count==HOTD_STAGE_RECORDS ||
+       !native_stage_task())return 0;
     memcpy(&model,record+0xC,sizeof(model));
     memcpy(&black,game_base+0x5A66A4+0x93E*16,sizeof(black));
-    if(visibility_ready && frame && (frame->render_flags&HOTD_RENDER_EXPAND_WORLD) &&
-       model && model!=black && native_stage_task())return hotd_remember_stage(&stage_records,record);
-    return 0;
+    return model && model!=black;
+}
+static void native_submit_model(const BYTE *record,float alpha,int alternate)
+{
+    const BYTE *previous=visibility_submit_record;
+    int previous_stage=visibility_submit_stage,stage=0,expanded=capture_world_enabled();
+    HotdNativeQueue before={0};
+    if(expanded) {
+        before=native_capture_queue();
+        if((*(const DWORD *)record&0x80000000u) &&
+           !hotd_native_queue_room(before,(uintptr_t)game_base+0x3E814C)) {
+            visibility_queue_drops++;return;
+        }
+        stage=native_stage_submission(record);
+    }
+    visibility_submit_record=record;visibility_submit_stage=stage;
+    if(alternate)native_submit_alt_original(record,alpha);else native_submit_original(record);
+    visibility_submit_record=previous;visibility_submit_stage=previous_stage;
+    if(stage) {
+        HotdNativeQueue after=native_capture_queue();
+        if(hotd_native_queue_appended(before,after,(uintptr_t)game_base+0x3E814C) &&
+           *(const DWORD *)(after.list+before.count*4)==before.cursor)
+            hotd_remember_stage(&stage_records,(const BYTE *)before.cursor);
+    }
 }
 static void __cdecl native_submit(const BYTE *record)
-{remember_stage_record(record);native_submit_original(record);}
+{native_submit_model(record,0,0);}
 static void __cdecl native_submit_alt(const BYTE *record,float alpha)
+{native_submit_model(record,alpha,1);}
+static void __cdecl native_sprite_submit(const BYTE *record)
 {
-    if(remember_stage_record(record)) {
-        BYTE deferred[HOTD_MODEL_RECORD_SIZE];
-        memcpy(deferred,record,sizeof(deferred));memcpy(deferred+0x10,&alpha,sizeof(alpha));
-        /* The ALT queue replaces its copy's alpha as well as sort flags/depth. */
-        hotd_remember_stage(&stage_records,deferred);
+    if(capture_world_enabled() && (*(const DWORD *)record&0x80000000u) && !native_queue_room()) {
+        visibility_queue_drops++;return;
     }
-    native_submit_alt_original(record,alpha);
+    native_sprite_submit_original(record);
 }
 
 static int native_stage_visibility(int visible,float radius,uintptr_t caller)
 {
-    return visible || (visibility_ready && frame && (frame->render_flags&HOTD_RENDER_EXPAND_WORLD) &&
+    return visible || (capture_world_enabled() && native_queue_room() &&
         !stage_records.overflow && stage_records.count<HOTD_STAGE_RECORDS && isfinite(radius) && radius>0 &&
         hotd_stage_visibility_caller(caller));
 }
@@ -765,7 +824,7 @@ static int native_model_draw(const BYTE *record,int pass,NativeModel original)
 {
     unsigned previous=capture_kind,previous_skip=capture_skip,previous_model=capture_model;
     DWORD previous_planes=capture_visibility_planes;
-    int result;
+    int result,queued_stage=0,expanded=capture_world_enabled();
     capture_model=1;
     capture_skip|=native_letterbox(record);
     if(capture_skip && !previous_skip) {
@@ -773,10 +832,16 @@ static int native_model_draw(const BYTE *record,int pass,NativeModel original)
         if(!logged++){logline("native letterbox bars omitted from VR capture");}
     }
     capture_kind=native_model_kind(record);
-    capture_visibility_planes=visibility_ready?hotd_visibility_expand(frame?frame->render_flags:0,
-        capture_kind==HOTD_WORLD && !capture_skip && hotd_stage_record(&stage_records,record),
+    if(expanded && pass==1)queued_stage=hotd_take_stage(&stage_records,record);
+    capture_visibility_planes=visibility_ready?hotd_visibility_expand(capture_render_flags(),
+        capture_kind==HOTD_WORLD && !capture_skip &&
+            ((visibility_submit_record==record && visibility_submit_stage) || queued_stage),
         original==native_model_alt_original):0;
     result=original(record,pass);
+    /* Immediate draws still run; only their unsafe deferred append is suppressed. */
+    if(expanded && pass==0 && visibility_submit_record==record && (BYTE)result && !native_queue_room()) {
+        visibility_queue_drops++;result=0;
+    }
     capture_kind=previous;capture_skip=previous_skip;capture_model=previous_model;
     capture_visibility_planes=previous_planes;
     return result;
@@ -832,6 +897,7 @@ static int install_capture_visibility(void)
     if(!hotd_visibility_profile(game_base))return 0;
     visibility_hooks_ready=detour(0xA7E50,submit,sizeof(submit),native_submit,(void **)&native_submit_original) &&
         detour(0xA8390,submit,sizeof(submit),native_submit_alt,(void **)&native_submit_alt_original) &&
+        detour(0xA7A40,submit,sizeof(submit),native_sprite_submit,(void **)&native_sprite_submit_original) &&
         detour(0x6310,sphere,sizeof(sphere),native_visibility,(void **)&native_visibility_original);
     return visibility_hooks_ready;
 }
@@ -847,6 +913,9 @@ static HRESULT (WINAPI *original_begin)(IDirect3DDevice7 *);
 static HRESULT (WINAPI *original_end)(IDirect3DDevice7 *);
 static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
 {
+    if(!visibility_flags_latched) {
+        visibility_frame_flags=frame?frame->render_flags:0;visibility_flags_latched=1;
+    }
     active_device=self;update_input();return original_begin(self);
 }
 static HRESULT WINAPI end_scene(IDirect3DDevice7 *self)
@@ -897,12 +966,17 @@ static void publish_frame(void)
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;
-    if(frame_no==1 || frame_no%300==0 || texture_failures || stage_records.overflow)logline("frame=%u draws=%u vertices=%u dropped=%u textures=%u evictions=%u texture_failures=%u lens=%u screen=%u stage_records=%u stage_overflow=%u",
+    unsigned pressure=stage_records.overflow || visibility_queue_drops;
+    int report=frame_no==1 || frame_no%300==0 || texture_failures ||
+        (pressure!=visibility_pressure && frame_no-visibility_last_pressure_log>=60);
+    if(report)logline("frame=%u draws=%u vertices=%u dropped=%u textures=%u evictions=%u texture_failures=%u lens=%u screen=%u stage_records=%u stage_overflow=%u queue_drops=%u",
         frame_no,calls,count,dropped,texture_count,texture_evictions,texture_failures,lens_valid,frame->screen_ok,
-        stage_records.count,stage_records.overflow);
+        stage_records.accepted,stage_records.overflow,visibility_queue_drops);
+    if(report)visibility_last_pressure_log=frame_no;
+    visibility_pressure=pressure;
     texture_failures=0;
     count=hud_count=calls=dropped=shot_group=0;
-    stage_records.count=stage_records.overflow=0;
+    memset(&stage_records,0,sizeof(stage_records));visibility_queue_drops=0;visibility_flags_latched=0;
 }
 static HRESULT (WINAPI *original_create_device)(IDirect3D7 *,REFCLSID,IDirectDrawSurface7 *,IDirect3DDevice7 **);
 static HRESULT WINAPI create_device(IDirect3D7 *self,REFCLSID cls,IDirectDrawSurface7 *target,IDirect3DDevice7 **out)

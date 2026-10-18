@@ -11,7 +11,7 @@ param(
     [switch]$SkipSplash,
     [switch]$ShowSplash,
     [ValidateRange(0.1,10.0)][double]$WorldScale = 1.25,
-    [ValidateRange(25,400)][int]$Brightness = 85,
+    [ValidateRange(25,400)][int]$Brightness = 90,
     [switch]$ExpandMeshes,
     [switch]$NoExpandMeshes,
     [switch]$ExpandWorld,
