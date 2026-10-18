@@ -65,6 +65,22 @@ int main(void)
     assert(g_cfgContinueGame && g_frame->checkpoint_autosave==2 && g_cfgContinueEdited);
     assert(GetPrivateProfileIntA("vr","continue_game",-1,g_vrIniPath)==-1);
     int font=vrMenuLoadFont();if(font)image("build/menu-root.bmp");
+    /* Pre-action captions show current Save location and independent saved Load destination. */
+    g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=7;
+    g_frame->checkpoint_saved_stage=2;g_frame->checkpoint_saved_scene=8;
+    vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"SAVE STAGE 3 DARKNESS SCENE 7"));
+    if(font)image("build/menu-save-destination.bmp");
+    g_vrMenuRow=MENU_LOAD_GAME;vrMenuDestination();
+    assert(!strcmp(g_vrMenuDestination,"LOAD STAGE 2 MUDDY SCENE 8"));
+    if(font)image("build/menu-load-destination.bmp");
+    g_frame->checkpoint_saved_stage=0;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"NO SAVED GAME"));
+    g_vrMenuRow=MENU_SAVE_GAME;g_frame->checkpoint_current_stage=0;vrMenuDestination();
+    assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
+    g_frame->checkpoint_current_stage=9;vrMenuDestination();assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
+    g_frame->seq=1;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"WAITING FOR GAME LOCATION"));
+    g_frame->seq=2;g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=9;
+    g_vrMenuDirty=0;vrMenuDestination();assert(g_vrMenuDirty && strstr(g_vrMenuDestination,"SCENE 9"));
+    assert(g_frame->checkpoint_request==4 && g_frame->checkpoint_response==4);
     vrMenuCanvas();assert(g_vrMenuPixels[479][639]==0x8017191D);
     vrMenuRect(0,0,32,32,0x80FFFFFF);
     memset(g_vrMenuFont['?'][0][0],255,4);g_vrMenuFont['?'][0][0][3]=128;

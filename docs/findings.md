@@ -449,3 +449,12 @@ title-screen Load with autosave off, live Autosave on/off and invalid scene 255
 rejection. Tests restore the save and leave the personal INI unchanged. Build,
 controller/menu regression and WARP rendering checks passed. Headset UI/load
 integration and full scene prerequisites remain unverified.
+
+
+Protocol 21 adds read-only current stage/scene at offsets 87,385,044/48 and
+saved stage/scene at 87,385,052/56; size 87,385,060. Stage zero marks unavailable.
+The bridge publishes these fields under the existing frame seqlock. Saved-file
+reads occur outside publication, once per second or after a successful write;
+current location comes from the same Arcade guard as Save. The viewer displays
+the selected Save/Load destination before confirmation, without issuing RPCs,
+changing the game, or reading native game addresses. Headset confirmation pending.

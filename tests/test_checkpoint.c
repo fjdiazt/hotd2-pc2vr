@@ -127,7 +127,14 @@ int main(void)
     assert(frame->checkpoint_response==1 && frame->checkpoint_result==HOTD_SAVE_OK);
     assert(frame->checkpoint_stage==2 && frame->checkpoint_scene==6);
     assert(hotd_checkpoint_read(path,&point) && point.scene==6);
+    checkpoint_refresh_saved();checkpoint_locations(1);
+    assert(frame->checkpoint_current_stage==2 && frame->checkpoint_current_scene==6);
+    assert(frame->checkpoint_saved_stage==2 && frame->checkpoint_saved_scene==6);
+    assert(frame->checkpoint_request==1 && frame->checkpoint_response==1); /* Previews never issue commands. */
+    checkpoint_locations(0);assert(!frame->checkpoint_current_stage && frame->checkpoint_saved_stage==2);
     assert(DeleteFileA(path));checkpoint_manual(1);assert(GetFileAttributesA(path)==INVALID_FILE_ATTRIBUTES);
+    checkpoint_preview_tick=GetTickCount()-1001;checkpoint_refresh_saved();checkpoint_locations(1);
+    assert(!frame->checkpoint_saved_stage && frame->checkpoint_current_stage==2);
     assert(hotd_checkpoint_write(path,point));
     frame->checkpoint_request=2;checkpoint_manual(0);
     assert(frame->checkpoint_response==2 && frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE);

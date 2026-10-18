@@ -167,3 +167,13 @@ python tests/test_checkpoint_runtime.py 'N:\games\systems\pcvr\bin\TheHouseOfThe
 
 No VR launch occurs. Headset menu integration and full scene prerequisites still
 need runtime confirmation.
+
+
+Before selecting Save game, the caption shows the live current stage, chapter
+name and scene, for example SAVE STAGE 3 DARKNESS SCENE 7. Load game shows the
+saved destination instead. The bridge publishes both read-only locations under
+the frame seqlock (protocol 21); inspecting captions never submits commands or
+writes saves. No active Arcade game and missing/invalid-format save files get
+explicit unavailable captions. Saved-file metadata refreshes at most once per
+second and immediately after bridge saves, with disk reads outside the seqlock.
+Current-location previews are suppressed during a pending native transition.

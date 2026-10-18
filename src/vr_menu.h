@@ -14,6 +14,8 @@ static const unsigned vrMenuRootCount=sizeof(vrMenuRootLabels)/sizeof(vrMenuRoot
 static unsigned g_vrMenuRequest,g_vrMenuAction;
 static DWORD g_vrMenuRequestTick;
 static char g_vrMenuStatus[96];
+static char g_vrMenuDestination[96];
+static const char *const vrMenuChapters[]={"A PRELUDE","MUDDY","DARKNESS","DESPAIR","DAWN","ORIGINAL SIN"};
 enum { MENU_INT,MENU_UNSIGNED,MENU_SCALE,MENU_CHEAT,MENU_BRIDGE };
 enum { MENU_RESTART_VIEWER=1,MENU_RESTART_GAME=2,MENU_SHADER=4,MENU_POWER2=8,MENU_CAPTURE=16 };
 typedef struct {
@@ -99,10 +101,9 @@ static void vrMenuCheckpointPoll(void)
         MemoryBarrier();
         g_vrMenuError=NULL;
         unsigned result=g_frame->checkpoint_result,stage=g_frame->checkpoint_stage,scene=g_frame->checkpoint_scene;
-        static const char *const chapters[]={"A PRELUDE","MUDDY","DARKNESS","DESPAIR","DAWN","ORIGINAL SIN"};
         if(result==HOTD_SAVE_OK && stage>=1 && stage<=6 && scene<=255)
             snprintf(g_vrMenuStatus,sizeof(g_vrMenuStatus),"%s %s SCENE %u",
-                g_vrMenuAction==HOTD_CHECKPOINT_SAVE?"SAVED":g_vrMenuAction==HOTD_CHECKPOINT_NEW?"STARTED":"LOADED",chapters[stage-1],scene);
+                g_vrMenuAction==HOTD_CHECKPOINT_SAVE?"SAVED":g_vrMenuAction==HOTD_CHECKPOINT_NEW?"STARTED":"LOADED",vrMenuChapters[stage-1],scene);
         else lstrcpyA(g_vrMenuStatus,result==HOTD_SAVE_UNAVAILABLE?"UNAVAILABLE   ACTIVE ARCADE GAME REQUIRED":
             result==HOTD_SAVE_IO_ERROR?"SAVE FAILED   PREVIOUS SAVE KEPT":
             result==HOTD_SAVE_INVALID?"NO VALID SAVED GAME":"LOAD FAILED   TRY AGAIN");
@@ -350,8 +351,28 @@ static void vrMenuText(int x,int y,const char *text,float scale,DWORD colour)
         }
     }
 }
+static void vrMenuDestination(void)
+{
+    char text[96]={0};
+    if(g_vrMenuPage<0 && (g_vrMenuRow==MENU_SAVE_GAME || g_vrMenuRow==MENU_LOAD_GAME)) {
+        unsigned stage=0,scene=0;int stable=0;
+        if(g_frame)for(unsigned retry=0;retry<8;retry++) {
+            unsigned seq=g_frame->seq;if(seq&1)continue;
+            MemoryBarrier();
+            stage=g_vrMenuRow==MENU_SAVE_GAME?g_frame->checkpoint_current_stage:g_frame->checkpoint_saved_stage;
+            scene=g_vrMenuRow==MENU_SAVE_GAME?g_frame->checkpoint_current_scene:g_frame->checkpoint_saved_scene;
+            MemoryBarrier();if(seq==g_frame->seq){stable=1;break;}
+        }
+        if(!stable)lstrcpyA(text,"WAITING FOR GAME LOCATION");
+        else if(stage>=1 && stage<=6 && scene<=255)
+            snprintf(text,sizeof(text),"%s STAGE %u %s SCENE %u",g_vrMenuRow==MENU_SAVE_GAME?"SAVE":"LOAD",stage,vrMenuChapters[stage-1],scene);
+        else lstrcpyA(text,g_vrMenuRow==MENU_SAVE_GAME?"SAVE UNAVAILABLE   NO ACTIVE ARCADE SCENE":"NO SAVED GAME");
+    }
+    if(strcmp(text,g_vrMenuDestination)){lstrcpyA(g_vrMenuDestination,text);g_vrMenuDirty=1;}
+}
 static void vrMenuCanvas(void)
 {
+    vrMenuDestination();
     const DWORD white=0xFFE8E8E8,red=0xFF4646ED,grey=0xFF989898;
     vrMenuRect(0,0,640,480,0x8017191D); /* 50% panel opacity; text keeps its own coverage. */
     vrMenuRect(18,16,4,448,0xFF2424A4);
@@ -373,8 +394,7 @@ static void vrMenuCanvas(void)
         }
     }
     const char *hint="APPLIES LIVE   SAVES ON CLOSE";
-    if(g_vrMenuPage<0 && g_vrMenuRow==MENU_SAVE_GAME)hint="SAVE CURRENT ARCADE SCENE";
-    if(g_vrMenuPage<0 && g_vrMenuRow==MENU_LOAD_GAME)hint="RESTART AT LAST SAVED SCENE";
+    if(g_vrMenuPage<0 && (g_vrMenuRow==MENU_SAVE_GAME || g_vrMenuRow==MENU_LOAD_GAME))hint=g_vrMenuDestination;
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_NEW_GAME)hint="RESTART ARCADE AT FIRST SCENE";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_RESET)
         hint=g_vrMenuResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";
@@ -395,6 +415,7 @@ static void vrMenuCanvas(void)
 static void vrMenuDraw(void)
 {
     if(!g_vrMenuEnabled || !g_vrMenuOpen || g_inScope)return;
+    vrMenuDestination();
     if(!g_vrMenuTexture) {
         D3D11_TEXTURE2D_DESC desc={0};desc.Width=640;desc.Height=480;desc.MipLevels=desc.ArraySize=1;
         desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DYNAMIC;

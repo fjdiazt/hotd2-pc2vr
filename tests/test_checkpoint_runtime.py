@@ -43,8 +43,8 @@ def session(from_menu=False):
     assert process
     memory = None
     try:
-        memory = mmap.mmap(-1, 87385044, tagname=name, access=mmap.ACCESS_WRITE)
-        assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 20)
+        memory = mmap.mmap(-1, 87385060, tagname=name, access=mmap.ACCESS_WRITE)
+        assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 21)
 
         def read(address, fmt="<I"):
             data = c.create_string_buffer(struct.calcsize(fmt))
@@ -83,6 +83,8 @@ def session(from_menu=False):
         if from_menu:
             before = save.read_bytes()
             assert command(0)[0] == 2 and save.read_bytes() == before
+            wait(lambda: struct.unpack_from("<2I", memory, 87385052) == (2, 0))
+            assert struct.unpack_from("<I", memory, 87385044)[0] == 0
             assert command(1) == (1, 2, 0)  # Load works without autosave, including from title.
         else:
             start = time.monotonic()
@@ -100,7 +102,9 @@ def session(from_menu=False):
             tick()
             wait(lambda: read(0x9A1A00, "<h") != 0)
             point = (read(0x9A1A08, "<h") + 1, read(0x9A2BC0, "<h"))
+            wait(lambda: struct.unpack_from("<2I", memory, 87385044) == point)
             assert command(0) == (1, *point)
+            wait(lambda: struct.unpack_from("<2I", memory, 87385052) == point)
             assert command(1) == (1, *point)  # Native resume and restart from paused gameplay.
             assert read(0x9A1A00, "<h") == 0
             write(2, 0)
