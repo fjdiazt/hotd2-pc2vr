@@ -1,7 +1,8 @@
 # Native VR settings menu: feasibility
 
 Investigation branch: `feat/vr-menu`, based on `main` at `9d0f23d`.
-No product code changed, game launched or installed configuration edited.
+Initial investigation changed no product code, launched no game and edited no
+installed configuration.
 
 Goal: expose the mod's existing options in a grouped, controller-operated menu,
 available from the native main menu and reused while native gameplay is paused.
@@ -79,3 +80,65 @@ save failures, opening without writes, input isolation, per-player pause/resume,
 viewer expiry and retained scene restoration. Keep cheats off for mapping/menu
 tests unless a particular cheat is deliberately being tested. Build/offline
 success does not establish headset readability or comfort.
+
+## UI-only POC (superseded)
+
+Uncommitted POC: launch the worktree viewer with `--menu-poc`. It uses glyphs
+extracted from the owned game's files by `tools/poc_menu_font.py`, rather than
+calling native Options or changing native resource loading. Group navigation and
+sample values work; no real settings or cheats are changed or saved. In desktop
+preview use arrows, Enter, Backspace and F8 to reopen. In VR use stick, Trigger,
+B/Y and A/X; pausing opens the preview again. Left click remains reserved.
+
+Cheap model/input smoke checks pass. A read-only offscreen render through the
+actual viewer shaders places the menu over live captured game geometry; images
+are in `build/menu-poc-integrated*.bmp`. Native font lifetime and headset comfort
+remain unproven. Existing unrelated VR tests were left running; the POC was
+started separately with `--preview-only --menu-poc` for desktop review.
+
+## Settings wiring
+
+The user confirmed the POC's appearance and operation in VR, then authorized
+real option wiring. The viewer now presents 45 existing numeric/boolean options
+from its effective launch configuration, grouped and paginated. Live options
+update their existing variables/heartbeat; brightness/gamma swap their three
+affected pixel shaders as one successful set. Resource/startup settings stage
+their values without changing running initialization state and display the
+appropriate viewer/game restart label.
+
+Close saves edited keys only, including bridge keys in their own section, into
+the active viewer INI. Same-directory staging, checked writes/disk flush and
+atomic replacement preserve the current file and produce a timestamped backup.
+An unchanged panel never writes; unrelated CLI overrides never become INI edits.
+Save failure retains pending values and prevents an explicit close so
+the user can retry. Normal viewer exit also attempts pending saves. Companion previews cannot
+edit or save. No new native hooks or shared-memory protocol changes were added.
+
+The user then requested an independent left-stick-click toggle instead of main
+menu or pause integration. The panel starts closed. Left stick click (left
+trackpad click on Vive) opens/closes it; desktop F8 does the same. Native pause
+and resume never open/close the panel; stick-click toggles never pause/resume the game.
+A/X retains native Start/Pause while the panel stays open or closed. B/Y backs
+out to the group list without closing. Only stick click toggles the VR panel.
+The original native Options entry remains unchanged. Gun model selection stays in the INI;
+diagnostic flags and the menu's own enable switch are not editable panel rows.
+The launcher generates the native font before starting a game when absent.
+Offline checks cover live values/heartbeat, real shader rendering, restart-only
+staging, paging/edges/input isolation, unchanged/unknown INI keys and comments,
+backup, locked-file retry, held stick clicks and unchanged native pause state. Real option changes still need
+headset acceptance beyond the earlier UI-only POC acceptance.
+
+Live desktop validation changed master volume through the real menu, observed
+its heartbeat update before any INI write, then verified its saved value and
+backup on close. Brightness and world scale also saved their selected values.
+All test values were returned through the menu; the active INI was restored
+byte-for-byte. Cheat requests stayed zero and installed native files retained
+their hashes. Final controller checks cover left-click edges and A/X native
+pause passthrough for both hands while the settings panel stays open.
+
+Quit Game follows Reset Defaults as the final root action. It saves pending
+options, validates the native window against the connected game PID, and posts
+WM_CLOSE. The existing quit-confirmation handler accepts the native prompt;
+no additional hook or process termination is involved. A live desktop test
+selected the new row and verified both native game and viewer exited normally,
+with cheats off and an unedited mod INI unchanged.

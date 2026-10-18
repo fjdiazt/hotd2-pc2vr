@@ -43,6 +43,10 @@ $out = Join-Path $PSScriptRoot 'build'
 if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
 if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) { throw 'Unsupported HOTD2 executable; no process started.' }
+if (!(Test-Path "$out\menu-poc-font.rgba")) {
+    & python "$PSScriptRoot\tools\poc_menu_font.py" $GameExe "$out\menu-poc-font.rgba"
+    if ($LASTEXITCODE) { throw 'Native menu font extraction failed; no process started.' }
+}
 $launchArgs = @($GameExe)
 if ($SkipSplash) { $launchArgs += '--skip-splash' }
 if ($ShowSplash) { $launchArgs += '--show-splash' }

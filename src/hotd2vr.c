@@ -14,7 +14,7 @@
  *      B / Y              native Skip / Cancel
  *      Grip               Reload
  *      thumbstick four-way native menu arrows
- *      right stick click  recentre on the current head pose; left reserved
+ *      right stick click  recentre; left stick click VR Settings
  *
  * The controller is the light gun: its ray is cast against the actual level
  * geometry, the hit point is projected through the game's own camera, and the
@@ -183,7 +183,7 @@ static int g_cfgExpandMeshes = 1;
 static int g_cfgExpandWorld;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
-static int g_cfgWindow, g_cfgVrWindow, g_previewOnly;
+static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_menuPocEnabled;
 static int g_cfgBrightness = 90;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
@@ -290,6 +290,7 @@ static void loadCfg(void)
     while (n > 0 && path[n - 1] != '\\') n--;
     lstrcpyA(path + n, "HOTD2VR.ini");
     readGraphicsFlags(path);
+    g_menuPocEnabled=GetPrivateProfileIntA("vr","menu",1,path)!=0;
     g_cheatFlags=readCheats(path);
     g_cfgMasterVolume=readAudioVolume(path,"master_volume");
     g_cfgMusicVolume=readAudioVolume(path,"music_volume");
@@ -667,7 +668,8 @@ static const char *SRC_TEX =
 "    float2 f   = pix - c;\n"
 "    float2 w   = clamp(fwidth(pix), 1e-5, 1.0);\n"
 "    f = clamp((f - 0.5) / w, -0.5, 0.5) + 0.5;\n"
-"    return float4(pow(tex.Sample(smp, (c + 0.5 + f) / res).rgb, GAMMA), 1);\n"
+"    float4 s = tex.Sample(smp, (c + 0.5 + f) / res);\n"
+"    return float4(pow(s.rgb, GAMMA), s.a);\n"
 "}\n";
 
 /* The overlay is 72x72 texels of 1997 art shown at twice that on the lens, and
@@ -1446,6 +1448,7 @@ static void uploadOverlay(void)
 }
 
 static void drawGun(const float *vp);
+#include "menu_poc.h"
 
 /* laser, hit marker and the floating screen; call right after drawWith, with
  * view * proj only - all of it lives in local (metre) space, not game space */
@@ -1490,6 +1493,7 @@ static void drawUI(const float *vp)
         ID3D11DeviceContext_Draw(g_ctx, g_ovCount, 0);
         ID3D11DeviceContext_OMSetBlendState(g_ctx, NULL, NULL, 0xFFFFFFFF);
     }
+    menuPocDraw();
     drawGun(vp);
 }
 
@@ -2009,6 +2013,7 @@ static void releaseGraphics(void)
     RELEASE(g_scopeVB); RELEASE(g_cbScope); RELEASE(g_vsScope); RELEASE(g_psScope);
     RELEASE(g_gunVB); RELEASE(g_gunSRV); RELEASE(g_vsGun); RELEASE(g_psGun); RELEASE(g_dssGun);
     RELEASE(g_atlSRV); RELEASE(g_atlTex); RELEASE(g_scrSRV); RELEASE(g_scrTex);
+    RELEASE(g_menuPocSRV); RELEASE(g_menuPocTexture); RELEASE(g_menuPocBlend);
     RELEASE(g_scrVB); RELEASE(g_vsTex); RELEASE(g_psTex); RELEASE(g_ilTex);
     RELEASE(g_samp); RELEASE(g_cbRes); RELEASE(g_blendAdd);
     RELEASE(g_ovVB); RELEASE(g_vb); RELEASE(g_cb); RELEASE(g_vs); RELEASE(g_ps);
@@ -2330,7 +2335,7 @@ static int headPoseReady(int anchored,XrSessionState state,XrResult located,
 }
 
 static XrActionSet g_actSet;
-static XrAction    g_actAim, g_actFire, g_actPause, g_actBack, g_actReload, g_actRecentre, g_actMenu, g_actMenuX, g_actHaptic;
+static XrAction    g_actAim, g_actFire, g_actPause, g_actBack, g_actReload, g_actRecentre, g_actSettings, g_actMenu, g_actMenuX, g_actHaptic;
 static volatile float g_zoomLevel = 1.0f;   /* 1 = no zoom; optional cinematic zoom */
 static int g_autoOn;                        /* the game is in a zoom moment  */
 static int g_resetControls;
@@ -2400,6 +2405,7 @@ static void initActions(XrInstance inst, XrSession session)
     MAKE(g_actBack,   "back",   "Skip / Cancel",  XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actReload, "reload", "Reload",         XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actRecentre, "recentre", "Recentre",    XR_ACTION_TYPE_BOOLEAN_INPUT);
+    MAKE(g_actSettings, "vr_settings", "VR Settings", XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actMenu,   "menu_vertical", "Menu up / down", XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actMenuX,  "menu_horizontal", "Menu left / right", XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actHaptic, "haptic",   "Recoil",           XR_ACTION_TYPE_VIBRATION_OUTPUT);
@@ -2431,6 +2437,7 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actReload, "/user/hand/left/input/squeeze/value");
     BIND(g_actReload, "/user/hand/right/input/squeeze/value");
     BIND(g_actRecentre, "/user/hand/right/input/thumbstick/click");
+    BIND(g_actSettings, "/user/hand/left/input/thumbstick/click");
     BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
     BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
     BIND(g_actMenuX, "/user/hand/left/input/thumbstick/x");
@@ -2451,6 +2458,7 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actReload, "/user/hand/left/input/squeeze/value");
     BIND(g_actReload, "/user/hand/right/input/squeeze/value");
     BIND(g_actRecentre, "/user/hand/right/input/thumbstick/click");
+    BIND(g_actSettings, "/user/hand/left/input/thumbstick/click");
     BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
     BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
     BIND(g_actMenuX, "/user/hand/left/input/thumbstick/x");
@@ -2465,6 +2473,7 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actHaptic, "/user/hand/left/output/haptic");
     BIND(g_actHaptic, "/user/hand/right/output/haptic");
     BIND(g_actRecentre, "/user/hand/right/input/trackpad/click");
+    BIND(g_actSettings, "/user/hand/left/input/trackpad/click");
     BIND(g_actPause, "/user/hand/left/input/menu/click");
     BIND(g_actPause, "/user/hand/right/input/menu/click");
     BIND(g_actReload, "/user/hand/left/input/squeeze/click");
@@ -2493,7 +2502,7 @@ static void initActions(XrInstance inst, XrSession session)
     if (XR_FAILED(pxrAttachSessionActionSets(session, &at)))
         die("could not attach the action set");
     note("controllers wired: trigger shoot/start, head-relative up 50deg/down 45deg/sides 60deg + trigger reload, A/X start/pause, B/Y skip/cancel, grip reload,\n"
-         "                   stick four-way menus, right stick click recentre; left click reserved\n");
+         "                   stick four-way menus, right click recentre; left click VR Settings\n");
 }
 #undef BIND
 
@@ -2613,7 +2622,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     XrActionsSyncInfo si;
     XrActiveActionSet act;
     XrActionStateGetInfo gi;
-    XrActionStateBoolean fire[2], bpause[2], bback[2], breload[2], bcentre;
+    XrActionStateBoolean fire[2], bpause[2], bback[2], breload[2], bcentre,bsettings;
     XrSpaceLocation loc;
     XrSpaceLocation poses[2];
     int poseValid[2];
@@ -2674,6 +2683,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     GETB(breload[0], g_actReload, g_handPath[0]);
     GETB(breload[1], g_actReload, g_handPath[1]);
     GETB(bcentre, g_actRecentre, g_handPath[1]);
+    GETB(bsettings, g_actSettings, g_handPath[0]);
 #undef GETB
     starts=(fire[0].isActive && fire[0].currentState ? 1u:0u) |
         (fire[1].isActive && fire[1].currentState ? 2u:0u);
@@ -2701,6 +2711,27 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         menuHorizontal[h]=hotd_menu_stick(menuHorizontal[h],active,stick.currentState);
         if(menuHorizontal[h]==VC2_BTN_UP)buttons|=VC2_BTN_RIGHT;
         if(menuHorizontal[h]==VC2_BTN_DOWN)buttons|=VC2_BTN_LEFT;
+    }
+    if(g_menuPocEnabled) {
+        unsigned input=buttons;
+        if(bsettings.isActive && bsettings.currentState)input|=MENU_TOGGLE;
+        for(h=0;h<2;h++) {
+            if(fire[h].isActive && fire[h].currentState)input|=VC2_BTN_START;
+            if(bback[h].isActive && bback[h].currentState)input|=VC2_BTN_BACK;
+            if(bpause[h].isActive && bpause[h].currentState)input|=VC2_BTN_PAUSE;
+        }
+        int owned=menuPocControl(input);
+        if(owned) {
+            g_gunPose=poses[1].pose;g_gun2Pose=poses[0].pose;
+            g_gunValid=poseValid[1];g_gun2Valid=poseValid[0];g_ovCount=0;
+            unsigned first=bpause[1].isActive && bpause[1].currentState?VC2_BTN_START|VC2_BTN_PAUSE:0;
+            unsigned second=bpause[0].isActive && bpause[0].currentState?VC2_BTN_START|VC2_BTN_PAUSE:0;
+            if(g_cfgAkimbo && (first || second))first|=VC2_BTN_PAIR_START;
+            pushAim(320,240,first);pushAim2(320,240,second);
+            int centre=bcentre.isActive && bcentre.currentState;
+            recentre=centre && !prevCentre;prevCentre=centre;
+            return recentre;
+        }
     }
     {
         float targetZoom=1.0f;
@@ -3347,6 +3378,12 @@ static LRESULT CALLBACK wp(HWND h, UINT m, WPARAM w, LPARAM l)
         return 0;
     case WM_MOUSEWHEEL: w_speed *= ((short)HIWORD(w) > 0) ? 1.4f : 0.71f; return 0;
     case WM_KEYDOWN: {
+        if(g_menuPocEnabled && w==VK_F8) {
+            if(l&(1L<<30))return 0;
+            if(g_menuPocOpen)menuPocClose();else {g_menuPocOpen=1;g_menuPocPage=-1;g_menuPocRow=0;}
+            g_menuPocDirty=1;g_menuPocArmed=1;return 0;
+        }
+        if(g_menuPocEnabled && g_menuPocOpen)return 0;
         float cy = cosf(w_yaw), sy = sinf(w_yaw), s = w_speed;
         if (w == 'W') { w_x -= sy * s; w_z -= cy * s; }
         if (w == 'S') { w_x += sy * s; w_z += cy * s; }
@@ -3361,6 +3398,19 @@ static LRESULT CALLBACK wp(HWND h, UINT m, WPARAM w, LPARAM l)
     case WM_DESTROY: PostQuitMessage(0); return 0;
     }
     return DefWindowProcA(h, m, w, l);
+}
+
+static void menuPocKeyboard(HWND hwnd)
+{
+    if(!g_menuPocEnabled)return;
+    unsigned input=0;
+    if(GetForegroundWindow()==hwnd) {
+        const int keys[]={VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,VK_RETURN,VK_BACK,VK_ESCAPE};
+        const unsigned actions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_LEFT,VC2_BTN_RIGHT,VC2_BTN_START,VC2_BTN_BACK,VC2_BTN_PAUSE};
+        for(unsigned k=0;k<7;k++)if(GetAsyncKeyState(keys[k])&0x8000)input|=actions[k];
+    }
+    int owned=menuPocControl(input);
+    if(owned){pushAim(320,240,0);pushAim2(320,240,0);}
 }
 
 static int runWindow(void)
@@ -3438,6 +3488,7 @@ static int runWindow(void)
             DispatchMessageA(&msg);
         }
         pullFrame();
+        menuPocKeyboard(hwnd);
         pullScreen();
         g_scrVisible = screenVisible();
         scale = 1.0f / g_unitsPerMetre;
@@ -3609,6 +3660,7 @@ static int runStereo(void)
         pullScreen();
         g_scrVisible = screenVisible();
 
+        menuPocKeyboard(hwnd);
         /* a head pose built the way a runtime would report one */
         cy2 = cosf(w_yaw * 0.5f); sy2 = sinf(w_yaw * 0.5f);
         cp2 = cosf(w_pitch * 0.5f); sp2 = sinf(w_pitch * 0.5f);
@@ -3729,6 +3781,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--vrwindow")) g_cfgVrWindow = 1;
         else if (!strcmp(argv[i], "--no-vrwindow")) g_cfgVrWindow = 0;
         else if (!strcmp(argv[i], "--preview-only")) g_previewOnly = 1;
+        else if (!strcmp(argv[i], "--menu") || !strcmp(argv[i], "--menu-poc")) g_menuPocEnabled = 1;
+        else if (!strcmp(argv[i], "--no-menu")) g_menuPocEnabled = 0;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
         else if (!strcmp(argv[i], "--expand-meshes")) g_cfgExpandMeshes = 1;
         else if (!strcmp(argv[i], "--no-expand-meshes")) g_cfgExpandMeshes = 0;
@@ -3765,9 +3819,14 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
+    if(g_menuPocEnabled && !menuPocLoadFont()) {
+        note("Settings menu disabled: menu-poc-font.rgba missing or invalid. Run Start-HOTD2.ps1 to generate it.\n");
+        g_menuPocEnabled=0;
+    }
+    menuPocInit();
     note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
     note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
@@ -3792,6 +3851,7 @@ int main(int argc, char **argv)
     } else if(g_cfgWindow)runWindow();
     else while(!gameExited()) { pushCheats();Sleep(10); }
     closeDesktopPreview(&preview);
+    if(g_menuPocEnabled)menuPocSave();
     g_cheatFlags=0;
     pushCheats();
     pushAim(320, 240, 0); pushAim2(320, 240, 0);

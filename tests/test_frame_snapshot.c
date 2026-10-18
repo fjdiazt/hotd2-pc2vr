@@ -10,7 +10,7 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes);
 #undef main
 
 static int interrupt_copy;
-static unsigned controller_pauses,controller_backs,controller_reloads,controller_fires,controller_lost,controller_recentres;
+static unsigned controller_pauses,controller_backs,controller_reloads,controller_fires,controller_lost,controller_recentres,controller_settings;
 static float controller_sticks[2][2];
 static XrQuaternionf controller_rotations[2]={{0,0,0,1},{0,0,0,1}};
 static int controller_sticks_active,controller_sync_lost;
@@ -20,7 +20,7 @@ static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionSt
 {
     unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
     (void)session;out->isActive=XR_TRUE;out->changedSinceLastSync=XR_TRUE;
-    unsigned held=info->action==g_actRecentre?controller_recentres:info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actReload?controller_reloads:info->action==g_actFire?controller_fires:0;
+    unsigned held=info->action==g_actSettings?controller_settings:info->action==g_actRecentre?controller_recentres:info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actReload?controller_reloads:info->action==g_actFire?controller_fires:0;
     out->currentState=info->subactionPath==XR_NULL_PATH ? held!=0:(held&(1u<<hand))!=0;
     return XR_SUCCESS;
 }
@@ -379,6 +379,42 @@ int main(void)
     check_controller_modes();
     check_head_relative_reload();
     check_shot_haptics();
+    g_cheatFlags=0;menuPocInit();
+    g_menuPocEnabled=g_menuPocOpen=g_menuPocArmed=1;g_menuPocPage=-1;g_menuPocRow=0;
+    g_menuPocPrevious=0;g_menuPocBlock=0;g_nativePaused=0;
+    controller_fires=controller_pauses=controller_backs=controller_reloads=0;controller_tick();
+    controller_fires=3;controller_tick();
+    assert(g_menuPocPage==0 && !g_frame->aim_buttons && !g_frame->aim2_buttons);
+    controller_fires=0;controller_tick();g_menuPocPage=4;g_menuPocRow=0;
+    controller_fires=2;controller_tick();
+    assert(menuPocItems[4][0].value==1 && g_cheatFlags==HOTD_CHEAT_AMMO);
+    assert(g_frame->cheat_flags==HOTD_CHEAT_AMMO);
+    assert(!g_frame->aim_buttons && !g_frame->aim2_buttons); /* UI Trigger cannot join/fire behind the page. */
+    controller_fires=0;g_cheatFlags=0;menuPocInit();
+    g_actSettings=(XrAction)(uintptr_t)10;
+    controller_backs=2;controller_tick();controller_backs=0;controller_tick(); /* Back to root. */
+    controller_backs=2;controller_tick();controller_backs=0;controller_tick();assert(g_menuPocOpen);
+    controller_pauses=3;controller_tick();controller_pauses=0;controller_tick();assert(g_menuPocOpen);
+    for(int h=0;h<2;h++) {
+        controller_pauses=1u<<h;controller_tick();
+        assert(((h?g_frame->aim_buttons:g_frame->aim2_buttons)&(VC2_BTN_START|VC2_BTN_PAUSE))==(VC2_BTN_START|VC2_BTN_PAUSE));
+        assert(!((h?g_frame->aim2_buttons:g_frame->aim_buttons)&(VC2_BTN_START|VC2_BTN_PAUSE)));
+        assert(!((g_frame->aim_buttons|g_frame->aim2_buttons)&(VC2_BTN_FIRE|VC2_BTN_RELOAD|VC2_BTN_BACK)) && g_menuPocOpen);
+        controller_pauses=0;controller_tick();
+    }
+    controller_settings=1;controller_tick();controller_settings=0;controller_tick();assert(!g_menuPocOpen);
+    for(int paused=0;paused<2;paused++) {
+        g_nativePaused=paused;controller_tick();assert(!g_menuPocOpen);
+        controller_settings=1;controller_tick();controller_tick();assert(g_menuPocOpen);
+        assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);
+        controller_settings=0;controller_tick();
+        controller_reloads=3;controller_tick();assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);
+        controller_reloads=0;controller_settings=1;controller_tick();assert(!g_menuPocOpen);
+        assert(g_nativePaused==paused && !g_frame->aim_buttons && !g_frame->aim2_buttons);
+        controller_tick();assert(!g_menuPocOpen); /* Held click cannot reopen. */
+        controller_settings=0;controller_tick();
+    }
+    g_menuPocEnabled=0;g_cheatFlags=0;
     free(g_frame);
     puts("Viewer: independent/paired players, gun visibility, INI/CLI cheats, heartbeat and coherent snapshots passed.");
     return 0;
