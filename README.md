@@ -95,7 +95,7 @@ A/X uses the game's normal pause. Both the VR view and the injected game's deskt
 
 The desktop window redraws the retained geometry and native textures through Direct3D 7; it does not display a saved screenshot. This requires the injected bridge and a prior gameplay scene. Rendering continues while paused, but gameplay stays frozen. The native desktop view does not apply the viewer's brightness, gamma or world-scale settings.
 
-The bridge and viewer must both be rebuilt for the current protocol 15; pause state was introduced in protocol 13, audio controls in 14 and briefing-book provenance in 15. Details and verification: [docs/pause.md](docs/pause.md).
+The bridge and viewer must both be rebuilt for the current protocol 16; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Details and verification: [docs/pause.md](docs/pause.md).
 
 ### Two hands and akimbo
 
@@ -273,7 +273,7 @@ Use whichever flags you want. For a viewer reconnect, use `--infinite-lives`, `-
 | Infinite continues | `infinite_continues=1` | Enables native free play: players can start or continue without needing or spending credits. Death, the continue countdown and Start confirmation retain their normal flow. |
 | Rapid fire | `rapid_fire=1` | Repeats a held VR trigger, using `rapid_fire_rate` shots per second. |
 
-Rapid fire defaults to **4 shots/sec**; whole-number rates 1–30 are accepted. Native timing and weapon handling can lower the actual rate. Reload gestures take priority; menus, pause, cutscenes, inactive players and stale input receive no repeated shots. The rate override does not enable rapid fire by itself. Recoil/haptics retain their trigger-press behavior.
+Rapid fire defaults to **4 shots/sec**; whole-number rates 1–30 are accepted. Native timing and weapon handling can lower the actual rate. Reload gestures take priority; menus, pause, cutscenes, inactive players and stale input receive no repeated shots. The rate override does not enable rapid fire by itself. Visual recoil retains its trigger-press behavior. Rumble follows confirmed native shots for each player, including Original-mode weapons: one 30 ms pulse at the existing fixed strength, capped at 10 pulses/sec per controller. The cap never changes firing rate. Excess feedback is dropped without a backlog; empty pulls, reload gestures, menus, pause and tracking loss produce no firing rumble. `haptic=0` disables it. Headset feel and performance remain to be verified.
 
 While the viewer heartbeat is fresh, lives/ammo and free-play settings override the native settings: `0` forces off, `1` forces on, for both players. Changing an option to `0` does not restore a pre-enabled native cheat. The bridge saves prior native values when the viewer takes ownership, restores them on viewer exit or heartbeat expiry (500 ms), and captures them again on reconnect. Invincibility off lets native damage run normally. Credit counts are not rewritten, and the bridge does not edit save files. Unsupported instruction signatures leave the affected feature unavailable and produce a log entry. Rebuild and restart both game and viewer together when updating cheat support. Full-game attack and continue coverage still needs runtime qualification.
 

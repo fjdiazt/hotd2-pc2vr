@@ -147,6 +147,7 @@ static Vc2Vertex *g_local=g_vertexBuffers[0],*g_readVerts=g_vertexBuffers[1];
 static unsigned  g_localCount;
 static unsigned  g_lastFrame;
 static unsigned  g_activePlayers;
+static uint32_t g_shotEvents[2];
 static float     g_shotOrigins[64][3];
 static float     g_unitsPerMetre = 130.0f;
 static float     g_gfx = 554.3f, g_gfy = 623.6f;   /* the game's projection */
@@ -399,6 +400,7 @@ static int pullFrame(void)
     for (i = 0; i < 8; i++) {
         HotdLens lens;
         unsigned lensValid,addStart,paused,ovStart,frameNo,activePlayers;
+        uint32_t shotEvents[2];
         float units,fov;
         float shotOrigins[64][3];
         a = g_frame->seq;
@@ -408,6 +410,7 @@ static int pullFrame(void)
         lens=g_frame->lens;lensValid=g_frame->lens_valid;
         frameNo=g_frame->frame;units=g_frame->units_per_metre;fov=g_frame->fov_degrees;
         activePlayers=g_frame->active_players;
+        memcpy(shotEvents,g_frame->shot_events,sizeof(shotEvents));
         CopyMemory(shotOrigins,g_frame->shot_origins,sizeof(shotOrigins));
         n = g_frame->vertex_count;
         if (n > VC2_MAX_VERTS) n = VC2_MAX_VERTS;
@@ -453,6 +456,7 @@ static int pullFrame(void)
             g_localCount = n;
             g_lastFrame = frameNo;
             g_activePlayers=activePlayers;
+            memcpy(g_shotEvents,shotEvents,sizeof(shotEvents));
             memcpy(g_shotOrigins,shotOrigins,sizeof(shotOrigins));
             placeShotEffects();
             return 1;
@@ -2329,6 +2333,7 @@ static XrAction    g_actAim, g_actFire, g_actStart, g_actBack, g_actGrip, g_actM
 static volatile float g_zoomLevel = 1.0f;   /* 1 = no zoom; optional cinematic zoom */
 static int g_autoOn;                        /* the game is in a zoom moment  */
 static int g_resetControls;
+static HotdShotFeedback g_shotFeedback[2];
 static XrPath      g_handPath[2];               /* 0 = left, 1 = right */
 static XrSpace     g_aimSpace[2];
 
@@ -2629,6 +2634,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         menuHorizontal[0] = menuHorizontal[1] = 0;
         prevButtons = prev2 = 0;
         memset(triggers,0,sizeof(triggers));
+        memset(g_shotFeedback,0,sizeof(g_shotFeedback));
         g_resetControls = 0;
     }
 
@@ -2640,6 +2646,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     si.countActiveActionSets = 1;
     si.activeActionSets = &act;
     if (pxrSyncActions(session, &si) != XR_SUCCESS) {
+        for(h=0;h<2;h++)hotd_shot_feedback(g_shotFeedback+h,g_shotEvents[1-h],0,GetTickCount());
         triggers[0].action=triggers[1].action=0;
         menuHeld[0]=menuHeld[1]=0;
         menuHorizontal[0]=menuHorizontal[1]=0;
@@ -2730,9 +2737,9 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     /* Right always drives P1; left always drives P2. */
     hand = 1;
     for (h = 0; h < 2; h++)
-        if (hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h) &&
-            fire[h].isActive && fire[h].currentState && fire[h].changedSinceLastSync)
-            buzz(session, h, 0.06f, 1.0f);
+        if (hotd_shot_feedback(g_shotFeedback+h,g_shotEvents[1-h],
+            g_cfgHaptic && !g_nativePaused && poseValid[h] && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h),GetTickCount()))
+            buzz(session, h, 0.03f, 1.0f);
 
     if (grip.isActive && grip.currentState > 0.85f && !prevGrip) recentre = 1;
     prevGrip = grip.isActive && grip.currentState > 0.85f;
@@ -3124,7 +3131,7 @@ static int runVR(void)
                 }
             }
         }
-        if (!running) { Sleep(20); continue; }
+        if (!running) { g_shotFeedback[0].ready=g_shotFeedback[1].ready=0;Sleep(20);continue; }
 
         pxrWaitFrame(session, &fwi, &fs);
         pxrBeginFrame(session, &fbi);
@@ -3276,7 +3283,7 @@ static int runVR(void)
             layers[0] = (const XrCompositionLayerBaseHeader *)&layer;
             fei.layerCount = 1;
             fei.layers = layers;
-        }
+        } else g_shotFeedback[0].ready=g_shotFeedback[1].ready=0;
         fei.type = XR_TYPE_FRAME_END_INFO;
         fei.displayTime = fs.predictedDisplayTime;
         fei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;

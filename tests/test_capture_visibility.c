@@ -270,6 +270,8 @@ int main(void)
     assert(!native_stage_visibility(0,1,0x1381)&&!native_stage_visibility(0,0,0x1380)&&!native_stage_visibility(0,NAN,0x1380));
     frame->render_flags=0;assert(!native_stage_visibility(0,1,0x1380)&&native_stage_visibility(1,1,0x1381));
     test_gfile_capture(record,task);
+    shot_events[0]=17;shot_events[1]=23;publish_frame();
+    assert(frame->shot_events[0]==17 && frame->shot_events[1]==23);
     VirtualFree(frame,0,MEM_RELEASE);VirtualFree(game_base,0,MEM_RELEASE);
     puts("Capture visibility, G's File immediate/deferred provenance, signature and queue-bound checks passed.");return 0;
 }

@@ -109,6 +109,27 @@ int main(void)
     hotd_trigger_action(&trigger,0,1,0,0);
     assert(hotd_trigger_action(&trigger,1,1,0,2)==VC2_BTN_RELOAD);
     assert(hotd_trigger_action(&trigger,1,1,0,0)==VC2_BTN_RELOAD);
+    HotdShotFeedback feedback={0},second={0};
+    assert(!hotd_shot_feedback(&feedback,40,1,0)); /* Attach consumes existing history. */
+    assert(hotd_shot_feedback(&feedback,41,1,0));
+    assert(!hotd_shot_feedback(&feedback,42,1,20));
+    assert(!hotd_shot_feedback(&feedback,42,1,100)); /* No delayed replay of the dropped shot. */
+    assert(hotd_shot_feedback(&feedback,43,1,100));
+    assert(!hotd_shot_feedback(&second,0,1,100));
+    assert(hotd_shot_feedback(&second,1,1,100)); /* Independent hands. */
+    assert(!hotd_shot_feedback(&feedback,44,0,200));
+    assert(!hotd_shot_feedback(&feedback,44,1,201));
+    assert(hotd_shot_feedback(&feedback,45,1,201));
+    feedback=(HotdShotFeedback){0};hotd_shot_feedback(&feedback,0,1,0);
+    unsigned pulses=0;
+    for(unsigned shot=1;shot<=300;shot++)pulses+=hotd_shot_feedback(&feedback,shot,1,shot*10);
+    assert(pulses==30); /* Even 100 shot events/sec cannot exceed 10 feedback pulses/sec. */
+    feedback=(HotdShotFeedback){0};hotd_shot_feedback(&feedback,UINT32_MAX-1,1,UINT32_MAX-50);
+    assert(hotd_shot_feedback(&feedback,UINT32_MAX,1,UINT32_MAX-40));
+    assert(!hotd_shot_feedback(&feedback,0,1,58));
+    assert(hotd_shot_feedback(&feedback,1,1,59)); /* Both clock and event counters wrap safely. */
+    feedback.ready=0;
+    assert(!hotd_shot_feedback(&feedback,50,1,1000)); /* Refocus seeds current history, not old shots. */
     assert(hotd_rgba(0,0,0,.5f)==0x80000000u); /* Native black shadow, half opacity. */
     assert(hotd_rgba(1,1,1,.25f)==0x40FFFFFFu);
     assert(hotd_rgba(NAN,-1,2,1)==0xFFFF0000u);

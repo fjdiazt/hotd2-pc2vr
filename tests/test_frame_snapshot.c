@@ -13,9 +13,9 @@ static int interrupt_copy;
 static unsigned controller_starts,controller_fires,controller_lost;
 static float controller_sticks[2][2];
 static XrQuaternionf controller_rotations[2]={{0,0,0,1},{0,0,0,1}};
-static int controller_sticks_active;
+static int controller_sticks_active,controller_sync_lost;
 static XrResult XRAPI_CALL controller_sync(XrSession session,const XrActionsSyncInfo *info)
-{(void)session;(void)info;return XR_SUCCESS;}
+{(void)session;(void)info;return controller_sync_lost?XR_ERROR_RUNTIME_FAILURE:XR_SUCCESS;}
 static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionStateGetInfo *info,XrActionStateBoolean *out)
 {
     unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
@@ -77,6 +77,36 @@ static void check_head_relative_reload(void)
     controller_fires=0;controller_tick();controller_fires=1;controller_tick();
     assert(g_frame->aim2_buttons&VC2_BTN_FIRE);
     controller_fires=0;g_resetControls=1;controller_tick();
+}
+static unsigned haptic_calls[2];
+static XrResult XRAPI_CALL controller_haptic(XrSession session,const XrHapticActionInfo *info,const XrHapticBaseHeader *event)
+{
+    (void)session;
+    unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
+    const XrHapticVibration *pulse=(const XrHapticVibration *)event;
+    assert(event->type==XR_TYPE_HAPTIC_VIBRATION && pulse->amplitude==1.0f && llabs(pulse->duration-30000000)<=1);
+    haptic_calls[hand]++;return XR_SUCCESS;
+}
+static void check_shot_haptics(void)
+{
+    pxrApplyHapticFeedback=controller_haptic;g_cfgHaptic=1;g_cfgAkimbo=1;
+    g_shotEvents[0]=g_shotEvents[1]=0;g_nativePaused=0;
+    g_resetControls=1;controller_fires=0;controller_lost=0;controller_tick();
+    controller_fires=3;controller_tick();
+    assert(!haptic_calls[0] && !haptic_calls[1]); /* Input alone is not a confirmed shot. */
+    unsigned rate=g_cfgRapidRate;
+    g_shotEvents[0]++;controller_tick();assert(!haptic_calls[0] && haptic_calls[1]==1);
+    g_shotEvents[1]++;controller_tick();assert(haptic_calls[0]==1 && haptic_calls[1]==1);
+    controller_tick();assert(haptic_calls[0]==1 && haptic_calls[1]==1);
+    g_cfgHaptic=0;g_shotEvents[0]++;controller_tick();
+    g_cfgHaptic=1;controller_tick();assert(haptic_calls[1]==1);
+    controller_lost=2;g_shotEvents[0]++;controller_tick();controller_lost=0;controller_tick();
+    assert(haptic_calls[1]==1);
+    controller_sync_lost=1;g_shotEvents[0]++;controller_tick();controller_sync_lost=0;controller_tick();
+    assert(haptic_calls[1]==1 && g_cfgRapidRate==rate);
+    g_nativePaused=1;g_shotEvents[1]++;controller_tick();g_nativePaused=0;controller_tick();
+    assert(haptic_calls[0]==1);
+    g_cfgHaptic=0;controller_fires=0;g_resetControls=1;controller_tick();
 }
 static void test_plane(unsigned at,float x,float z,unsigned style)
 {
@@ -275,6 +305,7 @@ int main(void)
     assert(g_local[0].address==hotd_address(2,3));
     assert(g_local[0].specular==0x00332211 && g_local[0].fog_colour==0x01112233 && g_local[0].fog==.25f);
     assert(g_shotOrigins[0][0]==11);
+    assert(!g_shotEvents[0] && !g_shotEvents[1]);
     g_frame->reserved[1]=1;g_frame->seq+=2;
     assert(pullFrame() && g_nativePaused && g_local[0].x==11);
     g_scrMode=1;assert(!screenVisible());
@@ -285,16 +316,16 @@ int main(void)
     unsigned *oldAtlas=g_atlPix;
     g_frame->seq=g_frame->atlas_seq=3;g_frame->frame=2;
     g_frame->verts[0].x=22;g_frame->atlas[0]=222;g_frame->active_players=2;
-    g_frame->shot_origins[0][0]=22;
+    g_frame->shot_origins[0][0]=22;g_frame->shot_events[0]=17;g_frame->shot_events[1]=23;
     assert(!pullFrame() && g_local==oldVertices && g_atlPix==oldAtlas && g_activePlayers==1);
-    assert(g_shotOrigins[0][0]==11);
+    assert(g_shotOrigins[0][0]==11 && !g_shotEvents[0] && !g_shotEvents[1]);
     g_frame->seq=g_frame->atlas_seq=4;
     interrupt_copy=1;
     assert(!pullFrame()); /* Writer changed generation during every atlas copy. */
     assert(g_local==oldVertices && g_atlPix==oldAtlas && g_local[0].x==11 && g_atlPix[0]==111 && g_activePlayers==1);
     interrupt_copy=0;
     assert(pullFrame() && g_local[0].x==22 && g_atlPix[0]==222 && g_lastFrame==2 && g_activePlayers==2);
-    assert(g_shotOrigins[0][0]==22);
+    assert(g_shotOrigins[0][0]==22 && g_shotEvents[0]==17 && g_shotEvents[1]==23);
     g_frame->seq+=2;g_frame->frame=3;g_frame->verts[0].x=33;
     oldAtlas=g_atlPix;
     assert(pullFrame() && g_local[0].x==33 && g_atlPix==oldAtlas && g_atlPix[0]==222);
@@ -318,6 +349,7 @@ int main(void)
     check_near_aim_and_splashes();
     check_controller_modes();
     check_head_relative_reload();
+    check_shot_haptics();
     free(g_frame);
     puts("Viewer: independent/paired players, gun visibility, INI/CLI cheats, heartbeat and coherent snapshots passed.");
     return 0;

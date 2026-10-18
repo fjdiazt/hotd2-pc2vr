@@ -17,6 +17,15 @@ static inline int hotd_hand_visible(int akimbo,unsigned active_players,int hand)
     return akimbo || (active_players&(1u<<(1-hand))); /* Right P1, left P2. */
 }
 typedef struct { uint32_t at; unsigned active; } HotdRapid;
+typedef struct { uint32_t sequence,at; unsigned ready,sent; } HotdShotFeedback;
+static inline int hotd_shot_feedback(HotdShotFeedback *feedback,uint32_t sequence,int enabled,uint32_t now)
+{
+    if(!feedback->ready) { feedback->ready=1;feedback->sequence=sequence;return 0; }
+    if(sequence==feedback->sequence)return 0;
+    feedback->sequence=sequence; /* Consume dropped events; never queue delayed pulses. */
+    if(!enabled || (feedback->sent && (uint32_t)(now-feedback->at)<100))return 0;
+    feedback->sent=1;feedback->at=now;return 1;
+}
 static inline int hotd_parse_rapid_rate(const char *text,unsigned *out)
 {
     char *end;

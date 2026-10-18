@@ -69,6 +69,8 @@ static unsigned cheat_owned,cheat_applied;
 static BYTE saved_cheats[2][2];
 static int continues_supported,invincibility_ready;
 static DWORD saved_freeplay;
+static uint32_t shot_events[2];
+static void (__cdecl *native_shot_ray_original)(int,float,float);
 static HotdRapid rapid_fire[2];
 static char ini_path[MAX_PATH];
 static IDirect3DDevice7 *active_device;
@@ -229,6 +231,19 @@ static int native_cheat_profile(const BYTE *base)
         !memcmp(base+0x149D9,ammo,sizeof(ammo)) && !memcmp(base+0x14C47,ammo_original,sizeof(ammo_original));
 }
 
+static int native_shot_profile(const BYTE *base)
+{
+    static const BYTE ray[]={0x83,0xEC,0x1C,0x8B,0x44,0x24,0x20};
+    static const BYTE normal[]={0xE8,0xDF,0x16,0xFF,0xFF},special[]={0xE8,0x9F,0x13,0xFF,0xFF};
+    return !memcmp(base+0x6110,ray,sizeof(ray)) && !memcmp(base+0x14A2C,normal,sizeof(normal)) &&
+        !memcmp(base+0x14D6C,special,sizeof(special));
+}
+static void __cdecl native_shot_ray(int player,float x,float y)
+{
+    native_shot_ray_original(player,x,y);
+    if(player>=0 && player<2 && *(DWORD *)(game_base+0x5C8E98)==6 && !*(short *)(game_base+0x5A1A00))
+        shot_events[player]++;
+}
 static int native_continues_profile(const BYTE *base)
 {
     static const BYTE shared[]={0x8B,0x0D,0x70,0x8E,0x9C,0x00,0x83,0xF9,0x01};
@@ -1188,6 +1203,7 @@ static void publish_frame(void)
     frame->reserved[1]=paused;frame->frame=frame_no;
     frame->draw_calls=calls;frame->dropped_triangles=dropped;frame->texture_count=texture_count;
     frame->active_players=native_active_players();
+    memcpy(frame->shot_events,shot_events,sizeof(shot_events));
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;
@@ -1327,6 +1343,12 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     frame->input_supported=input_ready;
     logline("HOTD2 bridge pid=%lu input_profile=%d",(unsigned long)GetCurrentProcessId(),input_ready);
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
+    {
+        static const BYTE signature[]={0x83,0xEC,0x1C,0x8B,0x44,0x24,0x20};
+        int ready=native_shot_profile(game_base) &&
+            detour(0x6110,signature,sizeof(signature),native_shot_ray,(void **)&native_shot_ray_original);
+        logline("native shot feedback: %s",ready?"ready":"unavailable; shot rumble disabled");
+    }
     {
         static const BYTE signature[]={0xA1,0xB8,0xE5,0x7D,0};
         audio_ready=hotd_audio_profile(game_base) &&
