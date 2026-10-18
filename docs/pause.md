@@ -1,8 +1,12 @@
-# Unobstructed VR pause
+# Unobstructed pause
 
 The supported game stores native pause state at `0x9A1A00`. Its pause routine at `0x40E500` draws black model `0x93E` and pause sprites. An owned desktop probe (PID 69540) filtered the backdrop and found **zero world vertices** in successive paused frames, with six UI vertices remaining. Removing the overlay alone therefore cannot preserve the 3D view.
 
-The bridge now retains the last complete gameplay capture while native pause is active: geometry, HUD, projection and shot anchors remain available in shared memory. Paused native draws still execute, but are not captured or uploaded into the texture atlas. The last screen capture is also retained. Frame publication, native input and viewer cheat heartbeats continue, allowing normal unpause. Fresh scene capture resumes immediately when native pause clears.
+The bridge retains the last complete gameplay capture while native pause is active: geometry, HUD, projection and shot anchors remain available in shared memory. Paused native draws still execute, but are not captured or uploaded into the texture atlas. The last screen capture is also retained. Frame publication, native input and viewer cheat heartbeats continue, allowing normal unpause. Fresh scene capture resumes immediately when native pause clears.
+
+The native `EndScene` hook also redraws this same retained geometry into the game's desktop render target after the pause UI. `desktop_pause.h` uses Direct3D 7 triangle batches with the saved native projection, the retained lit colours/specular/fog, original texture surfaces held by the capture cache, addressing, alpha tests, blending and depth state. HUD vertices use the inverse of the capture's panel mapping. No screenshot, backbuffer copy, second scene capture or additional game-code detour is used. Device state is saved/restored around the replay, including explicit transform and viewport restoration. Without a prior complete gameplay capture, the native pause display remains.
+
+Normal play adds only saving the projection and viewport alongside the existing retained scene. Paused desktop rendering costs CPU draw submission and GPU scene rendering each frame. The desktop uses native scale and colour output, independently of the D3D11 viewer's brightness/gamma/world-scale settings. Device-loss errors are logged once; recovery and broader stage/menu coverage are not yet qualified.
 
 Protocol 13 publishes pause state in `reserved[1]`, formerly unused background-layer metadata. The layout and size do not change. The viewer reads it under the existing frame seqlock and suppresses the captured-screen panel during pause, including manually forced panels. Head and controller poses continue through the normal render loop. A viewer attaching during an existing paused session can read the bridge's retained scene. No menu image is substituted when gameplay has not produced a valid scene yet.
 
@@ -14,3 +18,9 @@ Verification:
 - Actual offscreen D3D11 replay of the retained capture produced a visible street scene from two translated viewpoints, with different rendered images. This verifies retained 3D geometry rather than a flat screenshot.
 
 Evidence is retained under ignored `build/clean-pause-evidence/` in the main checkout: `pause-empty-scene.json`, `pause-probe.json`, `clean-pause-build.log`, `pause-viewer-checks.log`, `paused-retained.bin`, `paused-retained-atlas.bin` and `paused-viewpoints.png`. No VR session was launched for these checks; headset comfort and broader stage/menu coverage remain pending.
+
+Desktop replay verification:
+
+- `test_desktop_pause.c` renders through a real offscreen Direct3D 7 device. It checks retained geometry, occlusion, HUD placement, blending/alpha testing, native wrap/clamp textures, fog/specular and restoration of transforms, viewport, render state and texture bindings. The real bridge `EndScene` hook is exercised for cold pause, valid pause and resume.
+- Owned native test PID **93916** retained **29,517 world vertices** and 54 HUD vertices. Consecutive paused publications had identical scene hashes while frame numbers advanced. The original game window visibly rendered the scene without the pause overlay. Translating the retained world vertices by 1.2 native units changed the desktop view while the native pause flag stayed set; restoring those vertices restored the exact image. Resume produced fresh scene data. The owned game closed normally.
+- Evidence lives in this worktree's ignored `build/`: `desktop-pause-probe.json`, `desktop-pause-probe.log`, `HOTD2Bridge.log`, `paused-desktop.png`, `shifted-desktop.png` and `restored-desktop.png`. Headset testing and precise performance measurements were not performed for this change.

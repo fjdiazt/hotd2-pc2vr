@@ -41,6 +41,10 @@ if ($LASTEXITCODE) { throw 'Vertex reuse test failed.' }
 if ($LASTEXITCODE) { throw 'Texture cache test build failed.' }
 & "$out\test_texture_cache.exe"
 if ($LASTEXITCODE) { throw 'Texture cache test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_desktop_pause.exe" "$root\tests\test_desktop_pause.c" -lddraw -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Desktop pause test build failed.' }
+& "$out\test_desktop_pause.exe"
+if ($LASTEXITCODE) { throw 'Desktop pause test failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_reload.exe" "$root\tests\test_reload.c" -ldxguid -luser32 -lkernel32
 if ($LASTEXITCODE) { throw 'Reload test build failed.' }
 & "$out\test_reload.exe"

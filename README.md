@@ -91,7 +91,9 @@ Reload direction comes from the tracked gun, independently of head direction. A 
 
 ### Pausing
 
-A/X uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press Start again to resume. The native desktop window retains its original pause display.
+A/X uses the game's normal pause. Both the VR view and the injected game's desktop window retain the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue in VR, so you can look around the frozen scene. Press Start again to resume.
+
+The desktop window redraws the retained geometry and native textures through Direct3D 7; it does not display a saved screenshot. This requires the injected bridge and a prior gameplay scene. Rendering continues while paused, but gameplay stays frozen. The native desktop view does not apply the viewer's brightness, gamma or world-scale settings.
 
 The bridge and viewer must both be rebuilt for the current protocol 15; pause state was introduced in protocol 13, audio controls in 14 and briefing-book provenance in 15. Details and verification: [docs/pause.md](docs/pause.md).
 

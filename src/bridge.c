@@ -19,6 +19,7 @@
 #include "capture_visibility.h"
 #include "crosshair_capture.h"
 #include "audio_control.h"
+#include "desktop_pause.h"
 
 static FILE *logfile;
 static Vc2Frame *frame;
@@ -30,6 +31,8 @@ static Vc2Vertex vertices[VC2_MAX_VERTS];
 static Vc2Vertex hud_vertices[HOTD_MAX_HUD_VERTS];
 static unsigned hud_count;
 static int pause_scene_ready;
+static D3DMATRIX pause_projection;
+static D3DVIEWPORT7 pause_viewport;
 static HotdLens lens;
 static unsigned lens_valid;
 static unsigned capture_kind,shot_group;
@@ -416,6 +419,14 @@ typedef struct { IDirectDrawSurface7 *surface; unsigned x,y,w,h,last_used; } Tex
 static Texture textures[2048];
 static HotdAtlas atlas_space;
 static unsigned texture_count, texture_evictions, texture_failures;
+static IDirectDrawSurface7 *pause_texture(const Vc2Vertex *v)
+{
+    for(unsigned i=0;i<texture_count;i++)if(
+        v->atlas_x==(textures[i].x+.5f)/VC2_ATLAS_W &&
+        v->atlas_y==(textures[i].y+.5f)/VC2_ATLAS_H)
+        return textures[i].surface;
+    return NULL;
+}
 _Static_assert(VC2_ATLAS_W==HOTD_ATLAS_SIDE*HOTD_ATLAS_CELL && VC2_ATLAS_H==VC2_ATLAS_W,
     "Atlas allocator dimensions");
 
@@ -1104,6 +1115,11 @@ static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
 }
 static HRESULT WINAPI end_scene(IDirect3DDevice7 *self)
 {
+    if(pause_scene_ready && input_ready && *(short *)(game_base+0x5A1A00)) {
+        HRESULT hr=hotd_pause_render(self,frame,&pause_projection,&pause_viewport,pause_texture);
+        static int reported;
+        if(FAILED(hr) && !reported){reported=1;logline("desktop pause replay failed: %08lx",(unsigned long)hr);}
+    }
     return original_end(self);
 }
 static BOOL CALLBACK find_game_window(HWND hwnd,LPARAM unused)
@@ -1149,6 +1165,7 @@ static void publish_frame(void)
         frame->lens=lens;frame->lens_valid=lens_valid;
         memcpy(frame->shot_origins,shot_origins,sizeof(shot_origins));
         pause_scene_ready=input_ready && !paused && *(DWORD *)(game_base+0x5C8E98)==6 && count>0;
+        if(pause_scene_ready){pause_projection=projection;pause_viewport=viewport;}
     }
     frame->reserved[1]=paused;frame->frame=frame_no;
     frame->draw_calls=calls;frame->dropped_triangles=dropped;frame->texture_count=texture_count;
