@@ -221,6 +221,11 @@ int main(void)
     assert(g_frame->rapid_fire_rate==4 && !g_frame->render_flags);
     g_cfgNativeLighting=0;pushCheats();assert(g_frame->render_flags==HOTD_RENDER_UNLIT);
     g_cfgNativeLighting=1;pushCheats();assert(!g_frame->render_flags);
+    g_cfgExpandMeshes=0;g_cfgExpandWorld=1;pushCheats();
+    assert(g_frame->render_flags==(HOTD_RENDER_NATIVE_MESH_CULLING|HOTD_RENDER_EXPAND_WORLD));
+    g_cfgNativeLighting=0;pushCheats();
+    assert(g_frame->render_flags==(HOTD_RENDER_UNLIT|HOTD_RENDER_NATIVE_MESH_CULLING|HOTD_RENDER_EXPAND_WORLD));
+    g_cfgNativeLighting=1;g_cfgExpandMeshes=1;g_cfgExpandWorld=0;pushCheats();assert(!g_frame->render_flags);
     g_cfgRapidRate=5;pushCheats();assert(g_frame->rapid_fire_rate==5);
     g_cfgRapidRate=4;
     g_cheatFlags=0;pushCheats();assert(!g_frame->cheat_flags);

@@ -12,6 +12,10 @@ param(
     [switch]$ShowSplash,
     [ValidateRange(0.1,10.0)][double]$WorldScale = 1.25,
     [ValidateRange(25,400)][int]$Brightness = 85,
+    [switch]$ExpandMeshes,
+    [switch]$NoExpandMeshes,
+    [switch]$ExpandWorld,
+    [switch]$NoExpandWorld,
     [switch]$NativeLighting,
     [switch]$NoNativeLighting,
     [switch]$Laser,
@@ -21,6 +25,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($SkipSplash -and $ShowSplash) { throw 'Choose either -SkipSplash or -ShowSplash.' }
+if ($ExpandMeshes -and $NoExpandMeshes) { throw 'Choose either -ExpandMeshes or -NoExpandMeshes.' }
+if ($ExpandWorld -and $NoExpandWorld) { throw 'Choose either -ExpandWorld or -NoExpandWorld.' }
 if ($NativeLighting -and $NoNativeLighting) { throw 'Choose either -NativeLighting or -NoNativeLighting.' }
 if ($Laser -and $NoLaser) { throw 'Choose either -Laser or -NoLaser.' }
 if ($Crosshair -and $NoCrosshair) { throw 'Choose either -Crosshair or -NoCrosshair.' }
@@ -45,6 +51,10 @@ if ($RapidFire) { $viewerArgs += '--rapid-fire' }
 if ($PSBoundParameters.ContainsKey('RapidFireRate')) { $viewerArgs += '--rapid-fire-rate', "$RapidFireRate" }
 if ($PSBoundParameters.ContainsKey('WorldScale')) { $viewerArgs += '--world-scale', $WorldScale.ToString('G', [Globalization.CultureInfo]::InvariantCulture) }
 if ($PSBoundParameters.ContainsKey('Brightness')) { $viewerArgs += '--brightness', "$Brightness" }
+if ($ExpandMeshes) { $viewerArgs += '--expand-meshes' }
+if ($NoExpandMeshes) { $viewerArgs += '--no-expand-meshes' }
+if ($ExpandWorld) { $viewerArgs += '--expand-world' }
+if ($NoExpandWorld) { $viewerArgs += '--no-expand-world' }
 if ($NativeLighting) { $viewerArgs += '--native-lighting' }
 if ($NoNativeLighting) { $viewerArgs += '--no-native-lighting' }
 if ($Laser) { $viewerArgs += '--laser' }

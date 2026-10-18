@@ -153,6 +153,27 @@ Restart the viewer to apply it. The last direct CLI value wins; invalid CLI valu
 
 These controls already cover VC2VR's main picture settings. Its extra scene-reconstruction passes and backdrop fixes are game-specific. Precise native-crosshair suppression and configurable HUD size/distance remain possible follow-ups; a settings menu is not implemented yet.
 
+### Visibility expansion
+
+```ini
+[vr]
+expand_meshes=1
+expand_world=0
+```
+
+`expand_meshes=1` preserves the existing normal-model screen-edge expansion, helping retain offscreen body parts. Set it to `0` to restore native normal-model mesh rejection. Alternative-model draws retain their native visibility checks by default.
+
+`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. Opening-street windowed capture and offscreen rear replay passed; full rear coverage, forward-wall parity and headset performance still need testing.
+
+Session overrides, without changing the INI:
+
+```powershell
+.\Start-HOTD2.ps1 -ExpandWorld
+.\build\HOTD2VR.exe --expand-world
+```
+
+Use `-ExpandMeshes` / `-NoExpandMeshes` and `-ExpandWorld` / `-NoExpandWorld`, or viewer flags `--expand-meshes` / `--no-expand-meshes` and `--expand-world` / `--no-expand-world`. Last direct CLI switch wins; PowerShell rejects opposing switches. Restart the viewer to apply changes. Matching bridge/viewer builds are required.
+
 ### Other shipped settings
 
 These are the values in the shipped INI; an existing active file can differ.
@@ -162,6 +183,7 @@ These are the values in the shipped INI; an existing active file can differ.
 | `[vr] akimbo` | `1` | Paired joining; `0` uses independent player joining |
 | `[vr] gunmodel` / `gunscale` | `gun.obj` / `100` | Gun asset and its size in percent |
 | `[vr] depth` / `depthbias` | `2` / `0` | Reconstructed depth buffer and optional sort bias |
+| `[vr] expand_meshes` / `expand_world` | `1` / `0` | Normal-model side expansion; experimental loaded-stage rear capture |
 | `[vr] msaa` | `4` | Antialiasing samples: 1, 2, 4 or 8 |
 | `[vr] supersample` | `100` | Eye-buffer resolution in percent; separate from world size |
 | `[vr] gamma` | `220` | sRGB eye-buffer compensation in percent; `100` disables it |
@@ -219,7 +241,7 @@ Implementation and test evidence: [docs/cheats.md](docs/cheats.md).
 3. Coherent frames and a texture atlas pass through shared memory to the separate x64 Direct3D11/OpenXR viewer.
 4. The viewer renders the scene for both eyes. Controller rays intersect world geometry; the hit projects through HOTD2's camera back into each player's native gun input. HUD and shot-effect geometry are excluded from aim intersections.
 
-This differs from VC2VR's `HGL_VIEW.DLL` integration and extra rotated-camera passes. HOTD2 uses an injected capture bridge and relaxes native per-mesh screen-edge rejection. It does not inherit VC2VR's complete 360-degree scene coverage: only geometry submitted by HOTD2 is available, and whole-object/stage culling or never-authored surfaces can still leave gaps when you turn or lean.
+This differs from VC2VR's `HGL_VIEW.DLL` integration and extra rotated-camera passes. HOTD2 uses an injected capture bridge with configurable mesh/stage visibility expansion. Experimental `expand_world` broadens loaded stage submissions without rotating the camera or retaining scenery across frames. Full 360-degree coverage is not established: other culling, unloaded sections and never-authored surfaces can still leave gaps when you turn or lean.
 
 The bridge also repairs alpha after native bitmap uploads so menu art remains visible. Screen-space UI is captured in every game mode, including tutorial, story, game-over and menus, without a native depth cutoff. It uses a canvas 2 m away and 2 × 1.5 m in size, anchored to the recenter origin. Native transparency and submission order remain; UI draws above world geometry and never becomes an aim or splash target. The captured-screen panel replaces that HUD layer when its texture is available, avoiding duplicate UI. Model geometry, including untagged traveling tracers, keeps its world depth. Native letterbox bars are omitted from VR capture during gameplay; pause dimming and full-screen blackouts remain. These capture changes leave the native game rendering path running.
 

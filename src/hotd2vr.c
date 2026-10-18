@@ -177,6 +177,8 @@ static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
 static int g_cfgSuper = 140;      /* eye buffer scale in percent */
 static float g_cfgWorldScale = 1.25f; /* world size multiplier; 1 preserves the native unit conversion */
 static int g_cfgNativeLighting = 1;
+static int g_cfgExpandMeshes = 1;
+static int g_cfgExpandWorld;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
 static int g_cfgBrightness = 85;
@@ -215,6 +217,8 @@ static void readGraphicsFlags(const char *path)
     g_cfgLaser=GetPrivateProfileIntA("vr","laser",1,path)!=0;
     g_cfgCrosshair=GetPrivateProfileIntA("vr","crosshair",1,path)!=0;
     g_cfgNativeLighting=GetPrivateProfileIntA("vr","native_lighting",1,path)!=0;
+    g_cfgExpandMeshes=GetPrivateProfileIntA("vr","expand_meshes",1,path)!=0;
+    g_cfgExpandWorld=GetPrivateProfileIntA("vr","expand_world",0,path)!=0;
 }
 static int parseWorldScale(const char *text,float *scale)
 {
@@ -368,7 +372,9 @@ static int openShare(void)
 static void pushCheats(void)
 {
     if(!g_frame)return;
-    g_frame->render_flags=g_cfgNativeLighting?0:HOTD_RENDER_UNLIT;
+    g_frame->render_flags=(g_cfgNativeLighting?0:HOTD_RENDER_UNLIT) |
+        (g_cfgExpandMeshes?0:HOTD_RENDER_NATIVE_MESH_CULLING) |
+        (g_cfgExpandWorld?HOTD_RENDER_EXPAND_WORLD:0);
     g_frame->rapid_fire_rate=g_cfgRapidRate;
     g_frame->cheat_flags=g_cheatFlags;
     MemoryBarrier();
@@ -3694,6 +3700,10 @@ int main(int argc, char **argv)
         unsigned cheat=cheatArg(argv[i]);
         if (!strcmp(argv[i], "--window")) window = 1;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
+        else if (!strcmp(argv[i], "--expand-meshes")) g_cfgExpandMeshes = 1;
+        else if (!strcmp(argv[i], "--no-expand-meshes")) g_cfgExpandMeshes = 0;
+        else if (!strcmp(argv[i], "--expand-world")) g_cfgExpandWorld = 1;
+        else if (!strcmp(argv[i], "--no-expand-world")) g_cfgExpandWorld = 0;
         else if (!strcmp(argv[i], "--native-lighting")) g_cfgNativeLighting = 1;
         else if (!strcmp(argv[i], "--no-native-lighting")) g_cfgNativeLighting = 0;
         else if (!strcmp(argv[i], "--laser")) g_cfgLaser = 1;
@@ -3717,9 +3727,10 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--brightness N] [--native-lighting | --no-native-lighting] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--brightness N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
+    note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
     note("Scene brightness: %d%%\n",g_cfgBrightness);
     note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
     note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);

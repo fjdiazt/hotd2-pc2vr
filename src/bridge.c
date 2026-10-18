@@ -14,6 +14,7 @@
 #include "game_input.h"
 #include "texture_atlas.h"
 #include "lighting.h"
+#include "capture_visibility.h"
 
 static FILE *logfile;
 static Vc2Frame *frame;
@@ -29,6 +30,9 @@ static unsigned lens_valid;
 static unsigned capture_kind,shot_group;
 static unsigned capture_skip;
 static unsigned capture_model;
+static DWORD capture_visibility_planes;
+static HotdStageRecords stage_records;
+static int visibility_hooks_ready,visibility_ready;
 static float shot_origins[64][3];
 static D3DMATRIX world, view, projection;
 static D3DVIEWPORT7 viewport;
@@ -89,15 +93,6 @@ static int write_code(BYTE *at, const BYTE *bytes, unsigned n)
     FlushInstructionCache(GetCurrentProcess(), at, n);
     VirtualProtect(at, n, old, &unused);
     return 1;
-}
-
-static int relax_mesh_culling(BYTE *at)
-{
-    static const BYTE signature[]={0xF7,0x44,0x24,0x18,0x00,0xF0,0xFF,0x00};
-    const BYTE side_planes=0;
-    if(memcmp(at,signature,sizeof(signature)))return 0;
-    /* Mdl_Draw: retain near/far/custom planes; submit meshes outside the flat screen edges. */
-    return write_code(at+5,&side_planes,1);
 }
 
 static int active_input(void)
@@ -684,6 +679,59 @@ done: IDirectDrawSurface7_Release(surface);
 typedef DWORD (__cdecl *NativeDraw)(const void *,DWORD);
 typedef int (__cdecl *NativeModel)(const BYTE *,int);
 static NativeModel native_model_original,native_model_alt_original;
+typedef void (__cdecl *NativeSubmit)(const BYTE *);
+typedef void (__cdecl *NativeSubmitAlt)(const BYTE *,float);
+static NativeSubmit native_submit_original;
+static NativeSubmitAlt native_submit_alt_original;
+static int (__cdecl *native_visibility_original)(float,float,float,float);
+static HRESULT (WINAPI *original_sphere_visibility)(IDirect3DDevice7 *,D3DVECTOR *,D3DVALUE *,DWORD,DWORD,DWORD *);
+
+static int native_stage_task(void)
+{
+    const DWORD *task=*(const DWORD **)(game_base+0x3DF8B0);
+    return task && task[0]==(DWORD)(ULONG_PTR)(game_base+0x1260);
+}
+static int remember_stage_record(const BYTE *record)
+{
+    DWORD model,black;
+    memcpy(&model,record+0xC,sizeof(model));
+    memcpy(&black,game_base+0x5A66A4+0x93E*16,sizeof(black));
+    if(visibility_ready && frame && (frame->render_flags&HOTD_RENDER_EXPAND_WORLD) &&
+       model && model!=black && native_stage_task())return hotd_remember_stage(&stage_records,record);
+    return 0;
+}
+static void __cdecl native_submit(const BYTE *record)
+{remember_stage_record(record);native_submit_original(record);}
+static void __cdecl native_submit_alt(const BYTE *record,float alpha)
+{
+    if(remember_stage_record(record)) {
+        BYTE deferred[HOTD_MODEL_RECORD_SIZE];
+        memcpy(deferred,record,sizeof(deferred));memcpy(deferred+0x10,&alpha,sizeof(alpha));
+        /* The ALT queue replaces its copy's alpha as well as sort flags/depth. */
+        hotd_remember_stage(&stage_records,deferred);
+    }
+    native_submit_alt_original(record,alpha);
+}
+
+static int native_stage_visibility(int visible,float radius,uintptr_t caller)
+{
+    return visible || (visibility_ready && frame && (frame->render_flags&HOTD_RENDER_EXPAND_WORLD) &&
+        !stage_records.overflow && stage_records.count<HOTD_STAGE_RECORDS && isfinite(radius) && radius>0 &&
+        hotd_stage_visibility_caller(caller));
+}
+static int __cdecl native_visibility(float x,float y,float z,float radius)
+{
+    int visible=native_visibility_original(x,y,z,radius);
+    return native_stage_visibility(visible,radius,(uintptr_t)__builtin_return_address(0)-(uintptr_t)game_base);
+}
+static HRESULT WINAPI sphere_visibility(IDirect3DDevice7 *self,D3DVECTOR *centres,D3DVALUE *radii,
+                                       DWORD n,DWORD flags,DWORD *visibility)
+{
+    HRESULT hr=original_sphere_visibility(self,centres,radii,n,flags,visibility);
+    if(SUCCEEDED(hr) && capture_model && capture_visibility_planes)
+        for(DWORD i=0;i<n;i++)visibility[i]&=~capture_visibility_planes;
+    return hr;
+}
 static unsigned native_model_kind(const BYTE *record)
 {
     DWORD model;
@@ -716,6 +764,7 @@ static int native_letterbox(const BYTE *record)
 static int native_model_draw(const BYTE *record,int pass,NativeModel original)
 {
     unsigned previous=capture_kind,previous_skip=capture_skip,previous_model=capture_model;
+    DWORD previous_planes=capture_visibility_planes;
     int result;
     capture_model=1;
     capture_skip|=native_letterbox(record);
@@ -724,8 +773,12 @@ static int native_model_draw(const BYTE *record,int pass,NativeModel original)
         if(!logged++){logline("native letterbox bars omitted from VR capture");}
     }
     capture_kind=native_model_kind(record);
+    capture_visibility_planes=visibility_ready?hotd_visibility_expand(frame?frame->render_flags:0,
+        capture_kind==HOTD_WORLD && !capture_skip && hotd_stage_record(&stage_records,record),
+        original==native_model_alt_original):0;
     result=original(record,pass);
     capture_kind=previous;capture_skip=previous_skip;capture_model=previous_model;
+    capture_visibility_planes=previous_planes;
     return result;
 }
 static int __cdecl native_model(const BYTE *record,int pass)
@@ -769,6 +822,18 @@ static int install_invincibility(void)
        memcmp(game_base+0x15430,signature,sizeof(signature)))return 0;
     return detour(0x15300,signature,sizeof(signature),native_damage,(void **)&native_damage_original) &&
         detour(0x15430,signature,sizeof(signature),native_damage_forced,(void **)&native_damage_forced_original);
+}
+
+static int install_capture_visibility(void)
+{
+    static const BYTE submit[]={0x56,0x8B,0x74,0x24,0x08};
+    static const BYTE sphere[]={0x83,0xEC,0x38,0xD9,0x05,0xCC,0x49,0x4C,0x00};
+    /* Verify all call sites before any hook can enable expanded submission. */
+    if(!hotd_visibility_profile(game_base))return 0;
+    visibility_hooks_ready=detour(0xA7E50,submit,sizeof(submit),native_submit,(void **)&native_submit_original) &&
+        detour(0xA8390,submit,sizeof(submit),native_submit_alt,(void **)&native_submit_alt_original) &&
+        detour(0x6310,sphere,sizeof(sphere),native_visibility,(void **)&native_visibility_original);
+    return visibility_hooks_ready;
 }
 
 static HRESULT (WINAPI *original_present)(void *,DWORD);
@@ -832,10 +897,12 @@ static void publish_frame(void)
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;
-    if(frame_no==1 || frame_no%300==0 || texture_failures)logline("frame=%u draws=%u vertices=%u dropped=%u textures=%u evictions=%u texture_failures=%u lens=%u screen=%u",
-        frame_no,calls,count,dropped,texture_count,texture_evictions,texture_failures,lens_valid,frame->screen_ok);
+    if(frame_no==1 || frame_no%300==0 || texture_failures || stage_records.overflow)logline("frame=%u draws=%u vertices=%u dropped=%u textures=%u evictions=%u texture_failures=%u lens=%u screen=%u stage_records=%u stage_overflow=%u",
+        frame_no,calls,count,dropped,texture_count,texture_evictions,texture_failures,lens_valid,frame->screen_ok,
+        stage_records.count,stage_records.overflow);
     texture_failures=0;
     count=hud_count=calls=dropped=shot_group=0;
+    stage_records.count=stage_records.overflow=0;
 }
 static HRESULT (WINAPI *original_create_device)(IDirect3D7 *,REFCLSID,IDirectDrawSurface7 *,IDirect3DDevice7 **);
 static HRESULT WINAPI create_device(IDirect3D7 *self,REFCLSID cls,IDirectDrawSurface7 *target,IDirect3DDevice7 **out)
@@ -846,6 +913,8 @@ static HRESULT WINAPI create_device(IDirect3D7 *self,REFCLSID cls,IDirectDrawSur
         IDirect3DDevice7Vtbl *vt=(IDirect3DDevice7Vtbl *)(*out)->lpVtbl;
 #define HOOK(member,fun,original) replace_pointer((void **)&vt->member,fun,(void **)&original)
         HOOK(BeginScene,begin_scene,original_begin);HOOK(EndScene,end_scene,original_end);
+        visibility_ready=visibility_hooks_ready && HOOK(ComputeSphereVisibility,sphere_visibility,original_sphere_visibility);
+        logline("native capture visibility policy: %s",visibility_ready?"ready":"unavailable; native culling retained");
 #undef HOOK
     }
     return hr;
@@ -940,6 +1009,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     memset(frame,0,sizeof(*frame));frame->magic=VC2_SHARE_MAGIC;frame->version=VC2_SHARE_VERSION;
     frame->game_pid=GetCurrentProcessId();
     frame->render_flags=GetPrivateProfileIntA("vr","native_lighting",1,ini_path)?0:HOTD_RENDER_UNLIT;
+    if(!GetPrivateProfileIntA("vr","expand_meshes",1,ini_path))frame->render_flags|=HOTD_RENDER_NATIVE_MESH_CULLING;
+    if(GetPrivateProfileIntA("vr","expand_world",0,ini_path))frame->render_flags|=HOTD_RENDER_EXPAND_WORLD;
     logline("native lighting: %s",frame->render_flags&HOTD_RENDER_UNLIT?"off":"on");
     frame->units_per_metre=(float)GetPrivateProfileIntA("bridge","units_per_metre",10,ini_path);
     if(frame->units_per_metre<1 || frame->units_per_metre>100000)frame->units_per_metre=10;
@@ -959,7 +1030,7 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     logline("native continues profile: %s",continues_supported?"verified":"unsupported; free play unchanged");
     invincibility_ready=install_invincibility();
     logline("native invincibility hooks: %s",invincibility_ready?"ready":"unavailable; damage unchanged");
-    logline("native mesh screen-edge culling: %s",relax_mesh_culling(game_base+0xA7F81)?"relaxed":"unsupported; unchanged");
+    logline("native capture visibility hooks: %s",install_capture_visibility()?"ready":"unavailable; native culling retained");
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};

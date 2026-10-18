@@ -117,19 +117,6 @@ static int __cdecl draw_test_tl_model(const BYTE *record,int pass)
 
 int main(void)
 {
-    const BYTE cull_code[]={0xF7,0x44,0x24,0x18,0x00,0xF0,0xFF,0x00};
-    BYTE *code=VirtualAlloc(NULL,sizeof(cull_code),MEM_COMMIT|MEM_RESERVE,PAGE_EXECUTE_READWRITE);
-    DWORD cull_mask;
-    assert(code);memcpy(code,cull_code,sizeof(cull_code));
-    assert(relax_mesh_culling(code));memcpy(&cull_mask,code+4,4);
-    assert(!(cull_mask&(D3DSTATUS_CLIPINTERSECTIONLEFT|D3DSTATUS_CLIPINTERSECTIONRIGHT|
-        D3DSTATUS_CLIPINTERSECTIONTOP|D3DSTATUS_CLIPINTERSECTIONBOTTOM)));
-    assert((cull_mask&D3DSTATUS_CLIPINTERSECTIONFRONT) && (cull_mask&D3DSTATUS_CLIPINTERSECTIONBACK));
-    assert((cull_mask&D3DSTATUS_CLIPINTERSECTIONGEN0) && (cull_mask&D3DSTATUS_CLIPINTERSECTIONGEN5));
-    for(unsigned b=0;b<sizeof(cull_code);b++)if(b!=5)assert(code[b]==cull_code[b]);
-    memcpy(code,cull_code,sizeof(cull_code));code[3]^=1;
-    assert(!relax_mesh_culling(code) && code[5]==0xF0);
-    VirtualFree(code,0,MEM_RELEASE);
     IDirectDrawSurface7Vtbl surface_vt={.Release=release_surface,.Lock=lock_surface,
         .Unlock=unlock_surface,.GetColorKey=no_color_key};
     IDirect3DDevice7Vtbl device_vt={.GetTexture=get_texture,.GetRenderTarget=no_render_target,

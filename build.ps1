@@ -21,6 +21,10 @@ if ($LASTEXITCODE) { throw 'Lighting test failed.' }
 if ($LASTEXITCODE) { throw 'Math test build failed.' }
 & "$out\test_math.exe"
 if ($LASTEXITCODE) { throw 'Math test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_capture_visibility.exe" "$root\tests\test_capture_visibility.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Capture visibility test build failed.' }
+& "$out\test_capture_visibility.exe"
+if ($LASTEXITCODE) { throw 'Capture visibility test failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_texture_cache.exe" "$root\tests\test_texture_cache.c" -ldxguid -luser32 -lkernel32
 if ($LASTEXITCODE) { throw 'Texture cache test build failed.' }
 & "$out\test_texture_cache.exe"

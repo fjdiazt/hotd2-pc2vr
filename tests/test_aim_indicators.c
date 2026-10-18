@@ -15,7 +15,7 @@ int main(void)
     assert(readBrightness(ini,&brightness) && brightness==80);
     assert(WritePrivateProfileStringA("vr","brightness","bad",ini));
     assert(!readBrightness(ini,&brightness));
-    readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting);
+    readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting && g_cfgExpandMeshes && !g_cfgExpandWorld);
     assert(WritePrivateProfileStringA("vr","laser","0",ini));
     readGraphicsFlags(ini);assert(!g_cfgLaser && g_cfgCrosshair);
     assert(WritePrivateProfileStringA("vr","laser","1",ini));
@@ -27,6 +27,9 @@ int main(void)
     readGraphicsFlags(ini);assert(!g_cfgNativeLighting);
     assert(WritePrivateProfileStringA("vr","native_lighting","1",ini));
     readGraphicsFlags(ini);assert(g_cfgNativeLighting);
+    assert(WritePrivateProfileStringA("vr","expand_meshes","0",ini));
+    assert(WritePrivateProfileStringA("vr","expand_world","1",ini));
+    readGraphicsFlags(ini);assert(!g_cfgExpandMeshes && g_cfgExpandWorld);
     assert(DeleteFileA(ini));
 
     char *light_off[]={"viewer","--native-lighting","--no-native-lighting","--stop-before-bridge"};
@@ -43,6 +46,12 @@ int main(void)
     assert(parseBrightness("400",&brightness) && brightness==400);
     char *missing[]={"viewer","--brightness"};
     assert(viewer_application_main(2,missing)==2);
+    char *wide[]={"viewer","--no-expand-meshes","--expand-world","--stop-before-bridge"};
+    char *native[]={"viewer","--expand-world","--no-expand-world","--expand-meshes","--no-expand-meshes","--stop-before-bridge"};
+    char *default_mesh[]={"viewer","--no-expand-meshes","--expand-meshes","--no-expand-world","--stop-before-bridge"};
+    assert(viewer_application_main(4,wide)==2 && !g_cfgExpandMeshes && g_cfgExpandWorld);
+    assert(viewer_application_main(6,native)==2 && !g_cfgExpandMeshes && !g_cfgExpandWorld);
+    assert(viewer_application_main(5,default_mesh)==2 && g_cfgExpandMeshes && !g_cfgExpandWorld);
     const float aim[3]={0},hit[3]={.5f,0,-2};
     char *off[]={"viewer","--no-laser","--no-crosshair","--stop-before-bridge"};
     assert(viewer_application_main(4,off)==2);
