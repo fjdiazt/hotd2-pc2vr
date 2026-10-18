@@ -186,6 +186,7 @@ static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
 static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_vrMenuEnabled;
 static int g_cfgSwapPlayerHud=1;
+static int g_cfgContinueGame,g_cfgContinueEdited;
 static int g_cfgBrightness = 90;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
@@ -294,6 +295,7 @@ static void loadCfg(void)
     lstrcpyA(path + n, "HOTD2VR.ini");
     readGraphicsFlags(path);
     g_vrMenuEnabled=GetPrivateProfileIntA("vr","menu",1,path)!=0;
+    g_cfgContinueGame=GetPrivateProfileIntA("vr","continue_game",0,path)!=0;
     g_cheatFlags=readCheats(path);
     g_cfgMasterVolume=readAudioVolume(path,"master_volume");
     g_cfgMusicVolume=readAudioVolume(path,"music_volume");
@@ -393,6 +395,7 @@ static void pushCheats(void)
     g_frame->rapid_fire_rate=g_cfgRapidRate;
     g_frame->audio_levels=hotd_pack_audio(g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
     g_frame->cheat_flags=g_cheatFlags;
+    if(g_cfgContinueEdited)g_frame->checkpoint_autosave=g_cfgContinueGame?2:1;
     MemoryBarrier();
     g_frame->cheat_tick=GetTickCount();
 }
@@ -3774,6 +3777,7 @@ static int openDesktopPreview(DesktopPreview *preview,const char *command)
 
 int main(int argc, char **argv)
 {
+
     int stereo = 0, seconds = 0, i;
     DesktopPreview preview={0};
     g_previewOnly=0;
@@ -3832,7 +3836,6 @@ int main(int argc, char **argv)
         note("Settings menu disabled: menu-font.rgba missing or invalid. Run Start-HOTD2.ps1 to generate it.\n");
         g_vrMenuEnabled=0;
     }
-    vrMenuInit();
     note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
     note("Player HUD: swap=%d (akimbo=%d)\n",g_cfgSwapPlayerHud,g_cfgAkimbo);
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
@@ -3844,6 +3847,7 @@ int main(int argc, char **argv)
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
     for (i = 0; i < 100 && !openShare(); i++) Sleep(100);
     if (!g_frame) { note("No HOTD2 bridge. Start through Start-HOTD2.ps1.\n"); return 1; }
+    vrMenuInit();
     if (seconds > 0) g_stopAt = GetTickCount() + (DWORD)seconds*1000;
     note("Bridge connected; input profile %s\n", g_frame->input_supported ? "verified" : "unavailable");
     pushCheats();

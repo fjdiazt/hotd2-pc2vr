@@ -384,3 +384,77 @@ Protocol 18 integrates four groups in unused vertex address bits 9..11 with the 
 The viewer applies `[vr] swap_player_hud=1` independently of akimbo, translating each complete ammo/lives row so its bounding-box center moves to the opposite side of the existing HUD canvas. Vertex order, UVs, relative spacing, digits, Y/depth and materials remain intact. Labels, Original weapon numbers and reload prompts are part of their native row. Rows right/left align as their width changes; no texture filtering or removal is added. Source/shared vertices and native desktop rendering are untouched. Framebuffer panels still show native layout. Controller mapping remains right P1 / left P2.
 
 The pre-change snapshot-reader regression fails at the opposite-side assertion. Focused native tests cover both player/task kinds, immediate/deferred capture, original-call/return preservation, aliases, mutation, invalid players, unsupported profiles and frame cleanup. Viewer tests cover flag/akimbo combinations, both players/groups, repeated snapshots, 1/1.25/2x world scales, stable materials/depth, retained captions/world/book/unknown groups and INI/CLI overrides. The user confirmed akimbo placement in the headset. The follow-up regression requires swapping with either akimbo value and fails against the previous akimbo-gated implementation. Non-akimbo runtime placement, transitions and authored HUD variants still need confirmation. Main integration rebuilds the matched protocol-18 bridge/viewer and preserves the newer control mapping. Full build/offline/GPU checks pass in `build/hud-merge-build.log`; the combined build has not been relaunched in VR.
+
+## Experimental Arcade scene checkpoints
+
+The `feat/stage-checkpoints` worktree adds CLI-only starting stage/scene selection and opt-in `[vr] continue_game=1` recording/resume. The launcher passes explicit overrides to the injected child through private environment variables, clearing inherited values when absent. The initial stage/resume path required no shared-frame layout change; manual requests below add protocol 19. Original, Training, Boss and demos retain their native entry paths. Recording saves only stage and scene, not exact script position, variant, player state or route history. A new Arcade start after the menus selects the requested/saved scene; it does not load a full save state.
+
+Three native CALL sites are validated before patching: `Game6_Start` table loading at `0x45FF0A` (original target `0x413160`), stage initialization at `0x45FFD4` (`0x460030`), and root event initialization at `0x460710` (`0x45EBC0`). Wrappers preserve native calls and stage-start arguments. The selected table is loaded before its resources initialize. Scene lists are bounded and checked through the relocated event tables, including the Arcade variant-1 entry, before use. A rejected scene falls back to native chapter 1. Chapter entrances use `{0,0,7,0,0,0}` for chapters 1..6.
+
+An initial chapter-1 scene-3 desktop test reached the right scene and emitted geometry, but the user observed characters without the world. Its gameplay variant 1 assumes earlier setup. Native scene variant 0 begins with section-6 preload, request flush and section switch (`0x28`, `0x59`, `0x29`), plus environment/resource setup. For explicit/resumed mid-scene entries, the event-init wrapper now selects that native setup variant when available, leaving its ordinary transition to variant 1 intact. Chapter entrances keep native variant selection. The user confirmed the subsequent scene-3 test restored the visible world. This is scene-specific confirmation, not complete scene compatibility.
+
+`HOTD2VR.checkpoint.ini` lives beside the injected bridge and contains `[checkpoint] version=1`, one-based stage and zero-based scene. Active Arcade gameplay (mode 6/sub-state 2, active player) records only changed locations, after frame publication releases the seqlock. A flushed temporary file replaces the previous checkpoint atomically; failures preserve the prior file and retry after five seconds. Default-off configuration installs no scene-entry hooks and makes no automatic checkpoint writes; manual saving is handled separately below. Direct CLI overrides win over saved location; disabling resume/recording preserves the file. Existing native saves and executable bytes are not patched on disk.
+
+Offline tests cover strict CLI/file parsing, defaults and precedence, stale environment clearing, all chapter entrances, native callback preservation, variant-0 bootstrapping, script/pointer bounds, signature rejection before any call changes, non-Arcade guards, inactive/menu/continue guards, location-change-only writes, failed replacement retention and retry. PowerShell forwarding/validation is exercised through non-launching executable shims; startup options reach the injector rather than the viewer. Full build/offline/GPU verification is recorded in `build/checkpoint-build.log`.
+
+Owned windowed native tests use all five convenience cheats at 10 shots/sec, with no VR viewer. Artifacts are `build/checkpoint-*.json` and matching logs. Cases reached chapter 6/scene 0 and resumed it across process restart, honored a chapter-2 CLI override with recording disabled and unchanged saved file, retained normal chapter-1 startup, entered chapter 3/scene 7, and rejected chapter 6/scene 255 back to chapter 1. The corrected chapter-1/scene-3 case loads section 6, records the location, and resumes it on a new process using only the INI toggle. One attempted launch was refused by the existing shared-mapping guard; later tests waited for the old mapping to disappear. No VR launch was performed. All scenes, route prerequisites, later-stage objects, measured disk-write frame impact and exact-state restoration remain unverified.
+
+## On-demand checkpoint hook
+
+Protocol 19 appends five 32-bit fields at byte 87,385,016: `checkpoint_request`, `checkpoint_response`, `checkpoint_result`, `checkpoint_stage` and `checkpoint_scene`. Frame size becomes 87,385,036; previous offsets remain unchanged. A future caller serializes save requests, increments `checkpoint_request`, and waits until `checkpoint_response` equals that request ID. The bridge handles it on the game thread after releasing frame publication's seqlock. It publishes result/location before acknowledging the request. Results are `HOTD_SAVE_OK`, `HOTD_SAVE_UNAVAILABLE` or `HOTD_SAVE_IO_ERROR`. The manual path works independently of automatic recording or scene-entry hooks, including while native gameplay is paused.
+
+The bridge request handler remains the only production on-demand save entry point. Initial viewer/PowerShell CLI adapters were used for testing, then removed at the user's request: the intended deliverable is the bridge hook for future callers. No save CLI, UI, menu, controller binding, live load or scene jump is added. Calls from a read-only preview must use a separate writable connection rather than writing its read-only mapping. A caller timeout must not claim success; an already submitted request can still complete later.
+
+The bridge validates active Arcade mode/sub-state, player activity and scene-script availability before saving. It writes the same atomic checkpoint file, updates its last-saved location on success, and acknowledges unavailable scenes and I/O failures without replacing the previous checkpoint. If automatic recording remains enabled, future scene changes can overwrite a manual save. The file still contains only stage/scene; full game-state restoration is not implemented.
+
+Full build/offline/GPU checks passed before adapter removal (`build/manual-checkpoint-build.log`); the hook-only rebuild is recorded in `build/checkpoint-hook-only-build.log`. Retained native callback/file regressions cover manual saving with automatic recording and scene hooks disabled, pause eligibility, unavailable/menu requests, preservation on failed writes, acknowledgments and no duplicate service of the same request. Temporary viewer/PowerShell adapter tests were removed with those adapters; bridge behavior and its protocol remain unchanged.
+
+After user authorization to close the separate vr-menu session, owned desktop-only tests rejected save requests at the title/menu without altering the old file, then successfully saved chapter 1/scene 4 while paused with autosave off. Native logs confirm section 7 and the manual save acknowledgment (`build/checkpoint-manual.log` / `.json`). A second default-start case, with no scene-entry hooks and autosave off, saved chapter 1/scene 0 (`build/checkpoint-manual-default.log` / `.json`). Both used all convenience cheats at 10 shots/sec and closed their owned game afterward. No VR launch occurred for this addition; headset regression, all scene prerequisites and measured write latency remain unverified.
+
+
+## Runtime Save game and Load game integration
+
+Protocol 20 extends the protocol-19 foundation with `checkpoint_action` at offset
+87,385,036 and heartbeat-owned `checkpoint_autosave` at 87,385,040. Frame size is
+87,385,044. All previous offsets stay unchanged. Actions are Save (0), Load (1)
+and New game (2). Results additionally include invalid destination (4) and load
+initialization failure (5). The existing settings panel invokes this hook;
+there is no save CLI. Autosave updates through the existing heartbeat, with
+startup/CLI configuration restored after heartbeat expiry.
+
+Loads preflight the saved destination against bounded native `comevtbl.bin` and
+`stNevtbl.bin` files using the native pointer relocation. Before mutating game
+state, each scene/variant/script pointer must be aligned, in a loaded file's
+bounds and lead to an advancing Arcade opcode. This checks structural validity,
+not dependencies on earlier scripts, actors or route state.
+
+The bridge queues native mode request 6 at `0x7C17A0`; `Game_ApplyState`
+(`0x40E860`) performs task/resource cleanup and resets the mode/sub-state before
+normal `Game6_Start` initialization. The existing scene-entry hooks prioritize
+the pending Load/New target over CLI/auto-resume. New game selects chapter 1,
+scene 0. Existing players restart in their native joining state; title/menu
+loads choose P1, or both with akimbo. Paused loads request the existing native
+pause predicate so the native pause routine resumes audio/resources itself.
+No direct task teardown or pause-flag assignment is used.
+
+Load ACK requires destination root initialization, active Arcade sub-state 2,
+and matching stage/scene. Until then autosave is suppressed. Bridge timeout is
+30 seconds; viewer timeout is 45 seconds and cannot release an outstanding
+request. Invalid-file rejection occurs before native state changes. Later native
+initialization failure cannot promise restoration of the previous scene.
+
+Native desktop smoke tests passed paused Save/Load at chapter 1 scene 4,
+cross-chapter Load to chapter 2 scene 0, New game despite explicit startup scene,
+title-screen Load with autosave off, live Autosave on/off and invalid scene 255
+rejection. Tests restore the save and leave the personal INI unchanged. Build,
+controller/menu regression and WARP rendering checks passed. Headset UI/load
+integration and full scene prerequisites remain unverified.
+
+
+Protocol 21 adds read-only current stage/scene at offsets 87,385,044/48 and
+saved stage/scene at 87,385,052/56; size 87,385,060. Stage zero marks unavailable.
+The bridge publishes these fields under the existing frame seqlock. Saved-file
+reads occur outside publication, once per second or after a successful write;
+current location comes from the same Arcade guard as Save. The viewer displays
+the selected Save/Load destination before confirmation, without issuing RPCs,
+changing the game, or reading native game addresses. User confirmed the pre-selection Save/Load captions in VR at stage 3, scene 11. Full scene prerequisite coverage remains unverified.

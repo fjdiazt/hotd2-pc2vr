@@ -30,7 +30,11 @@ param(
     [switch]$Crosshair,
     [switch]$NoCrosshair,
     [switch]$SwapPlayerHud,
-    [switch]$NoSwapPlayerHud
+    [switch]$NoSwapPlayerHud,
+    [int]$StartStage,
+    [int]$StartScene,
+    [switch]$ContinueGame,
+    [switch]$NoContinueGame
 )
 $ErrorActionPreference = 'Stop'
 if ($Window -and $NoWindow) { throw 'Choose either -Window or -NoWindow.' }
@@ -42,6 +46,10 @@ if ($NativeLighting -and $NoNativeLighting) { throw 'Choose either -NativeLighti
 if ($Laser -and $NoLaser) { throw 'Choose either -Laser or -NoLaser.' }
 if ($Crosshair -and $NoCrosshair) { throw 'Choose either -Crosshair or -NoCrosshair.' }
 if ($SwapPlayerHud -and $NoSwapPlayerHud) { throw 'Choose either -SwapPlayerHud or -NoSwapPlayerHud.' }
+if ($ContinueGame -and $NoContinueGame) { throw 'Choose either -ContinueGame or -NoContinueGame.' }
+if ($PSBoundParameters.ContainsKey('StartStage') -and ($StartStage -lt 1 -or $StartStage -gt 6)) { throw "Invalid stage $StartStage" }
+if ($PSBoundParameters.ContainsKey('StartScene') -and ($StartScene -lt 0 -or $StartScene -gt 255)) { throw "Invalid scene $StartScene" }
+if ($PSBoundParameters.ContainsKey('StartScene') -and !$PSBoundParameters.ContainsKey('StartStage')) { throw '-StartScene requires -StartStage.' }
 $out = Join-Path $PSScriptRoot 'build'
 if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
@@ -53,6 +61,10 @@ if (!(Test-Path "$out\menu-font.rgba")) {
 $launchArgs = @($GameExe)
 if ($SkipSplash) { $launchArgs += '--skip-splash' }
 if ($ShowSplash) { $launchArgs += '--show-splash' }
+if ($PSBoundParameters.ContainsKey('StartStage')) { $launchArgs += '--start-stage', "$StartStage" }
+if ($PSBoundParameters.ContainsKey('StartScene')) { $launchArgs += '--start-scene', "$StartScene" }
+if ($ContinueGame) { $launchArgs += '--continue-game' }
+if ($NoContinueGame) { $launchArgs += '--no-continue-game' }
 & "$out\HOTD2Launch.exe" @launchArgs
 if ($LASTEXITCODE) { throw 'Game injection failed.' }
 $viewerArgs = @()

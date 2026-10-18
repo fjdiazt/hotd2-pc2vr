@@ -41,11 +41,51 @@ int main(void)
     assert(vrMenuControl(MENU_TOGGLE)==1 && g_vrMenuOpen);
     assert(vrMenuControl(0)==1);
     press(VC2_BTN_PAUSE);press(VC2_BTN_BACK);assert(g_vrMenuOpen && g_vrMenuPage==-1);
+    /* First two entries call the bridge, show progress, and report only acknowledged results. */
+    assert(!strcmp(vrMenuRootLabels[0],"SAVE GAME") && !strcmp(vrMenuRootLabels[1],"LOAD GAME"));
+    g_previewOnly=1;press(VC2_BTN_START);assert(!g_frame->checkpoint_request);g_previewOnly=0;
+    press(VC2_BTN_START);assert(g_frame->checkpoint_request==1 && g_vrMenuRequest==1);
+    assert(!strcmp(g_vrMenuStatus,"SAVING GAME") && !g_cfgContinueGame);
+    press(VC2_BTN_START);assert(g_frame->checkpoint_request==1); /* No duplicate outstanding command. */
+    g_frame->checkpoint_result=HOTD_SAVE_OK;g_frame->checkpoint_stage=1;g_frame->checkpoint_scene=4;
+    g_frame->checkpoint_response=1;vrMenuCheckpointPoll();
+    assert(!g_vrMenuRequest && !strcmp(g_vrMenuStatus,"SAVED A PRELUDE SCENE 4"));
+    press(VC2_BTN_DOWN);press(VC2_BTN_START);
+    assert(g_frame->checkpoint_action==HOTD_CHECKPOINT_LOAD && !strcmp(g_vrMenuStatus,"LOADING GAME"));
+    g_frame->checkpoint_result=HOTD_SAVE_INVALID;g_frame->checkpoint_response=2;vrMenuCheckpointPoll();
+    assert(!strcmp(g_vrMenuStatus,"NO VALID SAVED GAME"));
+    press(VC2_BTN_START);g_frame->checkpoint_result=HOTD_SAVE_OK;g_frame->checkpoint_stage=2;g_frame->checkpoint_scene=8;
+    g_frame->checkpoint_response=3;vrMenuCheckpointPoll();assert(!strcmp(g_vrMenuStatus,"LOADED MUDDY SCENE 8"));
+    press(VC2_BTN_START);g_vrMenuRequestTick=GetTickCount()-45001;vrMenuCheckpointPoll();
+    assert(!g_vrMenuRequest && strstr(g_vrMenuStatus,"UNKNOWN"));
+    press(VC2_BTN_START);assert(g_frame->checkpoint_request==4); /* Timeout cannot release bridge ownership. */
+    g_frame->checkpoint_response=4;g_vrMenuRow=0;g_vrMenuError=NULL;g_vrMenuStatus[0]=0;
+    /* Autosave updates heartbeat live; configuration persists through existing atomic save. */
+    vrMenuChange(&vrMenuItems[5][6],1);
+    assert(g_cfgContinueGame && g_frame->checkpoint_autosave==2 && g_cfgContinueEdited);
+    assert(GetPrivateProfileIntA("vr","continue_game",-1,g_vrIniPath)==-1);
     int font=vrMenuLoadFont();if(font)image("build/menu-root.bmp");
+    /* Pre-action captions show current Save location and independent saved Load destination. */
+    g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=7;
+    g_frame->checkpoint_saved_stage=2;g_frame->checkpoint_saved_scene=8;
+    vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"SAVE STAGE 3 DARKNESS SCENE 7"));
+    if(font)image("build/menu-save-destination.bmp");
+    g_vrMenuRow=MENU_LOAD_GAME;vrMenuDestination();
+    assert(!strcmp(g_vrMenuDestination,"LOAD STAGE 2 MUDDY SCENE 8"));
+    if(font)image("build/menu-load-destination.bmp");
+    g_frame->checkpoint_saved_stage=0;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"NO SAVED GAME"));
+    g_vrMenuRow=MENU_SAVE_GAME;g_frame->checkpoint_current_stage=0;vrMenuDestination();
+    assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
+    g_frame->checkpoint_current_stage=9;vrMenuDestination();assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
+    g_frame->seq=1;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"WAITING FOR GAME LOCATION"));
+    g_frame->seq=2;g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=9;
+    g_vrMenuDirty=0;vrMenuDestination();assert(g_vrMenuDirty && strstr(g_vrMenuDestination,"SCENE 9"));
+    assert(g_frame->checkpoint_request==4 && g_frame->checkpoint_response==4);
     vrMenuCanvas();assert(g_vrMenuPixels[479][639]==0x8017191D);
     vrMenuRect(0,0,32,32,0x80FFFFFF);
     memset(g_vrMenuFont['?'][0][0],255,4);g_vrMenuFont['?'][0][0][3]=128;
     vrMenuText(0,0,"?",1,0xFFFFFFFF);assert(g_vrMenuPixels[0][0]==0xC0FFFFFF);
+    for(int i=0;i<MENU_GROUP_FIRST;i++)press(VC2_BTN_DOWN);
     press(VC2_BTN_START);assert(g_vrMenuPage==0);
     int original=vrMenuItems[0][0].value;
     press(VC2_BTN_RIGHT);assert(vrMenuItems[0][0].value==original+5 && g_cfgWorldScale==1.30f);
@@ -81,6 +121,7 @@ int main(void)
     CloseHandle(lock);assert(vrMenuControl(0)==1);
     assert(vrMenuControl(MENU_TOGGLE)==1 && !g_vrMenuOpen && g_nativePaused);
     assert(GetPrivateProfileIntA("vr","master_volume",0,g_vrIniPath)==95);
+    assert(GetPrivateProfileIntA("vr","continue_game",0,g_vrIniPath)==1);
     assert(GetPrivateProfileIntA("vr","msaa",0,g_vrIniPath)==8 && g_cfgMsaa==msaa);
     assert(GetPrivateProfileIntA("bridge","skip_splash",1,g_vrIniPath)==0);
     assert(GetPrivateProfileIntA("vr","laser",0,g_vrIniPath)==1);
@@ -129,13 +170,13 @@ int main(void)
     assert(vrMenuSet(&vrMenuItems[0][0],200));
     assert(vrMenuSet(&vrMenuItems[0][7],0) && !g_cfgSwapPlayerHud);
     assert(vrMenuSet(&vrMenuItems[4][0],1));
-    g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=5;
+    g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=MENU_RESET-1;
     g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;g_nativePaused=1;
-    press(VC2_BTN_DOWN);assert(g_vrMenuRow==6 && !strcmp(vrMenuGroups[6],"RESET DEFAULTS"));
+    press(VC2_BTN_DOWN);assert(g_vrMenuRow==MENU_RESET && !strcmp(vrMenuRootLabels[MENU_RESET],"RESET DEFAULTS"));
     g_previewOnly=1;press(VC2_BTN_START);
     assert(g_cfgWorldScale==2 && g_cheatFlags==HOTD_CHEAT_AMMO && !g_vrMenuResetPending);
     g_previewOnly=0;press(VC2_BTN_START);
-    assert(g_vrMenuPage==-1 && g_vrMenuRow==6 && g_vrMenuOpen && g_nativePaused);
+    assert(g_vrMenuPage==-1 && g_vrMenuRow==MENU_RESET && g_vrMenuOpen && g_nativePaused);
     assert(g_vrMenuResetPending && g_cfgWorldScale==1.25f && g_cfgBrightness==90 && g_cfgGamma==220);
     assert(g_cfgSwapPlayerHud);
     assert(!g_cheatFlags && !g_frame->cheat_flags && g_frame->audio_levels==hotd_pack_audio(100,100,100));
@@ -164,9 +205,9 @@ int main(void)
     HWND gameWindow=CreateWindowExA(0,"STATIC","Menu quit fixture",WS_POPUP,0,0,1,1,NULL,NULL,GetModuleHandleA(NULL),NULL);
     assert(gameWindow);
     MSG message;
-    g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=6;
+    g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=MENU_QUIT-1;
     g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;
-    press(VC2_BTN_DOWN);assert(g_vrMenuRow==7 && !strcmp(vrMenuGroups[7],"QUIT GAME"));
+    press(VC2_BTN_DOWN);assert(g_vrMenuRow==MENU_QUIT && !strcmp(vrMenuRootLabels[MENU_QUIT],"QUIT GAME"));
     if(font)image("build/menu-quit-game.bmp");
     g_frame->game_hwnd=(DWORD)(ULONG_PTR)gameWindow;g_frame->game_pid=GetCurrentProcessId();
     g_previewOnly=1;press(VC2_BTN_START);g_previewOnly=0;

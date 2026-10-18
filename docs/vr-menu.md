@@ -81,7 +81,7 @@ success does not establish headset readability or comfort.
 
 ## Settings wiring
 
-The viewer presents 46 existing numeric/boolean options
+The viewer presents 47 numeric/boolean options
 from its effective launch configuration, grouped and paginated. Live options
 update their existing variables/heartbeat; brightness/gamma swap their three
 affected pixel shaders as one successful set. Resource/startup settings stage
@@ -94,7 +94,7 @@ atomic replacement preserve the current file and produce a timestamped backup.
 An unchanged panel never writes; unrelated CLI overrides never become INI edits.
 Save failure retains pending values and prevents an explicit close so
 the user can retry. Normal viewer exit also attempts pending saves. Companion previews cannot
-edit or save. No new native hooks or shared-memory protocol changes were added.
+edit or save. Initial settings wiring added no native hooks or protocol changes; Save/Load integration below extends the checkpoint bridge protocol.
 
 The user then requested an independent left-stick-click toggle instead of main
 menu or pause integration. The panel starts closed. Left stick click (left
@@ -125,5 +125,59 @@ no additional hook or process termination is involved. A live desktop test
 selected the new row and verified both native game and viewer exited normally,
 with cheats off and an unedited mod INI unchanged.
 
-Main integration retains protocol 18 and the independent player-HUD swap.
+Initial main integration retained protocol 18 and the independent player-HUD swap.
 Swap player HUD is available live in Display and included in Reset Defaults.
+
+## Save and Load integration
+
+Root entries start with Save game, Load game and New game, followed by existing
+settings groups, Reset Defaults and Quit Game. Root pages eight entries; settings
+groups page six. Advanced adds live Autosave (`continue_game`), persisted on close
+with existing atomic INI backups. Opening settings reflects the effective startup
+CLI value and never changes it.
+
+Save works during active or paused Arcade gameplay, independently of Autosave.
+Load also works from title/menu and restarts the saved Arcade scene. New game
+starts chapter 1, scene 0 without deleting the save. Enabled Autosave can later
+replace that slot. Existing players remain joined; menu loads start P1, or both
+when akimbo is enabled. Controller/player assignments stay unchanged.
+
+Progress captions resolve to acknowledged chapter/scene or an error and clear on
+navigation. The viewer serializes and polls requests without blocking rendering.
+Only a successful disk write reports Saved; only destination root/scene activation
+reports Loaded. A 45-second viewer timeout reports an unknown result and retains
+bridge ownership until acknowledgment. Companion previews cannot issue commands.
+
+Protocol 20 appends an action and heartbeat-owned Autosave override to protocol
+19's acknowledged save request. The bridge validates destination scripts against
+bounded native event files before changing the game, then queues the native mode
+transition for task/resource cleanup and reuses fresh Arcade/variant-0 setup.
+Paused loads use the native pause predicate/routine, preserving its sound handling.
+Initialization failure times out after 30 seconds. This restarts a scene; actor,
+script, player, route and exact moment state are not restored.
+
+Native desktop smoke tests exercise paused Save/Load, cross-chapter Load, New game,
+title/menu Load, live Autosave and invalid-scene rejection. They restore the old
+save and leave personal INI bytes unchanged. Run explicitly after a build, with
+no other game/viewer session running:
+
+```powershell
+python tests/test_checkpoint_runtime.py 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe'
+```
+
+No VR launch occurs. Headset menu integration and full scene prerequisites still
+need runtime confirmation.
+
+
+Before selecting Save game, the caption shows the live current stage, chapter
+name and scene, for example SAVE STAGE 3 DARKNESS SCENE 7. Load game shows the
+saved destination instead. The bridge publishes both read-only locations under
+the frame seqlock (protocol 21); inspecting captions never submits commands or
+writes saves. No active Arcade game and missing/invalid-format save files get
+explicit unavailable captions. Saved-file metadata refreshes at most once per
+second and immediately after bridge saves, with disk reads outside the seqlock.
+Current-location previews are suppressed during a pending native transition.
+
+User confirmed both pre-selection destination captions in-headset at stage 3,
+scene 11. The combined protocol-21 bridge also passed native desktop Save/Load,
+Autosave, destination-metadata and scene-restart regression tests.

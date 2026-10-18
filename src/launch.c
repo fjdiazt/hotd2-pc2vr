@@ -8,12 +8,17 @@
 #include <stdio.h>
 #include <string.h>
 #include <wchar.h>
+#include "checkpoint.h"
 
-typedef struct { int wait,native_window,skip_splash; } LaunchOptions;
+typedef struct {
+    int wait,native_window,skip_splash,start_stage,start_scene,continue_game;
+    const wchar_t *invalid_kind,*invalid_value;
+} LaunchOptions;
 
 static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOptions *options)
 {
     memset(options,0,sizeof(*options));
+    options->start_scene=options->continue_game=-1;
     options->skip_splash=GetPrivateProfileIntW(L"bridge",L"skip_splash",1,ini)!=0;
     if(argc<2)return 0;
     for(int i=2;i<argc;i++) {
@@ -21,9 +26,36 @@ static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOp
         else if(!wcscmp(argv[i],L"--native-window"))options->native_window=1;
         else if(!wcscmp(argv[i],L"--skip-splash"))options->skip_splash=1;
         else if(!wcscmp(argv[i],L"--show-splash"))options->skip_splash=0;
+        else if(!wcscmp(argv[i],L"--continue-game"))options->continue_game=1;
+        else if(!wcscmp(argv[i],L"--no-continue-game"))options->continue_game=0;
+        else if(!wcscmp(argv[i],L"--start-stage")) {
+            const wchar_t *value=++i<argc?argv[i]:NULL;
+            if(!hotd_checkpoint_number(value,1,6,&options->start_stage)) {
+                options->invalid_kind=L"stage";options->invalid_value=value;return 0;
+            }
+        }
+        else if(!wcscmp(argv[i],L"--start-scene")) {
+            const wchar_t *value=++i<argc?argv[i]:NULL;
+            if(!hotd_checkpoint_number(value,0,HOTD_CHECKPOINT_MAX_SCENE,&options->start_scene)) {
+                options->invalid_kind=L"scene";options->invalid_value=value;return 0;
+            }
+        }
         else return 0;
     }
-    return 1;
+    return !(options->start_scene>=0 && !options->start_stage) &&
+        !(options->native_window && (options->start_stage || options->continue_game==1));
+}
+
+static BOOL setCheckpointEnvironment(const LaunchOptions *options)
+{
+    const wchar_t *keys[]={L"HOTD2VR_START_STAGE",L"HOTD2VR_START_SCENE",L"HOTD2VR_CONTINUE_GAME"};
+    int values[]={options->start_stage?options->start_stage:-1,options->start_scene,options->continue_game};
+    wchar_t text[16];
+    for(unsigned i=0;i<3;i++) {
+        if(values[i]>=0)swprintf(text,16,L"%d",values[i]);
+        if(!SetEnvironmentVariableW(keys[i],values[i]>=0?text:NULL))return FALSE;
+    }
+    return TRUE;
 }
 
 static BOOL skipSplash(HANDLE process,BYTE *base)
@@ -57,7 +89,11 @@ int wmain(int argc,wchar_t **argv)
     slash=wcsrchr(ini,L'\\');if(!slash || slash-ini>MAX_PATH-14)return 2;
     wcscpy(slash+1,L"HOTD2VR.ini");
     if(!readLaunchOptions(argc,argv,ini,&options)) {
-        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--wait] [--native-window] [--skip-splash | --show-splash]\n");return 2;
+        if(options.invalid_kind) {
+            fwprintf(stderr,L"Invalid %ls%ls%ls\n",options.invalid_kind,
+                options.invalid_value?L" ":L"",options.invalid_value?options.invalid_value:L"");return 2;
+        }
+        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--wait] [--native-window] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
     }
     native_window=options.native_window;
     module=GetFullPathNameW(argv[1],MAX_PATH,game,NULL);
@@ -81,6 +117,7 @@ int wmain(int argc,wchar_t **argv)
     wcscpy(slash+1,L"HOTD2Bridge.dll");
     if(!native_window && GetFileAttributesW(dll)==INVALID_FILE_ATTRIBUTES){fwprintf(stderr,L"HOTD2Bridge.dll missing.\n");return 2;}
     module=0;
+    if(!setCheckpointEnvironment(&options))goto cleanup;
     swprintf(command,MAX_PATH+4,L"\"%ls\"",game);startup.cb=sizeof(startup);
     if(!CreateProcessW(game,command,NULL,NULL,FALSE,CREATE_SUSPENDED,NULL,dir,&startup,&process))goto cleanup;
     if(options.skip_splash && !skipSplash(process.hProcess,(BYTE *)0x400000))goto cleanup;

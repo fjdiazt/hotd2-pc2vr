@@ -28,7 +28,7 @@ Desktop replay verification:
 
 ## Separate Start and Pause input
 
-Integrated protocol 18 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside audio, briefing-book metadata and player-HUD ownership. Current bindings:
+Integrated protocol 21 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside audio, briefing-book metadata, player-HUD ownership and acknowledged manual-checkpoint requests. Current bindings:
 
 - Trigger: Fire and Start/confirm; existing tilted-gun reload gesture remains.
 - A/X: Start/confirm and Pause/resume.
@@ -57,6 +57,10 @@ Verification in the `feat/input-mapping` worktree:
 
 Latest physical controller mapping, complete menu coverage and Original-mode item weapons still need runtime acceptance. Offline/native desktop results do not establish headset acceptance.
 
-Merge preparation: main's head-relative reload gestures, audio, native cheat-off override, confirmed-shot rumble and desktop pause replay are retained. The combined mapping and player-HUD ownership use protocol 18, rejecting the incompatible protocol-17 builds from the separate branches. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.
+Merge preparation: main's head-relative reload gestures, audio, native cheat-off override, confirmed-shot rumble and desktop pause replay are retained. The combined mapping, player-HUD ownership and manual-checkpoint requests use protocol 21, rejecting earlier bridge/viewer versions. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.
 
 The combined full build and offline suite passed (`build/merge-main-final-build.log`), including input separation, head-relative gestures, shot-feedback routing, audio, retained desktop pause and output modes. No game or headset session was launched for merge validation.
+
+Save/Load integration uses the native pause predicate to resume before a queued
+native mode restart. Destination initialization acknowledgment, timeouts and
+validation are documented in [vr-menu.md](vr-menu.md).
