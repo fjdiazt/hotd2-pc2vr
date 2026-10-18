@@ -28,7 +28,7 @@ Desktop replay verification:
 
 ## Separate Start and Pause input
 
-Integrated protocol 16 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside main's audio and briefing-book metadata. Current bindings:
+Integrated protocol 17 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside main's audio and briefing-book metadata. Current bindings:
 
 - Trigger: Fire and Start/confirm; existing tilted-gun reload gesture remains.
 - A/X: Start/confirm and Pause/resume.
@@ -43,7 +43,7 @@ The native pause-input predicate at `0x40E9C0` has one direct caller, the unchan
 
 Normal and Original weapon reload reads at `0x414A9A` and `0x414DD0` now read a separate input word. Both original instruction signatures are checked before changing either operand. Each native input poll copies physical/native input into that word, excludes synthetic Cancel and adds keyboard-profile Reload presses there. Gun profiles retain their native offscreen-trigger reload path. Skip readers at `0x414AF7` and `0x414E0E`, menu consumers, reload routines and native eligibility checks remain unchanged. Physical Ctrl is preserved, including simultaneous Ctrl and VR Cancel. No menu classifier or direct ammo/event-state writes are used.
 
-Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases overrides. Original game files remain unchanged; restart without this bridge to remove the in-memory input changes. Protocol 16 prevents older viewers from sending the former combined Reload/Cancel mapping.
+Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases overrides. Original game files remain unchanged; restart without this bridge to remove the in-memory input changes. Protocol 17 prevents older viewers from sending the former combined Reload/Cancel mapping.
 
 Verification in the `feat/input-mapping` worktree:
 
@@ -57,4 +57,6 @@ Verification in the `feat/input-mapping` worktree:
 
 Latest physical controller mapping, complete menu coverage and Original-mode item weapons still need runtime acceptance. Offline/native desktop results do not establish headset acceptance.
 
-Merge preparation: main's head-relative reload gestures, audio, native cheat-off override and desktop pause replay are retained. The combined mapping uses protocol 16. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.
+Merge preparation: main's head-relative reload gestures, audio, native cheat-off override, confirmed-shot rumble and desktop pause replay are retained. The combined mapping uses protocol 17. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.
+
+The combined full build and offline suite passed (`build/merge-main-final-build.log`), including input separation, head-relative gestures, shot-feedback routing, audio, retained desktop pause and output modes. No game or headset session was launched for merge validation.

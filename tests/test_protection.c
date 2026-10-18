@@ -45,10 +45,38 @@ static void check_detours(void)
     assert(VirtualFree(game_base,0,MEM_RELEASE));game_base=saved_base;
 }
 
+static unsigned shot_calls;
+static void __cdecl shot_probe(int player,float x,float y)
+{assert(player>=-1 && player<=2 && x==12.5f && y==-3);shot_calls++;}
+static void check_shot_feedback(void)
+{
+    const BYTE ray[]={0x83,0xEC,0x1C,0x8B,0x44,0x24,0x20};
+    const BYTE normal[]={0xE8,0xDF,0x16,0xFF,0xFF},special[]={0xE8,0x9F,0x13,0xFF,0xFF};
+    assert(!native_shot_profile(game_base));
+    memcpy(game_base+0x6110,ray,sizeof(ray));memcpy(game_base+0x14A2C,normal,sizeof(normal));
+    memcpy(game_base+0x14D6C,special,sizeof(special));assert(native_shot_profile(game_base));
+    const unsigned offsets[]={0x6110,0x14A2C,0x14D6C},sizes[]={7,5,5};
+    for(unsigned k=0;k<3;k++)for(unsigned b=0;b<sizes[k];b++) {
+        game_base[offsets[k]+b]^=1;assert(!native_shot_profile(game_base));game_base[offsets[k]+b]^=1;
+    }
+    native_shot_ray_original=shot_probe;*(DWORD *)(game_base+0x5C8E98)=6;
+    for(unsigned mode=0;mode<2;mode++)for(int p=0;p<2;p++) {
+        *(DWORD *)(game_base+0x5CA08C)=mode;native_shot_ray(p,12.5f,-3);
+        assert(shot_events[p]==mode+1);
+    }
+    *(short *)(game_base+0x5A1A00)=1;native_shot_ray(0,12.5f,-3);
+    *(short *)(game_base+0x5A1A00)=0;*(DWORD *)(game_base+0x5C8E98)=5;native_shot_ray(1,12.5f,-3);
+    assert(shot_events[0]==2 && shot_events[1]==2);
+    *(DWORD *)(game_base+0x5C8E98)=6;native_shot_ray(-1,12.5f,-3);native_shot_ray(2,12.5f,-3);
+    assert(shot_calls==8 && shot_events[0]==2 && shot_events[1]==2);
+    shot_events[0]=UINT32_MAX;native_shot_ray(0,12.5f,-3);assert(!shot_events[0]);
+}
+
 int main(void)
 {
     game_base=calloc(1,0x5CA200);frame=calloc(1,sizeof(*frame));assert(game_base && frame);
     check_detours();
+    check_shot_feedback();
     /* Refuse both hooks before modifying either unsupported entry. */
     assert(!install_invincibility() && !game_base[0x15300] && !game_base[0x15430]);
     native_damage_original=damage_probe;native_damage_forced_original=forced_probe;invincibility_ready=1;
