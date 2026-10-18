@@ -3,12 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define HOTD_CROSSHAIR_RECORDS 16
-#define HOTD_SPRITE_RECORD_SIZE 0x3C
-typedef struct {
-    const unsigned char *address[HOTD_CROSSHAIR_RECORDS];
-    unsigned char records[HOTD_CROSSHAIR_RECORDS][HOTD_SPRITE_RECORD_SIZE];
-} HotdCrosshairRecords;
+#include "sprite_capture.h"
 
 static int hotd_crosshair_definition(const unsigned char *base,const unsigned char *definition,uintptr_t caller)
 {
@@ -21,27 +16,6 @@ static int hotd_crosshair_definition(const unsigned char *base,const unsigned ch
             memcpy(&candidate,base+0x179F58+(player*4+style)*2,2);
             if(id==candidate)return 1;
         }
-    }
-    return 0;
-}
-static void hotd_remember_crosshair(HotdCrosshairRecords *records,const unsigned char *record)
-{
-    unsigned free_slot=HOTD_CROSSHAIR_RECORDS;
-    for(unsigned i=0;i<HOTD_CROSSHAIR_RECORDS;i++) {
-        if(records->address[i]==record){free_slot=i;break;}
-        if(!records->address[i] && free_slot==HOTD_CROSSHAIR_RECORDS)free_slot=i;
-    }
-    if(free_slot<HOTD_CROSSHAIR_RECORDS) {
-        records->address[free_slot]=record;
-        memcpy(records->records[free_slot],record,HOTD_SPRITE_RECORD_SIZE);
-    }
-    /* A missed tag leaves a native crosshair visible; unrelated HUD stays intact. */
-}
-static int hotd_take_crosshair(HotdCrosshairRecords *records,const unsigned char *record)
-{
-    for(unsigned i=0;i<HOTD_CROSSHAIR_RECORDS;i++)if(records->address[i]==record) {
-        int same=!memcmp(records->records[i],record,HOTD_SPRITE_RECORD_SIZE);
-        records->address[i]=NULL;return same;
     }
     return 0;
 }

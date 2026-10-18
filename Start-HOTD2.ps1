@@ -28,7 +28,9 @@ param(
     [switch]$Laser,
     [switch]$NoLaser,
     [switch]$Crosshair,
-    [switch]$NoCrosshair
+    [switch]$NoCrosshair,
+    [switch]$SwapPlayerHud,
+    [switch]$NoSwapPlayerHud
 )
 $ErrorActionPreference = 'Stop'
 if ($Window -and $NoWindow) { throw 'Choose either -Window or -NoWindow.' }
@@ -39,6 +41,7 @@ if ($ExpandWorld -and $NoExpandWorld) { throw 'Choose either -ExpandWorld or -No
 if ($NativeLighting -and $NoNativeLighting) { throw 'Choose either -NativeLighting or -NoNativeLighting.' }
 if ($Laser -and $NoLaser) { throw 'Choose either -Laser or -NoLaser.' }
 if ($Crosshair -and $NoCrosshair) { throw 'Choose either -Crosshair or -NoCrosshair.' }
+if ($SwapPlayerHud -and $NoSwapPlayerHud) { throw 'Choose either -SwapPlayerHud or -NoSwapPlayerHud.' }
 $out = Join-Path $PSScriptRoot 'build'
 if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
@@ -78,5 +81,7 @@ if ($Laser) { $viewerArgs += '--laser' }
 if ($NoLaser) { $viewerArgs += '--no-laser' }
 if ($Crosshair) { $viewerArgs += '--crosshair' }
 if ($NoCrosshair) { $viewerArgs += '--no-crosshair' }
+if ($SwapPlayerHud) { $viewerArgs += '--swap-player-hud' }
+if ($NoSwapPlayerHud) { $viewerArgs += '--no-swap-player-hud' }
 & "$out\HOTD2VR.exe" @viewerArgs
 exit $LASTEXITCODE

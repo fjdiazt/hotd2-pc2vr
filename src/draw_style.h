@@ -11,6 +11,8 @@
 #define HOTD_WORLD 0x01000000u
 #define HOTD_SHOT 0x02000000u
 #define HOTD_SHOT_GROUP_MASK 0xFC000000u
+#define HOTD_PLAYER_HUD_SHIFT 9
+#define HOTD_PLAYER_HUD_MASK 0xE00u /* 1/2 ammo, 3/4 lives, P1/P2. */
 #define HOTD_GFILE 0x100u /* Address metadata; native U/V modes use only bits 0..3. */
 
 static inline uint32_t hotd_address(unsigned u,unsigned v)
