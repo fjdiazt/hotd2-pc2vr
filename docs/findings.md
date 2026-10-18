@@ -533,5 +533,37 @@ Bridge/viewer builds and all offline/WARP checks passed. Added tests cover held
 toggle/navigation/back, foreground gating, native P1/P2 key aliases, mixed VR
 keyboard/controller input, failed action sync, immediate close-release publication,
 native keyboard suppression and watchdog restoration. No game or VR session was
-launched for this change; another session remained untouched. Native-only output
-has no panel renderer; without a headset, desktop preview must be enabled.
+launched for that keyboard change; another session remained untouched. Native-window
+rendering was added subsequently, as described below.
+
+## Native-window settings panel
+
+The viewer publishes the existing 640x480 straight-alpha menu canvas to an
+independent sequence/heartbeat in protocol 23. Earlier offsets stay unchanged;
+menu sequence starts at 87,385,260, pixels at 87,385,272, total frame size
+88,614,072. Primary viewer only; companion previews never write the canvas.
+Canvas updates and D3D11 texture updates have separate dirty state, so native
+publication cannot consume either headset eye's texture upload. Unchanged menu
+frames refresh only their heartbeat, not the 1.2 MB canvas.
+
+The existing native presentation hook captures the game first, then starts a
+separate D3D7 scene and composites a managed 32-bit texture as one alpha-blended
+quad. No native menu geometry enters reconstruction or framebuffer capture.
+The texture uploads only when its stable sequence changes, restores after loss,
+and is recreated on device replacement. The compositor restores all changed
+device state and viewport, then calls normal presentation even after failure.
+Closed, torn or older-than-500-ms menu data is not drawn. Native pause replay
+stays ahead of capture/composition. The game's EXE and assets are unchanged.
+
+Native-only mode polls the same keyboard/settings path with desktop preview and
+headset outputs both disabled. It still runs the viewer helper, without graphics
+device or OpenXR initialization. Menu display/rendering rows retain their existing
+effects on converted output; audio, cheats and saves use the same bridge actions.
+
+Added real offscreen D3D7 checks cover alpha/color conversion, viewport and
+texture/render-state restoration, native presentation order, capture exclusion,
+stable/torn canvas sequences and closed/stale ownership. Viewer checks cover
+publication, unchanged-frame reuse, separate texture dirtiness and read-only
+preview guards. Full build/offline/WARP checks passed, including the real D3D7
+compositor test. Live native-window/headset acceptance remains unverified; another
+game session was active and was left untouched. Original EXE SHA256 is unchanged.

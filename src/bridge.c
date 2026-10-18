@@ -21,6 +21,7 @@
 #include "player_hud.h"
 #include "audio_control.h"
 #include "desktop_pause.h"
+#include "native_menu.h"
 #include "checkpoint.h"
 
 static FILE *logfile;
@@ -1462,14 +1463,24 @@ static int install_crosshair_capture(int profile_valid)
 }
 
 static HRESULT (WINAPI *original_present)(void *,DWORD);
+static HRESULT (WINAPI *original_begin)(IDirect3DDevice7 *);
+static HRESULT (WINAPI *original_end)(IDirect3DDevice7 *);
+static HotdNativeMenu native_menu;
 static HRESULT WINAPI native_present(void *self,DWORD flags)
 {
     publish_frame();
+    if(active_device && hotd_native_menu_visible(frame)) {
+        HRESULT hr=original_begin(active_device);
+        if(SUCCEEDED(hr)) {
+            hr=hotd_native_menu_draw(active_device,frame,&native_menu);
+            HRESULT ended=original_end(active_device);if(SUCCEEDED(hr))hr=ended;
+        }
+        static int reported;
+        if(FAILED(hr) && !reported){reported=1;logline("native menu render failed: %08lx",(unsigned long)hr);}
+    }
     return original_present(self,flags);
 }
 
-static HRESULT (WINAPI *original_begin)(IDirect3DDevice7 *);
-static HRESULT (WINAPI *original_end)(IDirect3DDevice7 *);
 static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
 {
     if(!visibility_flags_latched) {

@@ -1,6 +1,8 @@
 /* Viewer settings use extracted native glyphs without changing native resource ownership. */
 static int g_vrMenuOpen,g_vrMenuPage=-1,g_vrMenuRow;
 static int g_vrMenuDirty=1,g_vrMenuArmed=1,g_vrMenuBlock,g_vrMenuResetPending;
+static int g_vrMenuTextureDirty=1,g_vrMenuPublishedOpen=-1;
+static unsigned g_vrMenuRevision,g_vrMenuPublishedRevision;
 static unsigned g_vrMenuPrevious;
 static BYTE g_vrMenuFont[128][32][32][4];
 static DWORD g_vrMenuPixels[480][640];
@@ -375,13 +377,6 @@ static int vrMenuControl(unsigned input)
     return 1;
 }
 
-static void vrMenuKeyboard(void)
-{
-    int previous=g_vrMenuOwnsInput;
-    int owned=g_vrMenuOwnsInput=vrMenuControl(vrMenuKeyboardInput());
-    if(owned || previous){pushAim(320,240,0);pushAim2(320,240,0);}
-}
-
 static void vrMenuRect(int x,int y,int width,int height,DWORD colour)
 {
     for(int py=y;py<y+height && py<480;py++)for(int px=x;px<x+width && px<640;px++)
@@ -480,8 +475,34 @@ static void vrMenuCanvas(void)
     if(count>perPage){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/perPage+1,(count+perPage-1)/perPage);
         vrMenuText(440,72,page,.6f,grey);}
     vrMenuRect(42,418,552,1,0xFF303077);
-    vrMenuText(44,427,"STICK NAVIGATE   TRIGGER SELECT   B BACK",.65f,white);
-    vrMenuText(44,451,"LEFT STICK CLICK OPEN CLOSE   A PAUSE RESUME",.6f,grey);
+    vrMenuText(44,427,"ARROWS MOVE   ENTER SELECT   CTRL BACK",.65f,white);
+    vrMenuText(44,451,"F8 LEFT CLICK TOGGLE   STICK TRIGGER B IN VR",.6f,grey);
+    g_vrMenuRevision++;g_vrMenuDirty=0;g_vrMenuTextureDirty=1;
+}
+static void vrMenuNativePublish(void)
+{
+    if(!g_frame || g_previewOnly)return;
+    int open=g_vrMenuEnabled && g_vrMenuOpen;
+    if(open){vrMenuDestination();if(g_vrMenuDirty)vrMenuCanvas();}
+    if(open!=g_vrMenuPublishedOpen || (open && g_vrMenuRevision!=g_vrMenuPublishedRevision)) {
+        g_frame->menu_seq++;MemoryBarrier();
+        g_frame->menu_open=open;
+        if(open)memcpy(g_frame->menu_pixels,g_vrMenuPixels,sizeof(g_vrMenuPixels));
+        MemoryBarrier();g_frame->menu_seq++;
+        g_vrMenuPublishedOpen=open;g_vrMenuPublishedRevision=g_vrMenuRevision;
+    }
+    MemoryBarrier();g_frame->menu_tick=GetTickCount();
+}
+static int vrMenuInput(unsigned input)
+{
+    g_vrMenuOwnsInput=vrMenuControl(input);
+    vrMenuNativePublish();return g_vrMenuOwnsInput;
+}
+static void vrMenuKeyboard(void)
+{
+    int previous=g_vrMenuOwnsInput;
+    int owned=vrMenuInput(vrMenuKeyboardInput());
+    if(owned || previous){pushAim(320,240,0);pushAim2(320,240,0);}
 }
 static void vrMenuDraw(void)
 {
@@ -494,7 +515,7 @@ static void vrMenuDraw(void)
         if(FAILED(ID3D11Device_CreateTexture2D(g_dev,&desc,NULL,&g_vrMenuTexture)) ||
            FAILED(ID3D11Device_CreateShaderResourceView(g_dev,(ID3D11Resource *)g_vrMenuTexture,NULL,&g_vrMenuSRV)))
             die("menu texture");
-        g_vrMenuDirty=1;
+        g_vrMenuTextureDirty=1;
     }
     if(!g_vrMenuBlend) {
         D3D11_BLEND_DESC blend={0};
@@ -509,11 +530,11 @@ static void vrMenuDraw(void)
         if(FAILED(ID3D11Device_CreateBlendState(g_dev,&blend,&g_vrMenuBlend)))die("menu blend state");
     }
     D3D11_MAPPED_SUBRESOURCE mapped;
-    if(g_vrMenuDirty) {
-        vrMenuCanvas();
+    if(g_vrMenuDirty)vrMenuCanvas();
+    if(g_vrMenuTextureDirty) {
         if(FAILED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)))return;
         for(unsigned y=0;y<480;y++)memcpy((BYTE *)mapped.pData+y*mapped.RowPitch,g_vrMenuPixels[y],640*4);
-        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0);g_vrMenuDirty=0;
+        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0);g_vrMenuTextureDirty=0;
     }
     if(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_cbRes,0,D3D11_MAP_WRITE_DISCARD,0,&mapped))) {
         const float res[4]={640,480,0,0};memcpy(mapped.pData,res,sizeof(res));

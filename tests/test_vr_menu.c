@@ -40,6 +40,10 @@ static void check_keyboard(void)
     g_vrMenuEnabled=1;g_vrMenuOpen=g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;
     keyboard_keys[VK_F8]=(SHORT)0x8000;
     vrMenuKeyboard();assert(g_vrMenuOpen && g_vrMenuOwnsInput && (g_frame->aim_buttons&VC2_BTN_MENU));
+    assert(g_frame->menu_open==1 && g_frame->menu_tick && !(g_frame->menu_seq&1));
+    assert(!memcmp(g_frame->menu_pixels,g_vrMenuPixels,sizeof(g_vrMenuPixels)));
+    unsigned published=g_frame->menu_seq;vrMenuKeyboard();assert(g_frame->menu_seq==published);
+    assert(g_vrMenuTextureDirty && !g_vrMenuDirty); /* Native upload cannot consume the VR texture upload. */
     vrMenuKeyboard();assert(g_vrMenuOpen); /* Held toggle does not bounce. */
     memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
     keyboard_keys[VK_DOWN]=(SHORT)0x8000;vrMenuKeyboard();vrMenuKeyboard();assert(g_vrMenuRow==1);
@@ -53,6 +57,7 @@ static void check_keyboard(void)
     keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;vrMenuKeyboard();assert(!g_vrMenuOpen && g_vrMenuOwnsInput);
     memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();vrMenuKeyboard();
     assert(!g_vrMenuOwnsInput && !(g_frame->aim_buttons&VC2_BTN_MENU));
+    assert(!g_frame->menu_open);
     keyboard_keys[VK_F8]=(SHORT)0x8000;
     keyboard_owner=123456;g_frame->game_pid=123457;
     vrMenuKeyboard();assert(!g_vrMenuOpen); /* Other applications cannot toggle or navigate. */
@@ -63,6 +68,7 @@ static void check_keyboard(void)
     keyboard_keys[VK_LCONTROL]=0;keyboard_keys[VK_ESCAPE]=(SHORT)0x8000;vrMenuKeyboard();assert(!g_vrMenuOpen);
     memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();vrMenuKeyboard();
     g_previewOnly=1;keyboard_keys[VK_F8]=(SHORT)0x8000;assert(!vrMenuKeyboardInput());
+    published=g_frame->menu_seq;vrMenuNativePublish();assert(g_frame->menu_seq==published);
     keyboard_owner=GetCurrentProcessId();assert(vrMenuKeyboardInput()==MENU_TOGGLE);
     g_previewOnly=0;g_vrMenuEnabled=0;assert(!vrMenuKeyboardInput());g_vrMenuEnabled=1;
     g_frame->game_pid=0;keyboard_fixture=0;memset(keyboard_keys,0,sizeof(keyboard_keys));

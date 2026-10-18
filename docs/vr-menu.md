@@ -21,7 +21,7 @@ it does not depend on native Options font residency or initialization.
 | Main-menu entry | Mode-select task `0x496960` uses bitmap entries; its existing Options branch at `0x496B0F` requests native mode 12. Adding a row is more involved than extending a text list. |
 | Existing Options | Mode 12 entry `0x4869E0`, cursor `0x486C10`, list `0x486DA0`, native row table `0x5696E0`. Initialization resets tasks/resources. Do not invoke the full Options mode while a stage is paused. |
 | Pause | Native pause routine `0x40E500` and existing predicate hook `native_pause()` retain eligibility and ownership. Reuse those; do not set the pause flag directly. |
-| Capture | `capture_draw()` rejects paused draws; `publish_frame()` retains the entire previous scene/HUD; `end_scene()` replays that scene on desktop. The viewer menu refreshes separately above the retained scene; native desktop replay does not render it. |
+| Capture | `capture_draw()` rejects paused draws; `publish_frame()` retains the entire previous scene/HUD; `end_scene()` replays that scene on desktop. The viewer menu refreshes separately; the native menu composites after capture and before presentation. |
 
 The local HOTD2RE reconstruction confirms the text API and Options layout in
 `src/game/menu_text.*` and `src/game/world_modes_options.cpp`. Its port-only pause
@@ -37,7 +37,7 @@ an existing in-game VR menu.
 Left stick click opens/closes VR Settings. The panel starts closed and preserves
 native pause state. A/X retains native Start/Pause while the panel stays open;
 Trigger selects, stick directions navigate/change values and B/Y returns to groups.
-Right click recenters. F8 toggles the panel in headset or desktop preview mode, with either the native game or viewer focused. Arrows navigate/change values; Enter/Right Ctrl confirm/back, with native P2 Tab/Left Ctrl and Backspace/Escape aliases. Keyboard Back closes from the root; controller B/Y keeps its existing root behavior. Menu-owned keyboard keys are masked in the bridge until closing keys release, with the existing 500 ms input watchdog releasing ownership if the viewer disconnects. Other applications do not control the panel. Without a headset, use `--window --no-vrwindow`; no panel is drawn in native-only mode. Companion previews remain read-only and listen only while their own window has focus.
+Right click recenters. F8 toggles the panel in the native window, headset or desktop preview, with either the native game or viewer focused. Arrows navigate/change values; Enter/Right Ctrl confirm/back, with native P2 Tab/Left Ctrl and Backspace/Escape aliases. Keyboard Back closes from the root; controller B/Y keeps its existing root behavior. Menu-owned keyboard keys are masked in the bridge until closing keys release, with the existing 500 ms input watchdog releasing ownership if the viewer disconnects. Other applications do not control the panel. Native-only mode (`--no-window --no-vrwindow`) keeps the viewer helper active for input/settings; no preview or headset is required. Companion previews remain read-only and listen only while their own window has focus.
 
 | Group | Existing settings |
 | --- | --- |

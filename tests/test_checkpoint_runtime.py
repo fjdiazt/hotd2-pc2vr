@@ -43,8 +43,8 @@ def session(from_menu=False):
     assert process
     memory = None
     try:
-        memory = mmap.mmap(-1, 87385260, tagname=name, access=mmap.ACCESS_WRITE)
-        assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 22)
+        memory = mmap.mmap(-1, 88614072, tagname=name, access=mmap.ACCESS_WRITE)
+        assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 23)
 
         def read(address, fmt="<I"):
             data = c.create_string_buffer(struct.calcsize(fmt))

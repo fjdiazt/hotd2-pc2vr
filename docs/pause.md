@@ -28,7 +28,7 @@ Desktop replay verification:
 
 ## Separate Start and Pause input
 
-Integrated protocol 22 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside audio, briefing-book metadata, player-HUD ownership and acknowledged manual-checkpoint requests. Current bindings:
+Integrated protocol 23 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside audio, briefing-book metadata, player-HUD ownership, acknowledged manual-checkpoint requests and native menu canvas transport. Current bindings:
 
 - Trigger: Fire and Start/confirm; existing tilted-gun reload gesture remains.
 - A/X: Start/confirm and Pause/resume.
@@ -57,7 +57,7 @@ Verification in the `feat/input-mapping` worktree:
 
 Latest physical controller mapping, complete menu coverage and Original-mode item weapons still need runtime acceptance. Offline/native desktop results do not establish headset acceptance.
 
-Merge preparation: main's head-relative reload gestures, audio, native cheat-off override, confirmed-shot rumble and desktop pause replay are retained. The combined mapping, player-HUD ownership and manual-checkpoint requests use protocol 22, rejecting earlier bridge/viewer versions. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.
+Merge preparation: main's head-relative reload gestures, audio, native cheat-off override, confirmed-shot rumble and desktop pause replay are retained. The combined mapping, player-HUD ownership, manual-checkpoint requests and native menu use protocol 23, rejecting earlier bridge/viewer versions. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.
 
 The combined full build and offline suite passed (`build/merge-main-final-build.log`), including input separation, head-relative gestures, shot-feedback routing, audio, retained desktop pause and output modes. No game or headset session was launched for merge validation.
 

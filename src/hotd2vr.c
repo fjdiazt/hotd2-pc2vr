@@ -2671,7 +2671,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         triggers[0].action=triggers[1].action=0;
         menuHeld[0]=menuHeld[1]=0;
         menuHorizontal[0]=menuHorizontal[1]=0;
-        g_vrMenuOwnsInput=vrMenuControl(vrMenuKeyboardInput());
+        vrMenuInput(vrMenuKeyboardInput());
         pushAim(320,240,0);pushAim2(320,240,0);
         return 0;
     }
@@ -2732,7 +2732,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
             if(bback[h].isActive && bback[h].currentState)input|=VC2_BTN_BACK;
             if(bpause[h].isActive && bpause[h].currentState)input|=VC2_BTN_PAUSE;
         }
-        int owned=g_vrMenuOwnsInput=vrMenuControl(input);
+        int owned=vrMenuInput(input);
         if(owned) {
             g_gunPose=poses[1].pose;g_gun2Pose=poses[0].pose;
             g_gunValid=poseValid[1];g_gun2Valid=poseValid[0];g_ovCount=0;
@@ -3851,12 +3851,13 @@ int main(int argc, char **argv)
             note("Desktop preview unavailable; headset continues.\n");
         runVR();
     } else if(g_cfgWindow)runWindow();
-    else while(!gameExited()) { pushCheats();Sleep(10); }
+    else while(!gameExited()) { vrMenuKeyboard();pushCheats();Sleep(10); }
     closeDesktopPreview(&preview);
     if(g_vrMenuEnabled)vrMenuSave();
     g_cheatFlags=0;
     pushCheats();
     g_vrMenuOwnsInput=0;
+    if(!g_previewOnly){g_vrMenuOpen=0;vrMenuNativePublish();}
     pushAim(320, 240, 0); pushAim2(320, 240, 0);
     if(!g_previewOnly)g_frame->cheat_tick=GetTickCount()-500; /* Release overrides on normal exit. */
     if (g_gameProc) CloseHandle(g_gameProc);
