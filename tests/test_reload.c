@@ -10,6 +10,10 @@ static DWORD __cdecl poll_input(void)
 }
 static HRESULT WINAPI poll_keyboard(void *self,DWORD size,void *out)
 {(void)self;memset(out,0,size);return DI_OK;}
+static int __cdecl model_draw_probe(const BYTE *record,int pass)
+{
+    (void)record;assert(pass==1 && (capture_kind&HOTD_SHOT));return 37;
+}
 static void tick(unsigned p1,unsigned p2)
 {
     frame->cheat_flags=p1&HOTD_CHEAT_MASK;frame->cheat_tick=GetTickCount();
@@ -22,6 +26,17 @@ int main(void)
     BYTE keys[256];
     game_base=calloc(1,0x5CA200);frame=calloc(1,sizeof(*frame));
     assert(game_base && frame);
+    BYTE record[0x74]={0};DWORD model=0x12345678;float plane=-1;
+    *(unsigned short *)(game_base+0x179F78)=373;
+    *(DWORD *)(game_base+0x5A66A4+373*16)=model;
+    memcpy(record+0xC,&model,4);memcpy(record+0x34+14*4,&plane,4);
+    assert(native_model_kind(record)&HOTD_SHOT);
+    capture_kind=HOTD_WORLD;assert(native_model_draw(record,1,model_draw_probe)==37 && capture_kind==HOTD_WORLD);
+    plane=-21;memcpy(record+0x34+14*4,&plane,4);
+    assert(native_model_kind(record)==0); /* Traveling tracer: true position, no aim collision. */
+    plane=-1;memcpy(record+0x34+14*4,&plane,4);model++;
+    memcpy(record+0xC,&model,4);assert(native_model_kind(record)==HOTD_WORLD);
+    capture_kind=0;
     memcpy(game_base+0x15342,"\x8A\x0C\x85\xD8\x9F\x9C\x00",7);
     memcpy(game_base+0x15464,game_base+0x15342,7);
     memcpy(game_base+0x149D9,"\x8A\x51\x79",3);
@@ -33,8 +48,25 @@ int main(void)
     input_ready=1;native_input_original=poll_input;
     *(DWORD *)(game_base+0x5C8E98)=6;
     *(short *)(game_base+0x5A5C62)=*(short *)(game_base+0x5A5D92)=5;
+    assert(native_active_players()==3);
+    *(short *)(game_base+0x5A5C62)=9;assert(native_active_players()==2);
+    *(short *)(game_base+0x5A5C62)=10;assert(native_active_players()==3);
+    *(short *)(game_base+0x5A5D92)=4;assert(native_active_players()==1);
+    *(DWORD *)(game_base+0x5C8E98)=5;assert(!native_active_players());
+    *(DWORD *)(game_base+0x5C8E98)=6;
+    *(short *)(game_base+0x5A5C62)=*(short *)(game_base+0x5A5D92)=5;
     game_base[0x5A5D85]=1; /* P1 mouse/gun control. */
     game_base[0x5A5EB5]=0; /* P2 keyboard control, scheme 1. */
+    frame->aim_x=-100;frame->aim_y=-80;frame->aim2_x=740;frame->aim2_y=560;
+    tick(0,0);
+    assert(gun1->x==-420 && gun1->y==320 && gun2->x==420 && gun2->y==-320);
+    assert(gun1->valid && gun2->valid); /* Outside the old screen is still a valid 3D shot. */
+    frame->aim_x=frame->aim2_y=1e30f;frame->aim_y=frame->aim2_x=-1e30f;
+    tick(0,0);
+    assert(gun1->x==32767 && gun1->y==32767 && gun2->x==-32768 && gun2->y==-32768);
+    frame->aim_x=NAN;frame->aim2_y=INFINITY;tick(0,0);
+    assert(!gun1->x && !gun1->y && !gun2->x && !gun2->y);
+    frame->aim_x=frame->aim2_x=320;frame->aim_y=frame->aim2_y=240;
     *(DWORD *)(game_base+0x5C9F6C+0x7C+20)=0x20000;
     cheats_supported=1;
     game_base[0x5C9FD8+0x7C]=2;game_base[0x5C9FD9+0x7C]=3;
@@ -121,6 +153,19 @@ int main(void)
     tick(VC2_BTN_RELOAD,0);assert(!gun1->fire);
     tick(0,0);
     original_keyboard_state=poll_keyboard;
+    frame->aim_buttons=VC2_BTN_PAIR_START|VC2_BTN_START;frame->aim2_buttons=0;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RETURN] && keys[DIK_TAB]);
+    frame->aim_buttons=VC2_BTN_PAIR_START;frame->aim2_buttons=VC2_BTN_START;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RETURN] && keys[DIK_TAB]);
+    frame->aim_buttons=VC2_BTN_START;frame->aim2_buttons=0;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RETURN] && !keys[DIK_TAB]);
+    frame->aim_buttons=0;frame->aim2_buttons=VC2_BTN_START;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_RETURN] && keys[DIK_TAB]);
+    frame->akimbo=0;frame->aim_buttons=VC2_BTN_START;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RETURN] && !keys[DIK_TAB]);
+    frame->aim_buttons=0;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_RETURN] && !keys[DIK_TAB]);
+    frame->akimbo=1;
     frame->aim_buttons=frame->aim2_buttons=VC2_BTN_START;
     assert(SUCCEEDED(keyboard_state(NULL,256,keys)));
     assert(keys[DIK_RETURN] && keys[DIK_TAB] && !keys[DIK_RCONTROL] && !keys[DIK_LCONTROL]);

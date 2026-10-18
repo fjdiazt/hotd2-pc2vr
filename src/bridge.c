@@ -22,6 +22,8 @@ static unsigned count, calls, dropped, frame_no, atlas_dirty;
 static Vc2Vertex vertices[VC2_MAX_VERTS];
 static HotdLens lens;
 static unsigned lens_valid;
+static unsigned capture_kind,shot_group;
+static float shot_origins[64][3];
 static D3DMATRIX world, view, projection;
 static D3DVIEWPORT7 viewport;
 static DWORD fvf_logged[32], fvf_count;
@@ -127,6 +129,9 @@ static void update_input(void)
     int active = active_input();
     buttons[0] = active ? frame->aim_buttons : 0;
     buttons[1] = active && frame->akimbo ? frame->aim2_buttons : 0;
+    if(active && frame->akimbo && (buttons[0]&VC2_BTN_PAIR_START) && ((buttons[0]|buttons[1])&VC2_BTN_START)) {
+        buttons[0]|=VC2_BTN_START;buttons[1]|=VC2_BTN_START;
+    }
     if (active) {
         unsigned p;
         for (p=0;p<(frame->akimbo ? 2u:1u);p++) {
@@ -134,12 +139,9 @@ static void update_input(void)
             float sy = p ? frame->aim2_y : frame->aim_y;
             volatile short *axes = (volatile short *)(game_base+0x5C8FC4+p*0x28);
             if (!isfinite(sx) || !isfinite(sy)) continue;
-            if(sx<0) sx=0;
-            if(sx>640) sx=640;
-            if(sy<0) sy=0;
-            if(sy>480) sy=480;
-            axes[0] = (short)lroundf(sx-320);
-            axes[1] = (short)lroundf(240-sy);
+            /* VR can aim beyond the flat viewport; only the native WORD range limits it. */
+            axes[0] = (short)lroundf(fmaxf(-32768,fminf(32767,sx-320)));
+            axes[1] = (short)lroundf(fmaxf(-32768,fminf(32767,240-sy)));
         }
     }
 }
@@ -453,7 +455,7 @@ static int convert_vertex(const BYTE *v,DWORD fvf,Texture *tex,DrawStyle style,V
     if(fvf&D3DFVF_DIFFUSE){memcpy(&colour,v+offset,4);offset+=4;}
     if(fvf&D3DFVF_SPECULAR)offset+=4;
     out->colour=(fvf&D3DFVF_DIFFUSE) ? (colour&0xFF00FF00u)|((colour&255)<<16)|((colour>>16)&255):style.colour;
-    out->style=style.style;
+    out->style=style.style|capture_kind;
     out->u=out->v=-1;out->depth=0;
     out->atlas_x=out->atlas_y=out->atlas_w=out->atlas_h=0;
     if(tex && (fvf&D3DFVF_TEXCOUNT_MASK)) {
@@ -526,6 +528,10 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     texture=capture_texture(device);
     trace_draw_state(device,fvf,texture,data);
     style=read_draw_style(device,fvf);
+    if(capture_kind&HOTD_SHOT) {
+        const float origin[3]={0};float tmp[3],*anchor=shot_origins[capture_kind>>26];
+        transform_point(origin,&world,tmp);transform_point(tmp,&view,anchor);anchor[2]=-anchor[2];
+    }
     for(i=0;i+2<total;i+=(type==D3DPT_TRIANGLELIST?3:1)) {
         unsigned q[3]={i,i+1,i+2},k;
         Vc2Vertex tri[3];
@@ -567,6 +573,36 @@ done: IDirectDrawSurface7_Release(surface);
 }
 
 typedef DWORD (__cdecl *NativeDraw)(const void *,DWORD);
+typedef int (__cdecl *NativeModel)(const BYTE *,int);
+static NativeModel native_model_original,native_model_alt_original;
+static unsigned native_model_kind(const BYTE *record)
+{
+    DWORD model;
+    float z;
+    memcpy(&model,record+0xC,4);memcpy(&z,record+0x34+14*4,4);
+    /* Camera-plane flashes relocate; traveling tracers keep their depth but never block aim. */
+    if(model)
+        for(unsigned bank=0;bank<4;bank++) {
+            unsigned first=*(unsigned short *)(game_base+0x179F78+bank*2);
+            for(unsigned i=0;i<9;i++)
+                if(model==*(DWORD *)(game_base+0x5A66A4+(first+i)*16))
+                    return fabsf(fabsf(z)-1.0f)<.01f ? HOTD_SHOT|((shot_group++&63u)<<26):0;
+        }
+    return HOTD_WORLD;
+}
+static int native_model_draw(const BYTE *record,int pass,NativeModel original)
+{
+    unsigned previous=capture_kind;
+    int result;
+    capture_kind=native_model_kind(record);
+    result=original(record,pass);
+    capture_kind=previous;
+    return result;
+}
+static int __cdecl native_model(const BYTE *record,int pass)
+{return native_model_draw(record,pass,native_model_original);}
+static int __cdecl native_model_alt(const BYTE *record,int pass)
+{return native_model_draw(record,pass,native_model_alt_original);}
 static NativeDraw native_strip_original,native_list_original,native_tl_original;
 static DWORD native_draw(const void *v,DWORD n,D3DPRIMITIVETYPE type,DWORD fvf,NativeDraw original)
 {
@@ -628,6 +664,14 @@ static BOOL CALLBACK find_game_window(HWND hwnd,LPARAM unused)
             outer.bottom-outer.top+480-client.bottom,SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
     return FALSE;
 }
+static unsigned native_active_players(void)
+{
+    unsigned active=0;
+    if(input_ready)for(unsigned p=0;p<2;p++)
+        if(hotd_player_active(*(DWORD *)(game_base+0x5C8E98),
+            *(short *)(game_base+0x5A5C62+p*0x130)))active|=1u<<p;
+    return active;
+}
 static void publish_frame(void)
 {
     if(!frame || !active_device)return;
@@ -641,13 +685,15 @@ static void publish_frame(void)
     frame->reserved[0]=count;frame->reserved[1]=0;frame->reserved[2]=count+1;
     frame->lens=lens;frame->lens_valid=lens_valid;
     frame->draw_calls=calls;frame->dropped_triangles=dropped;frame->texture_count=texture_count;
+    frame->active_players=native_active_players();
+    memcpy(frame->shot_origins,shot_origins,sizeof(shot_origins));
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;
     if(frame_no==1 || frame_no%300==0 || texture_failures)logline("frame=%u draws=%u vertices=%u dropped=%u textures=%u evictions=%u texture_failures=%u lens=%u screen=%u",
         frame_no,calls,count,dropped,texture_count,texture_evictions,texture_failures,lens_valid,frame->screen_ok);
     texture_failures=0;
-    count=calls=dropped=0;
+    count=calls=dropped=shot_group=0;
 }
 static HRESULT (WINAPI *original_create_device)(IDirect3D7 *,REFCLSID,IDirectDrawSurface7 *,IDirect3DDevice7 **);
 static HRESULT WINAPI create_device(IDirect3D7 *self,REFCLSID cls,IDirectDrawSurface7 *target,IDirect3DDevice7 **out)
@@ -769,7 +815,10 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};
+        static const BYTE model_signature[]={0x83,0xEC,0x1C,0xA1,0x74,0xEB,0x7D,0x00,0x53};
         if(!detour9(0xCBB0,input_signature,native_input,(void **)&native_input_original) ||
+           !detour9(0xA7EF0,model_signature,native_model,(void **)&native_model_original) ||
+           !detour9(0xA8440,model_signature,native_model_alt,(void **)&native_model_alt_original) ||
            !detour9(0xA59C0,draw_signature,native_strip,(void **)&native_strip_original) ||
            !detour9(0xA5A00,draw_signature,native_tl,(void **)&native_tl_original) ||
            !detour9(0xA5A40,draw_signature,native_list,(void **)&native_list_original)) {

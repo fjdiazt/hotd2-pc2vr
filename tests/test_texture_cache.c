@@ -99,6 +99,12 @@ int main(void)
     view._11=view._22=view._33=view._44=1;
     assert(convert_vertex((const BYTE *)source,0x112,NULL,style,&vertex));
     assert(vertex.colour==0x80000000u && (vertex.style&255)==0x65);
+    capture_kind=HOTD_WORLD;
+    assert(convert_vertex((const BYTE *)source,0x112,NULL,style,&vertex) && (vertex.style&HOTD_WORLD));
+    capture_kind=HOTD_SHOT|(3u<<26);
+    assert(convert_vertex((const BYTE *)source,0x112,NULL,style,&vertex) &&
+        (vertex.style&(HOTD_WORLD|HOTD_SHOT|HOTD_SHOT_GROUP_MASK))==capture_kind);
+    capture_kind=0;
     assert((vertex.style&HOTD_DIFFUSE_ALPHA) && (vertex.style&HOTD_ALPHA_TEST));
     for(i=0;i<128*128;i++)pixels[i]=0x123456;
     for(i=0;i<1600;i++){surfaces[i].iface.lpVtbl=&surface_vt;surfaces[i].refs=1;}

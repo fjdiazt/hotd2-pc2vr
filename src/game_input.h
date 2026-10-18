@@ -7,6 +7,15 @@
 #include "hotd_share.h"
 
 typedef struct { unsigned held,action; } HotdTrigger;
+static inline int hotd_player_active(unsigned phase,int status)
+{
+    /* Join/rejoin transitions, active play and accepted joins waiting for a cutscene. */
+    return phase==6 && ((status>=0 && status<=3) || status==5 || status==10);
+}
+static inline int hotd_hand_visible(int akimbo,unsigned active_players,int hand)
+{
+    return akimbo || (active_players&(1u<<(1-hand))); /* Right P1, left P2. */
+}
 typedef struct { uint32_t at; unsigned active; } HotdRapid;
 static inline int hotd_parse_rapid_rate(const char *text,unsigned *out)
 {

@@ -27,6 +27,12 @@ static void check_effect(DWORD colour,unsigned style,int textured,int expected,i
     if(reverse_winding) {
         Vc2Vertex swap=g_local[1];g_local[1]=g_local[2];g_local[2]=swap;
     }
+    if((style&HOTD_CULL_MASK) && !textured) {
+        float ray_origin[3]={0,0,1},ray_direction[3]={0,0,-1},distance;
+        g_unitsPerMetre=10;
+        for(i=0;i<3;i++)g_local[i].style|=HOTD_WORLD;
+        assert(!!rayVsScene(ray_origin,ray_direction,&distance)==(expected==255));
+    }
     uploadVerts();mIdent(matrix);
     ID3D11DeviceContext_ClearRenderTargetView(g_ctx,rtv,clear);
     ID3D11DeviceContext_ClearDepthStencilView(g_ctx,dsv,D3D11_CLEAR_DEPTH,0,0);

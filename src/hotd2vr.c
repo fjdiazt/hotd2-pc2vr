@@ -17,8 +17,8 @@
  *
  * The controller is the light gun: its ray is cast against the actual level
  * geometry, the hit point is projected through the game's own camera, and the
- * resulting 640x480 coordinate goes to HOTD2Bridge.dll over shared memory, which
- * moves the real mouse. A red laser and a hit marker are drawn in the world.
+ * resulting coordinate, including outside the original viewport, goes through
+ * HOTD2Bridge.dll into native gun input. Laser and hit marker stay in the world.
  *
  * The floating screen shows a live capture of the game window. It appears by
  * itself whenever the 3D scene is nearly empty - menus, scores, name entry -
@@ -145,12 +145,15 @@ static Vc2Vertex g_vertexBuffers[2][VC2_MAX_VERTS];
 static Vc2Vertex *g_local=g_vertexBuffers[0],*g_readVerts=g_vertexBuffers[1];
 static unsigned  g_localCount;
 static unsigned  g_lastFrame;
+static unsigned  g_activePlayers;
+static float     g_shotOrigins[64][3];
 static float     g_unitsPerMetre = 130.0f;
 static float     g_gfx = 554.3f, g_gfy = 623.6f;   /* the game's projection */
 static float     g_gcx = 320.0f, g_gcy = 240.0f;   /* and its centre        */
 static int       g_projLive;        /* projection read out of the game itself */
 static float     g_aimSX = 320.0f, g_aimSY = 240.0f;   /* last aim we pushed */
 static void hideCrosshair(void);
+static void placeShotEffects(void);
 
 static unsigned  g_addStart;            /* first translucent vertex        */
 static unsigned  g_l3End;               /* end of the background layer     */
@@ -186,7 +189,7 @@ static int g_cfgHideCross = 48;   /* hide the game's crosshair sprite within thi
                                    * many pixels of our own aim; 0 keeps it */
 static int g_cfgAutoZoom = 1;     /* follow the game's own camera zoom */
 static int g_cfgFocus = 1;        /* pull the game window to the front on start */
-static int g_cfgAkimbo = 0;       /* 1 = drive a second light gun (needs a probe) */
+static int g_cfgAkimbo = 0;       /* Show/join both together, or each player independently. */
 static char g_vrIniPath[MAX_PATH];
 static int g_cfgScope;            /* 1 = optic on the gun, 0 = magnify the whole view */
 static int g_cfgScopeDeg = 12;    /* angular radius of the disc, degrees */
@@ -328,14 +331,17 @@ static int pullFrame(void)
     pushCheats();
     for (i = 0; i < 8; i++) {
         HotdLens lens;
-        unsigned lensValid,addStart,l3End,ovStart,frameNo;
+        unsigned lensValid,addStart,l3End,ovStart,frameNo,activePlayers;
         float units,fov;
+        float shotOrigins[64][3];
         a = g_frame->seq;
         if (a & 1u) continue;
         MemoryBarrier();
         if (g_frame->magic != VC2_SHARE_MAGIC || g_frame->version != VC2_SHARE_VERSION) return 0;
         lens=g_frame->lens;lensValid=g_frame->lens_valid;
         frameNo=g_frame->frame;units=g_frame->units_per_metre;fov=g_frame->fov_degrees;
+        activePlayers=g_frame->active_players;
+        CopyMemory(shotOrigins,g_frame->shot_origins,sizeof(shotOrigins));
         n = g_frame->vertex_count;
         if (n > VC2_MAX_VERTS) n = VC2_MAX_VERTS;
         addStart = g_frame->reserved[0];
@@ -369,6 +375,9 @@ static int pullFrame(void)
             g_addStart=addStart;g_l3End=l3End;g_ovStart=ovStart;
             g_localCount = n;
             g_lastFrame = frameNo;
+            g_activePlayers=activePlayers;
+            memcpy(g_shotOrigins,shotOrigins,sizeof(shotOrigins));
+            placeShotEffects();
             hideCrosshair();
             return 1;
         }
@@ -906,21 +915,15 @@ static int rayVsScene(const float *org, const float *dir, float *tOut)
         float e1[3], e2[3], p[3], tv[3], qv[3];
         float det, inv, u, v, t;
         const Vc2Vertex *a = &g_local[i], *b = &g_local[i+1], *c = &g_local[i+2];
-        /* The overlay - the game's own crosshair, the ammo drum, the hearts -
-         * hangs 2.3 m in front of the camera (d exactly 1.0), and the sky
-         * panorama sits behind everything (d exactly 0.0). Neither is a thing
-         * a light gun shoots AT: casting against the crosshair quad makes the
-         * aim chase its own tail, which is precisely the "crosshair living its
-         * own life" symptom. World geometry carries the engine's depth key,
-         * strictly between the two. */
-        if ((a->depth == 1.0f && b->depth == 1.0f && c->depth == 1.0f) ||
-            (a->depth == 0.0f && b->depth == 0.0f && c->depth == 0.0f))
-            continue;
+        /* Capture provenance, not VC2 painter depth, identifies shootable geometry. */
+        if(!(a->style&HOTD_WORLD) || !(b->style&HOTD_WORLD) || !(c->style&HOTD_WORLD))continue;
         e1[0] = b->x - a->x; e1[1] = b->y - a->y; e1[2] = b->z - a->z;
         e2[0] = c->x - a->x; e2[1] = c->y - a->y; e2[2] = c->z - a->z;
         vCross(dir, e2, p);
         det = vDot(e1, p);
         if (det > -1e-6f && det < 1e-6f) continue;
+        unsigned cull=(a->style&HOTD_CULL_MASK)>>HOTD_CULL_SHIFT;
+        if((cull==2 && det<0) || (cull==3 && det>0))continue;
         inv = 1.0f / det;
         tv[0] = org[0] - a->x; tv[1] = org[1] - a->y; tv[2] = org[2] - a->z;
         u = vDot(tv, p) * inv;
@@ -929,10 +932,33 @@ static int rayVsScene(const float *org, const float *dir, float *tOut)
         v = vDot(dir, qv) * inv;
         if (v < 0.0f || u + v > 1.0f) continue;
         t = vDot(e2, qv) * inv;
-        if (t > 1.0f && t < best) { best = t; found = 1; }
+        if (t > .001f*g_unitsPerMetre && t < best) { best = t; found = 1; }
     }
     if (found) *tOut = best;
     return found;
+}
+
+static void placeShotEffects(void)
+{
+    const float origin[3]={0};
+    for(unsigned start=0;start<g_localCount;) {
+        unsigned end=start+1,tag=g_local[start].style&(HOTD_SHOT|HOTD_SHOT_GROUP_MASK);
+        if(!(tag&HOTD_SHOT)){start++;continue;}
+        while(end<g_localCount && (g_local[end].style&(HOTD_SHOT|HOTD_SHOT_GROUP_MASK))==tag)end++;
+        const float *center=g_shotOrigins[tag>>26];
+        float distance=sqrtf(vDot(center,center)),direction[3]={center[0],center[1],center[2]},hit;
+        if(isfinite(distance) && distance>.0001f && center[2]<0) {
+            vNorm(direction);
+            if(!rayVsScene(origin,direction,&hit))hit=g_cfgReach*g_unitsPerMetre;
+            /* Keep the native screen shape, without scaling a camera-plane mesh into a thick volume. */
+            float z=center[2]*fmaxf(.001f*g_unitsPerMetre,hit-.002f*g_unitsPerMetre)/distance;
+            for(unsigned i=start;i<end;i++)if(g_local[i].z<-.0001f) {
+                float scale=z/g_local[i].z;
+                g_local[i].x*=scale;g_local[i].y*=scale;g_local[i].z=z;
+            }
+        }
+        start=end;
+    }
 }
 
 /* ------------------------------------------------------------- the sight
@@ -1826,12 +1852,12 @@ static void drawGunAt(const float *vp, const XrPosef *pose, DWORD fireAt, DWORD 
 
 /* Both hands. In akimbo the other hand is a gun in its own right - it aims,
  * it fires and it has its own crosshair in the game - so it gets the same
- * model at its own pose, with its own recoil and reload. Without akimbo the
- * second call never happens and this is the single gun exactly as before. */
+ * model at its own pose, with its own recoil and reload. Without akimbo each
+ * model follows its own player's native active status. */
 static void drawGun(const float *vp)
 {
     D3D11_MAPPED_SUBRESOURCE mm;
-    int one = g_gunValid, two = g_cfgAkimbo && g_gun2Valid;
+    int one = g_gunValid, two = g_gun2Valid;
     if (!g_gunVB || g_inScope || (!one && !two)) return;
     /* depth=1 fills the buffer with the ENGINE's sort keys (a floor tile of
      * layer 3 sits at 0.81), while the gun is tested with real reversed-Z
@@ -2228,7 +2254,6 @@ static int g_autoOn;                        /* the game is in a zoom moment  */
 static int g_resetControls;
 static XrPath      g_handPath[2];               /* 0 = left, 1 = right */
 static XrSpace     g_aimSpace[2];
-static int         g_activeHand = 1;            /* the light-gun hand */
 
 static XrPath path(XrInstance inst, const char *s)
 {
@@ -2382,7 +2407,7 @@ static void initActions(XrInstance inst, XrSession session)
 
 /*
  * Turn one controller pose (origin p, forward d, both in local metre space)
- * into a 640x480 aim point plus the hit point in local space for the laser.
+ * into native aim coordinates plus the hit point in local space for the laser.
  * This is exactly the math the single-gun path has always used, pulled out so
  * the akimbo second hand runs the identical, proven projection rather than a
  * parallel copy. Writes sxOut/syOut and hitLocal; returns the haveHit kind
@@ -2433,11 +2458,9 @@ static int aimFromPose(const float *p, const float *d,
         {
             float hg[3] = { pg[0]+dg[0]*t, pg[1]+dg[1]*t, pg[2]+dg[2]*t };
             float zv = -hg[2];
-            if (zv > 1.0f) {
+            if (zv > .001f*g_unitsPerMetre) {
                 sx = g_gcx + hg[0] * g_gfx / zv;
                 sy = g_gcy - hg[1] * g_gfy / zv;
-                if (sx < 0) sx = 0; if (sx > 639) sx = 639;
-                if (sy < 0) sy = 0; if (sy > 479) sy = 479;
             }
             {
                 float s = 1.0f / g_unitsPerMetre;
@@ -2488,7 +2511,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     XrActionsSyncInfo si;
     XrActiveActionSet act;
     XrActionStateGetInfo gi;
-    XrActionStateBoolean fire[2], bstart, bback[2];
+    XrActionStateBoolean fire[2], bstart[2], bback[2];
     XrActionStateFloat grip;
     XrSpaceLocation loc;
     XrSpaceLocation poses[2];
@@ -2498,6 +2521,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     static int prevGrip;
     static unsigned menuHeld[2];
     static unsigned prevButtons, prev2;
+    unsigned starts;
     int recentre = 0, h, hand;
     unsigned buttons = 0;
     float p[3], d[3], fwd[3] = { 0, 0, -1 };
@@ -2538,10 +2562,14 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
 
     GETB(fire[0], g_actFire, g_handPath[0]);
     GETB(fire[1], g_actFire, g_handPath[1]);
-    GETB(bstart, g_actStart, XR_NULL_PATH);
+    GETB(bstart[0], g_actStart, g_handPath[0]);
+    GETB(bstart[1], g_actStart, g_handPath[1]);
     GETB(bback[0], g_actBack, g_handPath[0]);
     GETB(bback[1], g_actBack, g_handPath[1]);
 #undef GETB
+    starts=(bstart[0].isActive && bstart[0].currentState ? 1u:0u) |
+        (bstart[1].isActive && bstart[1].currentState ? 2u:0u);
+    g_frame->akimbo=1; /* Both native player input blocks are available in either mode. */
     for(h=0;h<2;h++) {
         float direction[3]={0};
         XrSpaceLocationFlags required=XR_SPACE_LOCATION_POSITION_VALID_BIT|XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
@@ -2550,7 +2578,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
             (poses[h].locationFlags&required)==required;
         if(poseValid[h])quatRotate(&poses[h].pose.orientation,fwd,direction);
         triggerActions[h]=hotd_trigger_action(triggers+h,fire[h].isActive && fire[h].currentState,
-            poseValid[h],direction[1]);
+            poseValid[h] && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h),direction[1]);
     }
     ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&grip, sizeof(grip));
     gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
@@ -2596,49 +2624,23 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         if (g_zoomLevel < 1.001f) g_zoomLevel = 1.0f;
     }
 
-    /* the gun is whichever hand fired last */
-    /* "whichever hand fired last is the gun" is right for one gun and is the
-     * whole akimbo bug for two. Pull the right trigger: the hand flips to the
-     * right, so the right hand is player 1 and the LEFT becomes player 2 - and
-     * if the left trigger is also down at that moment it fires player 2 in the
-     * same frame. One pull, two players. Tap the other trigger and the roles
-     * swap back, which is the crosshairs trading places as well.
-     * With two guns the assignment is nailed down: right hand is player 1,
-     * left is player 2, and neither trigger can reach the other player. */
-    if (g_cfgAkimbo) {
-        g_activeHand = 1;               /* right */
-    } else {
-        for (h = 0; h < 2; h++)
-            if (fire[h].isActive && fire[h].currentState && fire[h].changedSinceLastSync)
-                g_activeHand = h;
-    }
-    hand = g_activeHand;
+    /* Right always drives P1; left always drives P2. */
+    hand = 1;
     for (h = 0; h < 2; h++)
-        if (fire[h].isActive && fire[h].currentState && fire[h].changedSinceLastSync)
+        if (hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h) &&
+            fire[h].isActive && fire[h].currentState && fire[h].changedSinceLastSync)
             buzz(session, h, 0.06f, 1.0f);
 
     if (grip.isActive && grip.currentState > 0.85f && !prevGrip) recentre = 1;
     prevGrip = grip.isActive && grip.currentState > 0.85f;
 
-    /* Start is bound to both hands, so with akimbo one press started BOTH
-     * players at once - and in a menu that is a double selection. When there
-     * are two guns, player 1 hears only his own hand; the other hand belongs
-     * to player 2 and gets its own Start below. */
-    if (g_cfgAkimbo) {
-        XrActionStateBoolean s1;
-        ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&s1, sizeof(s1));
-        gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
-        s1.type = XR_TYPE_ACTION_STATE_BOOLEAN;
-        gi.action = g_actStart; gi.subactionPath = g_handPath[hand];
-        if (pxrGetActionStateBoolean(session, &gi, &s1) == XR_SUCCESS &&
-            s1.isActive && s1.currentState) buttons |= VC2_BTN_START;
-    } else if (bstart.isActive && bstart.currentState) buttons |= VC2_BTN_START;
-    if ((bback[hand].isActive && bback[hand].currentState) ||
-        (!g_cfgAkimbo && bback[1-hand].isActive && bback[1-hand].currentState)) buttons |= VC2_BTN_BACK;
+    /* The bridge mirrors either player's Start to both native keys in akimbo. */
+    if(g_cfgAkimbo)buttons|=VC2_BTN_PAIR_START;
+    if(starts&(1u<<hand))buttons|=VC2_BTN_START;
+    if(bback[hand].isActive && bback[hand].currentState)buttons|=VC2_BTN_BACK;
     /* where is the gun */
-    if(!poseValid[hand] && !g_cfgAkimbo)hand=1-hand;
     loc=poses[hand];
-    g_gunValid=poseValid[hand];
+    g_gunValid=poseValid[hand] && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,hand);
     if(g_gunValid) {
         g_gunPose=loc.pose;
         p[0]=loc.pose.position.x;p[1]=loc.pose.position.y;p[2]=loc.pose.position.z;
@@ -2651,39 +2653,15 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     prevButtons=buttons;
     pushAim(sx, sy, buttons);
 
-    /* akimbo: the OTHER hand is a second gun. Its trigger fires gun 2, its ray
-     * is projected the same way and written to the second aim block, which the
-     * DLL only consumes when it too has akimbo enabled. This whole block is
-     * inert unless g_cfgAkimbo is set, so the default single-gun path above is
-     * untouched. NOTE: only the deterministic plumbing is done here - the DLL
-     * still has to tell the two on-screen crosshairs apart, which needs a live
-     * probe; see the передача. */
-    if (g_cfgAkimbo) {
+    /* Left keeps native P2 input independently of automatic paired joining. */
+    {
         int oh = 1 - hand;              /* the hand that is not the primary gun */
         XrSpaceLocation loc2;
         unsigned buttons2 = 0;
         if(bback[oh].isActive && bback[oh].currentState)buttons2|=VC2_BTN_BACK;
-        g_frame->akimbo = 1;
-        /* PLAYER 2 HAS TO PRESS START HIMSELF. The game only draws the second
-         * crosshair when its player state is 2 - "player 2 is in the game" -
-         * and nothing sets that until P2's own Start arrives on his own device.
-         * Gun 2 used to be trigger-only "so its thumb does not fight the menus",
-         * which is precisely why akimbo never started: the second player was
-         * never in the game, and both controllers went on driving player 1.
-         * So gun 2 gets its own Start. It is a separate device; it cannot fight
-         * anything. */
-        {
-            XrActionStateBoolean s2;
-            ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&s2, sizeof(s2));
-            gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
-            s2.type = XR_TYPE_ACTION_STATE_BOOLEAN;
-            gi.action = g_actStart; gi.subactionPath = g_handPath[oh];
-            if (pxrGetActionStateBoolean(session, &gi, &s2) == XR_SUCCESS &&
-                s2.isActive && s2.currentState)
-                buttons2 |= VC2_BTN_START;
-        }
+        if(starts&(1u<<oh))buttons2|=VC2_BTN_START;
         loc2=poses[oh];
-        if (poseValid[oh]) {
+        if (poseValid[oh] && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,oh)) {
             float p2[3], d2[3], hit2[3], sx2 = 320.0f, sy2 = 240.0f;
             p2[0] = loc2.pose.position.x;
             p2[1] = loc2.pose.position.y;
@@ -2706,9 +2684,6 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
             g_gun2Fire=0;prev2=buttons2;
             pushAim2(320,240,buttons2);
         }
-    } else if (g_frame) {
-        g_frame->akimbo = 0;
-        g_gun2Valid = 0;
     }
 
     /* the sight: beam, ring and hot core. alpha 0x80 only so the shader's
@@ -2722,7 +2697,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
                 fired ? 0x8090E0FFu : 0x804040FFu,    /* ring  */
                 fired ? 0x80E0F0FFu : 0x80A0A0FFu);   /* core  */
     }
-    if (g_cfgAkimbo && g_gun2Valid) {   /* second gun, amber, to tell them apart */
+    if (g_gun2Valid) {   /* second gun, amber, to tell them apart */
         int fired = (g_gun2Fire & VC2_BTN_FIRE) != 0;
         ovSight(g_gun2Origin, g_gun2Hit,
                 fired ? 0x8040D0FFu : 0x8010A0FFu,

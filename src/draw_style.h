@@ -8,6 +8,9 @@
 #define HOTD_CULL_SHIFT 22u
 #define HOTD_CULL_MASK (3u<<HOTD_CULL_SHIFT)
 #define HOTD_DRAW_STATE_MASK (511u|HOTD_CULL_MASK)
+#define HOTD_WORLD 0x01000000u
+#define HOTD_SHOT 0x02000000u
+#define HOTD_SHOT_GROUP_MASK 0xFC000000u
 
 static inline uint32_t hotd_style(unsigned blend,unsigned src,unsigned dst,unsigned zwrite,
     unsigned diffuse_alpha,unsigned test,unsigned func,unsigned ref)

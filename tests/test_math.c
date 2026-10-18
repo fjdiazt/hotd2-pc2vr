@@ -17,6 +17,16 @@ int main(void)
     HotdAtlas atlas={0};
     unsigned ax,ay,bx,by;
     HotdTrigger trigger={0},other={0};
+    for(int status=-1;status<=11;status++) {
+        int active=(status>=0 && status<=3) || status==5 || status==10;
+        assert(!!hotd_player_active(6,status)==active);
+        assert(!hotd_player_active(4,status) && !hotd_player_active(5,status) && !hotd_player_active(7,status));
+    }
+    assert(!hotd_hand_visible(0,0,0) && !hotd_hand_visible(0,0,1));
+    assert(hotd_hand_visible(1,0,0) && hotd_hand_visible(1,0,1));
+    assert(!hotd_hand_visible(0,1,0) && hotd_hand_visible(0,1,1));
+    assert(hotd_hand_visible(0,2,0) && !hotd_hand_visible(0,2,1));
+    assert(hotd_hand_visible(0,3,0) && hotd_hand_visible(0,3,1));
     HotdRapid repeat={0},repeat2={0};
     assert(hotd_rapid_fire(&repeat,1,1,10,0));
     assert(!hotd_rapid_fire(&repeat,1,1,10,99));
