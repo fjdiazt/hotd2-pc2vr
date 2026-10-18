@@ -30,3 +30,7 @@ Verification in the `feat/input-mapping` worktree:
 - That session requested zero cheats. The game's native lives/ammo flags were initially enabled, so the test cleared those flags only in its owned process before checking firing/reload/pause. Both players' native flags were verified off. The game closed normally and original `Hod2.exe`/`Hod2.ini` hashes stayed unchanged. Evidence: ignored `build/input-mapping-live.json`, `build/input-mapping-live.log` and `build/input-mapping-build.log` in this worktree.
 
 No headset session was launched. Physical controller bindings, complete menu coverage, eligible cutscene skip and full-game behavior still need runtime acceptance; the existing native Cancel route remains unchanged.
+
+The user subsequently confirmed the initial Trigger/A/B mapping works in the headset. A follow-up binds grip directly to the same per-hand OpenXR Reload/Cancel action as A/X and moves recenter to thumbstick click (Vive trackpad click). Stick tilt retains native menu arrows, and holding click recenters only once until release. No additional native hook or protocol change is needed. Grip/click headset acceptance remains pending.
+
+A/X is not also bound to Start: native calibration adjusts its value from Reload (`0x4885F1`) before processing Start to accept (`0x4884D2`). Sending both would adjust and accept together. Separating those actions by screen would require the special handling the user excluded.

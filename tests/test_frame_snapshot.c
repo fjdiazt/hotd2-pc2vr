@@ -10,7 +10,7 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes);
 #undef main
 
 static int interrupt_copy;
-static unsigned controller_pauses,controller_backs,controller_fires,controller_lost;
+static unsigned controller_pauses,controller_backs,controller_fires,controller_lost,controller_recentres;
 static float controller_sticks[2][2];
 static int controller_sticks_active;
 static XrResult XRAPI_CALL controller_sync(XrSession session,const XrActionsSyncInfo *info)
@@ -19,7 +19,8 @@ static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionSt
 {
     unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
     (void)session;out->isActive=XR_TRUE;out->changedSinceLastSync=XR_TRUE;
-    out->currentState=((info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actFire?controller_fires:0)&(1u<<hand))!=0;
+    unsigned held=info->action==g_actRecentre?controller_recentres:info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actFire?controller_fires:0;
+    out->currentState=info->subactionPath==XR_NULL_PATH ? held!=0:(held&(1u<<hand))!=0;
     return XR_SUCCESS;
 }
 static XrResult XRAPI_CALL controller_float(XrSession session,const XrActionStateGetInfo *info,XrActionStateFloat *out)
@@ -171,6 +172,20 @@ static void check_controller_modes(void)
     }
     controller_sticks_active=0;controller_tick();assert(!(g_frame->aim_buttons&nav_mask));
     memset(controller_sticks,0,sizeof(controller_sticks));
+    /* Stick click recenters once; tilting down remains a native menu arrow. */
+    g_actRecentre=(XrAction)(uintptr_t)8;
+    controller_recentres=1;
+    assert(handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0));
+    controller_tick();
+    controller_recentres=0;controller_tick();
+    controller_recentres=2;g_nativePaused=1;
+    assert(handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0));
+    controller_tick();
+    controller_recentres=0;controller_tick();g_nativePaused=0;
+    controller_sticks_active=1;controller_sticks[0][0]=-.8f;
+    controller_tick();assert(g_frame->aim_buttons&VC2_BTN_DOWN);
+    assert(!(g_frame->aim_buttons&(VC2_BTN_START|VC2_BTN_BACK|VC2_BTN_PAUSE|VC2_BTN_FIRE)));
+    controller_sticks_active=0;memset(controller_sticks,0,sizeof(controller_sticks));controller_tick();
 }
 static void snapshot_copy(void *dst,const void *src,size_t bytes)
 {

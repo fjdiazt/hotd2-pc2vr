@@ -45,7 +45,7 @@ The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun 
 1. Close any existing `Hod2.exe` session.
 2. Start your OpenXR runtime and connect the headset.
 3. Run `Start-HOTD2.ps1` with your game path.
-4. Face forward while the headset becomes focused and tracked. Grip recenters afterward.
+4. Face forward while the headset becomes focused and tracked. Thumbstick click recenters afterward.
 
 Keep the bridge and viewer from the same build together: their shared-memory formats must match. No DLL needs to be copied into the game directory.
 
@@ -68,16 +68,16 @@ Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the
 | --- | --- |
 | Trigger | Native Start/confirm and fire, or reload while the gun is tilted beyond the reload threshold |
 | Gun up at least 50° or down at least 45°, then trigger | Reload that hand's gun |
-| A / X | Native Reload/Cancel; reload during play and skip eligible cutscenes |
+| A / X or grip | Native Reload/Cancel; reload during play and skip eligible cutscenes |
 | B / Y | Native pause/resume, separate from Start |
 | Thumbstick four-way | Navigate native menus and adjust options |
-| Grip | Recenter the VR view |
+| Thumbstick click | Recenter the VR view |
 
 Trigger supplies Start and Fire together; the native game consumes them in its own interfaces. A pause-only input hook separates VR Start from pause/resume, retaining the game's pause eligibility, player ownership and automatic device-disconnect pause. If one player pauses, that player's B/Y resumes. Physical keyboard Enter/Tab keep their native Start/pause behavior. There is no menu classifier. Matching protocol-14 bridge/viewer builds are required.
 
 This mapping passed offline and native desktop input checks for both players. Headset button routing, complete menu coverage and eligible cutscene skip still need acceptance.
 
-Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms firing until release. Holding A/X does not block a later trigger pull. Thumbsticks supply native arrow keys; VR thumbstick zoom and click-to-toggle-screen bindings are removed.
+Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms firing until release. Holding A/X or grip does not block a later trigger pull. Grip and A/X share the same native action per hand; changing between them while one remains held does not create another reload press. Thumbstick tilt supplies native arrow keys, while clicking either stick recenters once per press, including in menus and while paused. On Vive, grip reloads/skips and trackpad click recenters.
 
 ### Pausing
 
@@ -92,7 +92,7 @@ Right always controls P1; left always controls P2.
 - `akimbo=1`: both guns appear from startup. Either hand's Start requests both players, so one menu confirmation joins both.
 - `akimbo=0`: each hand joins its own player. Gun visibility follows native player status, including accepted joins waiting through a cutscene. A rejected join, continue countdown, game over or return to menus does not leave an inactive gun visible.
 
-Firing and tracking loss do not swap player identities. A hidden hand's held trigger must be released before it can fire after joining. Grip and menu navigation remain available before joining.
+Firing and tracking loss do not swap player identities. A hidden hand's held trigger must be released before it can fire after joining. Recenter and menu navigation remain available before joining.
 
 ## Configuration
 

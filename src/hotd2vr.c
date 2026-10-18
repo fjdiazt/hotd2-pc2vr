@@ -10,10 +10,10 @@
  * Controllers (headset mode):
  *      trigger            shoot and native Start / confirm
  *      Gun up 50deg/down 45deg + trigger   Reload that gun
- *      A / X              native Reload / Cancel (cutscene skip)
+ *      A / X or grip      native Reload / Cancel (cutscene skip)
  *      B / Y              pause / resume
  *      thumbstick four-way native menu arrows
- *      grip (squeeze)     recentre on the current head pose
+ *      thumbstick click   recentre on the current head pose
  *
  * The controller is the light gun: its ray is cast against the actual level
  * geometry, the hit point is projected through the game's own camera, and the
@@ -2354,7 +2354,7 @@ static int headPoseReady(int anchored,XrSessionState state,XrResult located,
 }
 
 static XrActionSet g_actSet;
-static XrAction    g_actAim, g_actFire, g_actPause, g_actBack, g_actGrip, g_actMenu, g_actMenuX, g_actHaptic;
+static XrAction    g_actAim, g_actFire, g_actPause, g_actBack, g_actRecentre, g_actMenu, g_actMenuX, g_actHaptic;
 static volatile float g_zoomLevel = 1.0f;   /* 1 = no zoom; optional cinematic zoom */
 static int g_autoOn;                        /* the game is in a zoom moment  */
 static int g_resetControls;
@@ -2421,7 +2421,7 @@ static void initActions(XrInstance inst, XrSession session)
     MAKE(g_actFire,   "fire",   "Shoot / Start",   XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actPause,  "pause",  "Pause / Resume",  XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actBack,   "back",   "Reload / Cancel", XR_ACTION_TYPE_BOOLEAN_INPUT);
-    MAKE(g_actGrip,   "recentre", "Recentre",      XR_ACTION_TYPE_FLOAT_INPUT);
+    MAKE(g_actRecentre, "recentre", "Recentre",    XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actMenu,   "menu_vertical", "Menu up / down", XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actMenuX,  "menu_horizontal", "Menu left / right", XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actHaptic, "haptic",   "Recoil",           XR_ACTION_TYPE_VIBRATION_OUTPUT);
@@ -2450,8 +2450,10 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actBack,  "/user/hand/right/input/a/click");
     BIND(g_actPause, "/user/hand/left/input/y/click");
     BIND(g_actPause, "/user/hand/right/input/b/click");
-    BIND(g_actGrip, "/user/hand/left/input/squeeze/value");
-    BIND(g_actGrip, "/user/hand/right/input/squeeze/value");
+    BIND(g_actBack, "/user/hand/left/input/squeeze/value");
+    BIND(g_actBack, "/user/hand/right/input/squeeze/value");
+    BIND(g_actRecentre, "/user/hand/left/input/thumbstick/click");
+    BIND(g_actRecentre, "/user/hand/right/input/thumbstick/click");
     BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
     BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
     BIND(g_actMenuX, "/user/hand/left/input/thumbstick/x");
@@ -2469,8 +2471,10 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actBack,  "/user/hand/right/input/a/click");
     BIND(g_actPause, "/user/hand/left/input/b/click");
     BIND(g_actPause, "/user/hand/right/input/b/click");
-    BIND(g_actGrip, "/user/hand/left/input/squeeze/value");
-    BIND(g_actGrip, "/user/hand/right/input/squeeze/value");
+    BIND(g_actBack, "/user/hand/left/input/squeeze/value");
+    BIND(g_actBack, "/user/hand/right/input/squeeze/value");
+    BIND(g_actRecentre, "/user/hand/left/input/thumbstick/click");
+    BIND(g_actRecentre, "/user/hand/right/input/thumbstick/click");
     BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
     BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
     BIND(g_actMenuX, "/user/hand/left/input/thumbstick/x");
@@ -2484,12 +2488,12 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actFire, "/user/hand/right/input/trigger/value");
     BIND(g_actHaptic, "/user/hand/left/output/haptic");
     BIND(g_actHaptic, "/user/hand/right/output/haptic");
-    BIND(g_actBack,  "/user/hand/left/input/trackpad/click");
-    BIND(g_actBack,  "/user/hand/right/input/trackpad/click");
+    BIND(g_actRecentre, "/user/hand/left/input/trackpad/click");
+    BIND(g_actRecentre, "/user/hand/right/input/trackpad/click");
     BIND(g_actPause, "/user/hand/left/input/menu/click");
     BIND(g_actPause, "/user/hand/right/input/menu/click");
-    BIND(g_actGrip, "/user/hand/left/input/squeeze/click");
-    BIND(g_actGrip, "/user/hand/right/input/squeeze/click");
+    BIND(g_actBack, "/user/hand/left/input/squeeze/click");
+    BIND(g_actBack, "/user/hand/right/input/squeeze/click");
     BIND(g_actMenu, "/user/hand/left/input/trackpad/y");
     BIND(g_actMenu, "/user/hand/right/input/trackpad/y");
     BIND(g_actMenuX, "/user/hand/left/input/trackpad/x");
@@ -2513,8 +2517,8 @@ static void initActions(XrInstance inst, XrSession session)
     at.actionSets = &g_actSet;
     if (XR_FAILED(pxrAttachSessionActionSets(session, &at)))
         die("could not attach the action set");
-    note("controllers wired: trigger shoot/start, gun up 50deg/down 45deg + trigger reload, A/X reload/cancel, B/Y pause,\n"
-         "                   stick four-way menus, grip recentre\n");
+    note("controllers wired: trigger shoot/start, gun up 50deg/down 45deg + trigger reload, A/X or grip reload/cancel, B/Y pause,\n"
+         "                   stick four-way menus, stick click recentre\n");
 }
 #undef BIND
 
@@ -2624,14 +2628,13 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     XrActionsSyncInfo si;
     XrActiveActionSet act;
     XrActionStateGetInfo gi;
-    XrActionStateBoolean fire[2], bpause[2], bback[2];
-    XrActionStateFloat grip;
+    XrActionStateBoolean fire[2], bpause[2], bback[2], bcentre;
     XrSpaceLocation loc;
     XrSpaceLocation poses[2];
     int poseValid[2];
     unsigned triggerActions[2];
     static HotdTrigger triggers[2];
-    static int prevGrip;
+    static int prevCentre;
     static unsigned menuHeld[2],menuHorizontal[2];
     static unsigned prevButtons, prev2;
     unsigned starts;
@@ -2643,7 +2646,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     float sx = 320.0f, sy = 240.0f;
 
     if (g_resetControls) {
-        prevGrip = 0;
+        prevCentre = 0;
         menuHeld[0] = menuHeld[1] = 0;
         menuHorizontal[0] = menuHorizontal[1] = 0;
         prevButtons = prev2 = 0;
@@ -2681,6 +2684,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     GETB(bpause[1], g_actPause, g_handPath[1]);
     GETB(bback[0], g_actBack, g_handPath[0]);
     GETB(bback[1], g_actBack, g_handPath[1]);
+    GETB(bcentre, g_actRecentre, XR_NULL_PATH);
 #undef GETB
     starts=(fire[0].isActive && fire[0].currentState ? 1u:0u) |
         (fire[1].isActive && fire[1].currentState ? 2u:0u);
@@ -2695,12 +2699,6 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         triggerActions[h]=hotd_trigger_action(triggers+h,fire[h].isActive && fire[h].currentState,
             poseValid[h] && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h),direction[1]);
     }
-    ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&grip, sizeof(grip));
-    gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
-    grip.type = XR_TYPE_ACTION_STATE_FLOAT;
-    gi.action = g_actGrip; gi.subactionPath = XR_NULL_PATH;
-    pxrGetActionStateFloat(session, &gi, &grip);
-
     for(h=0;h<2;h++) {
         XrActionStateFloat stick={XR_TYPE_ACTION_STATE_FLOAT};
         gi.type=XR_TYPE_ACTION_STATE_GET_INFO;gi.action=g_actMenu;gi.subactionPath=g_handPath[h];
@@ -2752,8 +2750,8 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
             fire[h].isActive && fire[h].currentState && fire[h].changedSinceLastSync)
             buzz(session, h, 0.06f, 1.0f);
 
-    if (grip.isActive && grip.currentState > 0.85f && !prevGrip) recentre = 1;
-    prevGrip = grip.isActive && grip.currentState > 0.85f;
+    if (bcentre.isActive && bcentre.currentState && !prevCentre) recentre = 1;
+    prevCentre = bcentre.isActive && bcentre.currentState;
 
     /* The bridge mirrors either player's Start to both native keys in akimbo. */
     if(g_cfgAkimbo)buttons|=VC2_BTN_PAIR_START;
@@ -3180,7 +3178,7 @@ static int runVR(void)
 
             if (handleControllers(session, space, fs.predictedDisplayTime,
                                   originYaw, ox, oy, oz))
-                haveOrigin = 0;                    /* grip: recentre next frame */
+                haveOrigin = 0;                    /* stick click: recentre next frame */
 
             mIdent(model);
             model[0] = model[5] = model[10] = scale;
