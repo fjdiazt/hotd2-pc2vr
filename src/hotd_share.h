@@ -7,12 +7,13 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 11
+#define VC2_SHARE_VERSION 12
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960
 #define VC2_ATLAS_W 4096
 #define VC2_ATLAS_H 4096
+#define HOTD_RENDER_UNLIT 1u
 #define VC2_BTN_FIRE 1u
 #define VC2_BTN_START 2u
 #define VC2_BTN_BACK 4u
@@ -20,6 +21,8 @@
 #define VC2_BTN_UP 16u
 #define VC2_BTN_DOWN 32u
 #define VC2_BTN_PAIR_START 64u
+#define VC2_BTN_LEFT 2048u
+#define VC2_BTN_RIGHT 4096u
 #define HOTD_CHEAT_AMMO 256u
 #define HOTD_CHEAT_LIVES 512u
 #define HOTD_CHEAT_RAPID 1024u
@@ -34,6 +37,8 @@ typedef struct {
     float u, v, depth;
     float atlas_x, atlas_y, atlas_w, atlas_h;
     uint32_t style, address; /* Per-axis native wrap/mirror/clamp; see hotd_address(). */
+    uint32_t specular, fog_colour; /* RGBA; fog alpha stores mode 0/off, 1/linear, 2/exp, 3/exp2. */
+    float fog; /* Native camera fog coordinate; evaluated after texturing/specular. */
 } Vc2Vertex;
 
 typedef struct {
@@ -48,7 +53,8 @@ typedef struct {
     float aim_x, aim_y;
     uint32_t aim_buttons;
     volatile uint32_t screen_seq;
-    uint32_t screen_frame, screen_ok, screen_w, screen_h, screen_pad;
+    uint32_t screen_frame, screen_ok, screen_w, screen_h;
+    volatile uint32_t render_flags; /* Viewer -> bridge; uses previously reserved screen padding. */
     volatile uint32_t atlas_seq;
     uint32_t atlas_frame;
     HotdLens lens;
@@ -63,7 +69,7 @@ typedef struct {
     float shot_origins[64][3]; /* Exact camera-space anchors for grouped native flashes. */
 } Vc2Frame;
 #pragma pack(pop)
-_Static_assert(sizeof(Vc2Vertex) == 52, "vertex layout changed");
+_Static_assert(sizeof(Vc2Vertex) == 64, "vertex layout changed");
 _Static_assert(offsetof(Vc2Frame, verts) == 156, "frame layout changed");
-_Static_assert(offsetof(Vc2Frame,cheat_flags)==84504220 && offsetof(Vc2Frame,shot_origins)==84504236 && sizeof(Vc2Frame)==84505004,"effect layout changed");
+_Static_assert(offsetof(Vc2Frame,cheat_flags)==87384220 && offsetof(Vc2Frame,shot_origins)==87384236 && sizeof(Vc2Frame)==87385004,"effect layout changed");
 #endif

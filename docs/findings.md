@@ -194,6 +194,31 @@ Default is now 4 shots/sec in the shipped INI, viewer initialization, missing/in
 
 Build/offline gates passed after the default change (`build/default-rate-4-build.log`), including missing-key default, shared request value and the existing 250 ms rate-4 timer check. No game or VR launch.
 
+
+## In-game HUD at main-menu depth
+
+The bridge previously discarded some flat 2D draws and captured other HUD sprites at their native near-camera depth. Live tracing found biased HUD planes at depths 0.98 and 0.9999 native units (rhw 1.02041 and 1.0001), explaining the elements sitting close to the face. Native screen-space sprite and bitmap draws outside model capture now collect into a bounded HUD buffer in every mode and at every native sort depth. They append after world geometry under the existing frame seqlock; `reserved[2]` reports the first HUD vertex plus one. Model capture is tracked separately from collision metadata: traveling tracers deliberately have no world/shot tag but must retain their actual depth. The automatic screen-panel presentation replaces the separate HUD layer when its texture is available, preserving bitmap menus without duplicating UI. Scope rendering keeps HUD because the scope does not draw that panel.
+
+HUD canvas and menu pose share constants in `capture_math.h`: 2 m distance, 1 m half-width and 0.75 m half-height. Native 640×480 HUD coordinates map directly onto that plane using the active units-per-metre value, so recentering and world scale place it with the menu. Native vertex/texture transparency and blend/alpha-test states are retained. HUD vertices have no world/shot/group flags, no face culling and no depth writes. The existing HUD render pass disables scene depth testing, keeps its unzoomed matrix and uses the sharp overlay shader. Captions/lives/ammo cannot become aim or splash targets. Auto-panel visibility now tests the world vertex boundary, so HUD text counts cannot suppress the menu panel.
+
+Protocol v9 changes layer semantics without changing v8's 83,545,004-byte layout; matching bridge/viewer builds are required. Test reproduced the old discarded-HUD behavior (`frame->vertex_count==6` failed before implementation). Full build passed (`build/hud-menu-depth-build.log`). Actual bridge tests cover world/HUD publication order, all canvas corners at 2 m, transparency, cleared collision flags, main-menu exclusion and depth-disabled HUD capture. Viewer snapshot tests cover the HUD boundary, and WARP verifies the HUD remains visible over nearer scene depth. HUD size/depth comfort, full caption coverage and headset presentation remain unverified. No VR launch.
+
+Final desktop check (owned PID 108792, `build/hud-native.json`) captured coherent frames for both active players with 156 / 132 HUD vertices, all at native z=-20 (2 m at units_per_metre=10). No unclassified near-camera vertices remained outside the HUD layer in either capture. World geometry and 126 shot-effect vertices remained separate. Both players had three lives and were unpaused; all cheats were requested at 4 shots/sec. Owned game closed normally. This checks capture, depth and separation; headset size/readability and full-game UI coverage still require user testing.
+
+User accepted HUD placement and later confirmed HOLD YOUR FIRE looks correct; dialogue subtitles need another headset check. Native intro capture and actual viewer shader replay (`build/caption-reference.png`, `build/caption-replay.png`) both show "We're meeting G over there." The 138 captured subtitle vertices are already in the 2 m HUD layer; no separate subtitle depth change was made.
+
+Letterbox_Task 0x00413970 draws two instances of model 0x93E with identity view-space bases, y translations +/-0.35 through +/-0.45 and z=-1. Capture now omits only those exact bar instances in every game mode. The original model draw still runs for the native desktop window. Pause dimming, full-screen blackouts and other uses of the same model remain captured. Fake-COM regression verifies animated top/bottom bars, unchanged native draw calls, scope restoration, pause/blackout preservation, other models and cross-mode bar removal. Bridge rebuilt and checks passed; headset verification pending (`build/caption-letterbox-vr.log`).
+
+
+Title/attract logo regression: the initial phase-6-only HUD filter discarded the title logo (depth 1) and PRESS START (depth 0.9999). Their 3D background keeps the automatic captured-screen panel hidden, so neither fallback displayed them. The first correction admitted 3 and 5 alongside 6; the broader correction below removes that filter entirely. Added actual-bridge capture/publication checks for both native depths in title and attract over world geometry. Test failed before the fix at the world/HUD vertex-count assertion and passed afterward. Bridge rebuilt; no game or VR launch for this change.
+
+
+All-mode UI correction: the mode whitelist still discarded how-to-play (9), story (10/11), game-over (7) and menu text outside admitted modes. The depth cutoff also misclassified ranking/map/options artwork, whose native sort depths reach 200. Both filters are removed; original native submission order remains the HUD paint order. Actual-bridge tests exercise modes 0..16 at depths 0.9, 0.98, 0.9999, 1, 2, 21, 45, 101, 120 and 200, with world/HUD separation and 2 m placement. They reproduce the old missing-UI assertion before the fix. Additional checks protect pretransformed world/shot geometry and untagged traveling tracers. WARP verifies screen-panel replacement, scope HUD and fallback when the panel texture is unavailable. Full build/offline checks passed (`build/all-mode-ui-build.log`). No VR launch; full-game visual coverage remains pending.
+
+
+Desktop attract-loop verification (owned game PID 101744, viewer 87540) passed with cheats enabled at 4 shots/sec. Coherent live frames in title (3), tutorial (9), and demo (5) contained up to 54, 72, and 120 HUD vertices respectively, all at native z=-20 with world/shot flags cleared. Tutorial retained 13,974 world vertices plus 66 UI vertices in the replay fixture. Actual viewer shader replay (`build/tutorial-replay.png`) visibly retains PRESS START, six bullets, the P1 label and three life torches seen in the native reference (`build/tutorial-reference.png`). Report: `build/all-mode-ui-native.json`; build: `build/all-mode-ui-build.log`. Both owned diagnostic processes were closed normally. Other modes have synthetic capture coverage, not complete native visual acceptance; headset testing remains pending.
+
+
 ## Per-material texture addressing
 
 User reported a symmetry seam / wrongly textured half on the opening car and a boss, visible in the conversion desktop window as well as VR while the native game looks correct. The bridge read blend/alpha/cull state but discarded D3DTSS_ADDRESSU/V; both conversion shaders applied frac(UV) unconditionally. Native material state supports wrap, mirror and clamp independently per axis. VC2VR handles its own engine's quad flips in its UV builder, so its behavior is not a substitute for capturing HOTD2's D3D7 sampler state.
@@ -206,3 +231,66 @@ Native opening-car inspection (owned desktop PID 110596, `build/car-address-nati
 
 
 Headset verification: user confirmed textures fixed in the session logged by `build/texture-address-vr.log` (game PID 98820, viewer 92896). No claim of exhaustive boss/scene coverage.
+
+
+Attract intro/outro letterbox follow-up: the bar-removal helper still required game phase 6 even after UI capture became mode-independent. Attract demo/story phases 5/10/11 use the same Letterbox_Task and model/matrix shape. Removed that phase restriction; exact model 0x93E, identity basis, y +/-0.35..0.45 and |z|=1 remain mandatory. Fake-COM checks cover 102 bar cases (phases 0..16, y +/-0.35, +/-0.40 and +/-0.45), unchanged native draw calls, restored capture scope, and preserved pause/blackout/other-model behavior. Native screen-panel fallback still contains original desktop pixels; no framebuffer cropping or native draw suppression was added. Headset attract-loop acceptance pending.
+
+
+## Menu navigation across native interfaces
+
+The bridge gated arrow injection to mode-select phase 4 even though the viewer already sent vertical stick navigation. Arrow injection now follows fresh VR input in every mode; the game consumes arrows in its own interface handlers. Added horizontal float actions and Touch/Index/Vive bindings, using LEFT=2048 / RIGHT=4096 and existing hysteresis. Either hand can navigate before a player joins. Conflicting directions cancel VR navigation per axis. Native A/X Enter/Tab, B/Y cancel and gun aiming/firing remain separate. Options difficulty/lives/etc use Left/Right to adjust values; Enter confirms only native actions such as Default, calibration/controller pages and Exit. Sound/voice Play requires native Fire, so Start intentionally is not remapped to shoot. In akimbo-off menus, the existing hidden-gun trigger guard can still limit that Play action.
+
+Focused bridge/controller checks pass: modes 0..16, both hands, four directions, hysteresis/release/inactive inputs, opposing directions, unchanged Start keys, no extra fire and preserved independent gameplay aim axes. No VR launch; native menu/headset acceptance remains pending.
+
+## Lighting/shader audit
+
+User reports the conversion view appears brighter/flatter than native, initially describing missing shadows then shaders. Native lit submissions are present in actual logs (FVF 0x112 with normals, LIGHTING=1, AMBIENT=0xFFB2B2B2), but capture drops normals and specular and copies only material diffuse. Conversion shaders multiply texture RGB by that color; they do not evaluate native enabled lights, material ambient/emissive, specular or fog. The native reference implements directional, point/spot Gouraud lighting, secondary specular after texturing, and fog. This is a confirmed fidelity gap and a likely source of different shading; scene brightness has not been quantified.
+
+Current VR logs already show sRGB eye buffers and gamma=220%, so no blanket gamma change was made. Black alpha shadow geometry is captured and has offscreen shader coverage; that does not prove all scene shadows are present. A second potential mismatch is linear-space sRGB-eye blending versus the original's encoded-color blending, especially on translucent shadows; current UNORM/gamma=1 pixel checks cannot qualify that difference. No lighting repair implemented. Next proper step is native per-vertex diffuse/ambient evaluation from enabled lights/materials/normal transforms, then separate secondary-color/fog support; specular cannot correctly be folded into texture tint.
+
+
+## Native lighting conversion
+
+The bridge now evaluates native D3D7 Gouraud lighting per vertex using current WORLD/VIEW, inverse-transpose normals, material source selection, emissive/global/light ambient, enabled light slots 0..15, directional/point/spot attenuation and cones, and local-viewer specular. Normal normalization follows NORMALIZENORMALS instead of being forced. These states are captured per draw because native actor/stage submissions change them. Pretransformed UI retains its already-lit colors.
+
+Specular is transported separately and added after texture modulation. Fog follows that saturated sum; native linear table fog uses the original camera depth and remains unclamped until pixel evaluation. EXP/EXP2, vertex/range fog and supplied prelit fog factors are supported. Protocol v11 uses 64-byte vertices and an 87,385,004-byte frame; both producer and viewer must be rebuilt together. Generated gun/aim geometry explicitly disables native specular/fog. Gamma/blending settings remain as before.
+
+Validation: CPU lighting fixtures cover material sources, light types/range/attenuation, normal transforms, view transforms, local viewer and fog modes; actual fake-COM bridge coverage includes sparse enabled slot 15, material-vs-vertex color and fog/specular transport. WARP pixel checks cover secondary color after texture modulation, clamping before fog, linear/EXP/EXP2 fog, per-pixel table-fog clamping, and both world/sharp HUD shaders. Existing input/HUD/opacity/culling/addressing tests pass.
+
+Native windowed car-dialogue capture (owned PID 46620, closed normally) published 15,474 world vertices, 921 with specular, 15,330 with fog, and 201 distinct diffuse colors. `build/lighting-comparison.png` places native capture left and conversion replay right. Shading/highlights now appear much closer; filtering, HUD placement and letterboxing differ, so this is not a pixel parity measurement. Full-game stage lights, bosses and headset appearance remain unverified. Existing sRGB-eye blending differences on translucent shadows are outside this change.
+
+Formula references: [Microsoft lighting](https://learn.microsoft.com/en-us/windows/win32/direct3d9/mathematics-of-lighting), [pixel fog](https://learn.microsoft.com/en-us/windows/win32/direct3d9/pixel-fog), [vertex fog](https://learn.microsoft.com/en-us/windows/win32/direct3d9/vertex-fog), and the local native-reference renderer `C:/src/gaming/hotd2-re/src/port/render/hlsl_shaders.h`.
+
+
+## Native lighting switch
+
+`[vr] native_lighting=1` defaults enabled; viewer CLI `--native-lighting` / `--no-native-lighting` override for one launch (last wins), and Start-HOTD2.ps1 forwards `-NativeLighting` / `-NoNativeLighting`. The viewer publishes HOTD_RENDER_UNLIT through the previously unused screen-padding word (offset 96), now named render_flags; protocol v11 size/other offsets stay unchanged. Bridge initialization reads the same INI so native-only capture also follows it. Changing the viewer setting updates the live bridge without modifying the native game's draw path.
+
+Off restores pre-lighting diffuse/material color and neutral specular/fog. It skips extended state/light queries, normal-matrix preparation and lighting evaluation, while keeping the fixed 64-byte vertex format. INI/CLI precedence, shared flag delivery and exact bridge off/on colors are covered by offline tests; no frame-time savings have been measured. Menu UI deferred by user request.
+
+VC2VR comparison: HOTD2 already has MSAA, supersampling, sRGB gamma handling, native depth, sharp HUD, zoom/scope and world/gun scale. Precise native-crosshair suppression and optional HUD size/distance controls are useful future work. VC2 HGL cube passes/object-memory/background stretching/dashboard or custom drum UI are not general graphics improvements to transplant here. Separate brightness gain, described below, provides comfort tuning rather than reconstructing native lighting.
+
+## Scene brightness
+
+`[vr] brightness=100` is neutral; integer values 25..400 apply gain to the converted scene after native specular/fog and before existing gamma compensation. It works with native lighting enabled or disabled. HUD vertices (`depth>=1`), generated gun/aim graphics, the captured-screen panel and native desktop rendering are unchanged. Gamma remains sRGB compensation, separate from brightness.
+
+`HOTD2VR.exe --brightness 80` or `Start-HOTD2.ps1 -Brightness 80` selects 80% brightness for one launch without saving the INI. Default brightness is 85%. Missing/invalid INI values use 85; invalid CLI values are rejected and repeated valid CLI values use the last one. Restart the viewer to apply changes. Headset brightness/comfort acceptance remains pending.
+
+
+## Behind-view capture investigation (read-only)
+
+HOTD2 submits real XYZ before GPU projection, so VC2's extra rotated-camera passes may be unnecessary. The existing Mdl_Draw side-plane relaxation does not expand Stage_DrawSection's whole-object visibility gates. Installed-EXE inspection identified Stage_DrawSection 0x401260 calling 0x406310 at 0x40137B, 0x4013C7 and 0x40140E. 0x419200 retrieves a bounding sphere; it is not the visibility test. Mdl_Draw's sphere check at 0x4A7F81 still retains near/back/custom rejection.
+
+First candidate prototype: expand only valid loaded stage-model submissions, including their deferred second pass, and allow rear stage meshes through the appropriate native camera checks. Preserve explicit stage omissions, face culling and native draw/material passes. Stage-task scope alone does not cover deferred submissions. Measure rear vertices, dropped geometry, queue capacity and CPU time before broadening it. No prototype or runtime change was made by this investigation.
+
+A cache cannot invent never-submitted geometry. Consider it only for scenery lost when sections switch/unload (native format notes: `C:/src/gaming/hotd2-re/notes/formats.md:273`). Safe retention needs owned static geometry in stable coordinates, protected texture lifetime, bounded retention and section/stage/reset invalidation. Current output is camera-space and atlas tiles are reused; retaining it blindly can produce wrong textures, frozen lighting, stale walls or enemy ghosts. Prefer known stage-model ownership over VC2's repeated-position static heuristic. Rear coverage, authored backfaces, performance and section transitions remain untested.
+
+
+## Native crosshair investigation (read-only)
+
+The viewer's comment claiming the DLL removes VC2 texture IDs 1361..1376 is inherited donor text; HOTD2's bridge has no such filter, and its positional hidecross heuristic defaults disabled. Native HOTD2 crosshair selection instead uses 0x579F58: P1 IDs 0xAA8/0xAAA/0xAAB/0xAAC, P2 IDs 0xAA9/0xAAD/0xAAE/0xAAF.
+
+A narrow capture-only suppression candidate is Bitmap_DrawDef 0x41C630, scoped by native caller and player crosshair definition identity. Verified first nine bytes are `8B 44 24 04 83 EC 38 8B 08` (complete instructions). Gameplay call 0x416AE2 returns to 0x416AE7; end-screen gun crosshair call 0x4169B1 returns to 0x4169B6. Both pass player+0xE4 (P1 0x9A5D44, P2 +0x130). Options preview reaches the same renderer via generic helper 0x488000, return 0x488081 with a temporary definition; caller/definition guards can preserve that preview and unrelated HUD. Any implementation must preserve native desktop rendering and VR aiming indicators. Native captured-screen panels can still contain the original crosshair, so that path needs separate consideration. No hook or suppression was implemented by this investigation.
+
+
+Crosshair queuing constraint: Bitmap_DrawDef can enqueue rather than draw immediately (0x4ACD20 -> Sprite_Submit 0x4A7A40, copied 0x3C record). Therefore a scoped capture_skip only around Bitmap_DrawDef would miss deferred output. A future solution must retain precise crosshair provenance through the queued record and apply capture-only suppression during Sprite_Draw 0x4A7AB0, while still invoking native drawing. Its verified nine-byte detour signature is `81 EC B0 00 00 00 53 55 56`. Record+0xC carries the resolved bitmap handle, but handle-only filtering can also match preview/aliases; preserve caller/definition identity and clear frame-local tags. This is a candidate design, not runtime-qualified implementation.

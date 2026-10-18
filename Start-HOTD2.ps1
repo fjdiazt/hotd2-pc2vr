@@ -11,6 +11,9 @@ param(
     [switch]$SkipSplash,
     [switch]$ShowSplash,
     [ValidateRange(0.1,10.0)][double]$WorldScale = 1.25,
+    [ValidateRange(25,400)][int]$Brightness = 85,
+    [switch]$NativeLighting,
+    [switch]$NoNativeLighting,
     [switch]$Laser,
     [switch]$NoLaser,
     [switch]$Crosshair,
@@ -18,6 +21,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if ($SkipSplash -and $ShowSplash) { throw 'Choose either -SkipSplash or -ShowSplash.' }
+if ($NativeLighting -and $NoNativeLighting) { throw 'Choose either -NativeLighting or -NoNativeLighting.' }
 if ($Laser -and $NoLaser) { throw 'Choose either -Laser or -NoLaser.' }
 if ($Crosshair -and $NoCrosshair) { throw 'Choose either -Crosshair or -NoCrosshair.' }
 $out = Join-Path $PSScriptRoot 'build'
@@ -40,6 +44,9 @@ if ($InfiniteContinues) { $viewerArgs += '--infinite-continues' }
 if ($RapidFire) { $viewerArgs += '--rapid-fire' }
 if ($PSBoundParameters.ContainsKey('RapidFireRate')) { $viewerArgs += '--rapid-fire-rate', "$RapidFireRate" }
 if ($PSBoundParameters.ContainsKey('WorldScale')) { $viewerArgs += '--world-scale', $WorldScale.ToString('G', [Globalization.CultureInfo]::InvariantCulture) }
+if ($PSBoundParameters.ContainsKey('Brightness')) { $viewerArgs += '--brightness', "$Brightness" }
+if ($NativeLighting) { $viewerArgs += '--native-lighting' }
+if ($NoNativeLighting) { $viewerArgs += '--no-native-lighting' }
 if ($Laser) { $viewerArgs += '--laser' }
 if ($NoLaser) { $viewerArgs += '--no-laser' }
 if ($Crosshair) { $viewerArgs += '--crosshair' }

@@ -13,6 +13,10 @@ if ($LASTEXITCODE) { throw 'Launcher build failed.' }
 if ($LASTEXITCODE) { throw 'Startup test build failed.' }
 & "$out\test_startup.exe"
 if ($LASTEXITCODE) { throw 'Startup test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_lighting.exe" "$root\tests\test_lighting.c"
+if ($LASTEXITCODE) { throw 'Lighting test build failed.' }
+& "$out\test_lighting.exe"
+if ($LASTEXITCODE) { throw 'Lighting test failed.' }
 & $gcc -std=c11 -Wall -Wextra -o "$out\test_math.exe" "$root\tests\test_math.c"
 if ($LASTEXITCODE) { throw 'Math test build failed.' }
 & "$out\test_math.exe"

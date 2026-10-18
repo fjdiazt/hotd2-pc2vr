@@ -175,21 +175,35 @@ int main(void)
     frame->aim_buttons=0;frame->aim2_buttons=VC2_BTN_BACK;
     assert(SUCCEEDED(keyboard_state(NULL,256,keys)));
     assert(!keys[DIK_RCONTROL] && keys[DIK_LCONTROL] && !keys[DIK_ESCAPE]);
-    *(DWORD *)(game_base+0x5C8E98)=4;
-    frame->aim_buttons=VC2_BTN_UP;frame->aim2_buttons=0;
-    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_UP] && !keys[DIK_DOWN]);
-    frame->aim_buttons=0;frame->aim2_buttons=VC2_BTN_DOWN;
-    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && keys[DIK_DOWN]);
-    frame->aim_buttons=VC2_BTN_UP;
-    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN]);
-    frame->aim_buttons=VC2_BTN_DOWN;frame->aim2_buttons=0;
+    /* Native keyboard navigation works in every interface, including Options. */
+    for(unsigned phase=0;phase<=16;phase++) {
+        *(DWORD *)(game_base+0x5C8E98)=phase;
+        frame->aim_buttons=VC2_BTN_UP;frame->aim2_buttons=0;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_UP] && !keys[DIK_DOWN]);
+        frame->aim_buttons=0;frame->aim2_buttons=VC2_BTN_DOWN;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && keys[DIK_DOWN]);
+        frame->aim_buttons=VC2_BTN_UP;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN]);
+        frame->aim_buttons=VC2_BTN_RIGHT;frame->aim2_buttons=0;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RIGHT] && !keys[DIK_LEFT]);
+        frame->aim_buttons=0;frame->aim2_buttons=VC2_BTN_LEFT;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_RIGHT] && keys[DIK_LEFT]);
+        frame->aim_buttons=VC2_BTN_RIGHT;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_RIGHT] && !keys[DIK_LEFT]);
+        frame->aim_buttons=VC2_BTN_START;frame->aim2_buttons=VC2_BTN_START;
+        assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RETURN] && keys[DIK_TAB] && !keys[DIK_SPACE]);
+    }
     *(DWORD *)(game_base+0x5C8E98)=6;
-    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN]);
+    frame->aim_x=400;frame->aim_y=150;frame->aim2_x=120;frame->aim2_y=350;
+    tick(VC2_BTN_UP|VC2_BTN_LEFT,VC2_BTN_UP|VC2_BTN_RIGHT);
+    assert(!gun1->fire && !gun2->fire);
+    assert(gun1->x==80 && gun1->y==90 && gun2->x==-200 && gun2->y==-110);
     aim_seq=frame->aim_seq;aim_tick=GetTickCount()-501;
     poll_input();native_input();
     assert(!gun1->fire && !gun2->fire && !gun1->valid && !gun2->valid);
     *(DWORD *)(game_base+0x5C8E98)=4;
-    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN]);
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN] &&
+        !keys[DIK_LEFT] && !keys[DIK_RIGHT]);
     free(game_base);free(frame);
     puts("Input/cheats: reload edges, native flag restore, independent rapid fire, menu/pause guards and watchdogs passed.");
     return 0;

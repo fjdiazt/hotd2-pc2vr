@@ -12,7 +12,7 @@
  *      Gun up 50deg/down 45deg + trigger   Reload that gun
  *      A / X              Start / confirm / pause
  *      B / Y              native Reload / Cancel (cutscene skip)
- *      thumbstick up/down native mode-selection menu arrows
+ *      thumbstick four-way native menu arrows
  *      grip (squeeze)     recentre on the current head pose
  *
  * The controller is the light gun: its ray is cast against the actual level
@@ -24,7 +24,7 @@
  * itself whenever the 3D scene is nearly empty - menus, scores, name entry -
  * because those are 2D sprites that never reach the quad slot and would
  * otherwise leave the headset in a void. Point at the screen and the ray maps
- * straight onto it for aiming. Mode selection uses thumbstick arrow keys.
+ * straight onto it for aiming. Menus use thumbstick arrow keys.
  *
  * Two modes:
  *      HOTD2VR.exe              headset (default)
@@ -176,8 +176,10 @@ static int g_cfgHaptic = 1;             /* [vr] haptic: buzz on every shot */
 static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
 static int g_cfgSuper = 140;      /* eye buffer scale in percent */
 static float g_cfgWorldScale = 1.25f; /* world size multiplier; 1 preserves the native unit conversion */
+static int g_cfgNativeLighting = 1;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
+static int g_cfgBrightness = 85;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
  * The game's texels and shades are already gamma-encoded (a 1997 renderer
@@ -208,10 +210,11 @@ static int  g_cfgGunScale = 100;  /* percent */
 static int  g_cfgReloadMs = 180;  /* reload flick, ms */
 static unsigned g_cheatFlags;
 static unsigned g_cfgRapidRate=4;
-static void readAimIndicators(const char *path)
+static void readGraphicsFlags(const char *path)
 {
     g_cfgLaser=GetPrivateProfileIntA("vr","laser",1,path)!=0;
     g_cfgCrosshair=GetPrivateProfileIntA("vr","crosshair",1,path)!=0;
+    g_cfgNativeLighting=GetPrivateProfileIntA("vr","native_lighting",1,path)!=0;
 }
 static int parseWorldScale(const char *text,float *scale)
 {
@@ -232,6 +235,20 @@ static int readRapidRate(const char *path,unsigned *rate)
     char text[32];
     GetPrivateProfileStringA("vr","rapid_fire_rate","4",text,sizeof(text),path);
     return hotd_parse_rapid_rate(text,rate);
+}
+static int parseBrightness(const char *text,int *brightness)
+{
+    char *end;long value;
+    if(!text || *text<'0' || *text>'9')return 0;
+    value=strtol(text,&end,10);
+    if(*end || value<25 || value>400)return 0;
+    *brightness=(int)value;return 1;
+}
+static int readBrightness(const char *path,int *brightness)
+{
+    char text[32];
+    GetPrivateProfileStringA("vr","brightness","85",text,sizeof(text),path);
+    return parseBrightness(text,brightness);
 }
 static unsigned readCheats(const char *path)
 {
@@ -257,8 +274,11 @@ static void loadCfg(void)
     DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
     while (n > 0 && path[n - 1] != '\\') n--;
     lstrcpyA(path + n, "HOTD2VR.ini");
-    readAimIndicators(path);
+    readGraphicsFlags(path);
     g_cheatFlags=readCheats(path);
+    if(!readBrightness(path,&g_cfgBrightness)) {
+        note("Invalid brightness; using 85%% (allowed 25..400).\n");g_cfgBrightness=85;
+    }
     if(!readRapidRate(path,&g_cfgRapidRate)) {
         note("Invalid rapid_fire_rate; using 4 shots/sec (allowed 1..30).\n");g_cfgRapidRate=4;
     }
@@ -348,6 +368,7 @@ static int openShare(void)
 static void pushCheats(void)
 {
     if(!g_frame)return;
+    g_frame->render_flags=g_cfgNativeLighting?0:HOTD_RENDER_UNLIT;
     g_frame->rapid_fire_rate=g_cfgRapidRate;
     g_frame->cheat_flags=g_cheatFlags;
     MemoryBarrier();
@@ -580,8 +601,8 @@ static float g_scrC[3]  = { 0, 0, -2.0f };  /* centre       */
 static float g_scrR[3]  = { 1, 0, 0 };      /* right        */
 static float g_scrU[3]  = { 0, 1, 0 };      /* up           */
 static float g_scrN[3]  = { 0, 0, 1 };      /* towards user */
-static float g_scrHalfW = 1.0f;             /* 4:3 -> 2.0 x 1.5 m at 2 m */
-static float g_scrHalfH = 0.75f;
+static float g_scrHalfW = HOTD_PANEL_HALF_WIDTH_M;
+static float g_scrHalfH = HOTD_PANEL_HALF_HEIGHT_M;
 static int   g_scrMode;                     /* 0 auto, 1 on, 2 off */
 static int   g_scrVisible;
 static int   g_inScope;                     /* drawing INTO the sight, not the world */
@@ -595,15 +616,21 @@ static int   g_inScope;                     /* drawing INTO the sight, not the w
 "float addressCoord(float t,uint mode) { return mode==1u ? 1.0-abs(1.0-2.0*frac(t*0.5)) : mode==2u ? saturate(t) : frac(t); }\n" \
 "float2 addressUV(float2 t,uint modes) { return float2(addressCoord(t.x,modes&3u),addressCoord(t.y,(modes>>2u)&3u)); }\n"
 
+#define HOTD_LIGHT_SHADER \
+"float3 nativeShade(float3 rgb,VOut i) { rgb=saturate(rgb+i.spec.rgb); uint mode=i.fogcol>>24u;\n" \
+" if(mode!=0u) { float f=mode==2u ? exp(-i.fog) : mode==3u ? exp(-i.fog*i.fog) : i.fog;\n" \
+" float3 c=float3(i.fogcol&255u,(i.fogcol>>8u)&255u,(i.fogcol>>16u)&255u)/255.0; rgb=lerp(c,rgb,saturate(f)); } return rgb; }\n"
+
 /* World/overlay share native material opacity and alpha-test rules.
  * A zero atlas width marks an untextured primitive; draw runs carry blending. */
 static const char *SRC =
 "cbuffer C : register(b0) { row_major float4x4 mvp; };\n"
 "Texture2D atlas : register(t0); SamplerState smp : register(s0);\n"
-"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; uint address : TEXCOORD4; };\n"
-"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; nointerpolation uint address : TEXCOORD4; };\n"
+"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; uint address : TEXCOORD4; float4 spec : COLOR1; uint fogcol : TEXCOORD5; float fog : TEXCOORD6; };\n"
+"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; nointerpolation uint address : TEXCOORD4; float4 spec : COLOR1; nointerpolation uint fogcol : TEXCOORD5; float fog : TEXCOORD6; };\n"
 HOTD_ALPHA_SHADER
 HOTD_ADDRESS_SHADER
+HOTD_LIGHT_SHADER
 "struct POut { float4 c : SV_TARGET; float d : SV_Depth; };\n"
 "#ifdef TRUEZ\n"
 /* TRUE Z. The DLL's exact geometry carries real positions, so the hardware
@@ -614,10 +641,10 @@ HOTD_ADDRESS_SHADER
  * eye by BIAS * k relative, so a decal painted after its wall still sits on
  * the wall instead of fighting it. */
 "VOut vs(VIn i, uint vid : SV_VertexID) { VOut o; o.p = mul(mvp, float4(i.p,1));\n"
-"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
+"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; o.spec=i.spec; o.fogcol=i.fogcol; o.fog=i.fog; return o; }\n"
 "#define POut float4\n"
 "#else\n"
-"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
+"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; o.spec=i.spec; o.fogcol=i.fogcol; o.fog=i.fog; return o; }\n"
 "#endif\n"
 "#ifdef TRUEZ\n"
 "float4 ps(VOut i) : SV_TARGET {\n"
@@ -628,7 +655,7 @@ HOTD_ADDRESS_SHADER
 "    float4 s = atlas.Sample(smp, i.r.xy + addressUV(i.t,i.address) * i.r.zw);\n"
 "    bool flat = i.r.z <= 0;\n"
 "    float a=opacity(i,s,flat); alphaTest(a,i.style);\n"
-"    float3 rgb = flat ? i.c.rgb : saturate(s.rgb * i.c.rgb);\n"
+"    float3 rgb = nativeShade(flat ? i.c.rgb : saturate(s.rgb * i.c.rgb),i); rgb=saturate(rgb*(i.d>=1.0 ? 1.0 : BRIGHTNESS));\n"
 "#ifdef TRUEZ\n"
 "    return float4(pow(rgb, GAMMA), a);\n"
 "#else\n"
@@ -668,10 +695,11 @@ static const char *SRC_TEX =
 static const char *SRC_OV =
 "cbuffer C : register(b0) { row_major float4x4 mvp; };\n"
 "Texture2D atlas : register(t0); SamplerState smp : register(s0);\n"
-"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; uint address : TEXCOORD4; };\n"
-"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; nointerpolation uint address : TEXCOORD4; };\n"
+"struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; uint style : TEXCOORD3; uint address : TEXCOORD4; float4 spec : COLOR1; uint fogcol : TEXCOORD5; float fog : TEXCOORD6; };\n"
+"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; float4 r : TEXCOORD2; nointerpolation uint style : TEXCOORD3; nointerpolation uint address : TEXCOORD4; float4 spec : COLOR1; nointerpolation uint fogcol : TEXCOORD5; float fog : TEXCOORD6; };\n"
 HOTD_ALPHA_SHADER
 HOTD_ADDRESS_SHADER
+HOTD_LIGHT_SHADER
 "struct POut { float4 c : SV_TARGET; float d : SV_Depth; };\n"
 "#ifdef TRUEZ\n"
 /* TRUE Z. The DLL's exact geometry carries real positions, so the hardware
@@ -682,10 +710,10 @@ HOTD_ADDRESS_SHADER
  * eye by BIAS * k relative, so a decal painted after its wall still sits on
  * the wall instead of fighting it. */
 "VOut vs(VIn i, uint vid : SV_VertexID) { VOut o; o.p = mul(mvp, float4(i.p,1));\n"
-"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
+"    o.p.z *= 1.0 + BIAS * (float)(vid / 6u); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; o.spec=i.spec; o.fogcol=i.fogcol; o.fog=i.fog; return o; }\n"
 "#define POut float4\n"
 "#else\n"
-"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; return o; }\n"
+"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.d = i.d; o.r = i.r; o.style=i.style; o.address=i.address; o.spec=i.spec; o.fogcol=i.fogcol; o.fog=i.fog; return o; }\n"
 "#endif\n"
 "#ifdef TRUEZ\n"
 "float4 ps(VOut i) : SV_TARGET {\n"
@@ -702,7 +730,7 @@ HOTD_ADDRESS_SHADER
 "    float4 s = atlas.Sample(smp, (c0 + 0.5 + f) / res);\n"
 "    bool flat = i.r.z <= 0;\n"
 "    float a=opacity(i,s,flat); alphaTest(a,i.style);\n"
-"    float3 rgb = flat ? i.c.rgb : saturate(s.rgb * i.c.rgb);\n"
+"    float3 rgb = nativeShade(flat ? i.c.rgb : saturate(s.rgb * i.c.rgb),i); rgb=saturate(rgb*(i.d>=1.0 ? 1.0 : BRIGHTNESS));\n"
 "#ifdef TRUEZ\n"
 "    return float4(pow(rgb, GAMMA), a);\n"
 "#else\n"
@@ -714,12 +742,14 @@ HOTD_ADDRESS_SHADER
 
 static HRESULT compileG(const char *src, const char *entry, const char *prof, ID3DBlob **out, ID3DBlob **err)
 {
-    D3D_SHADER_MACRO m[4];
-    char g[32], b[32];
+    D3D_SHADER_MACRO m[5];
+    char g[32], b[32], gain[32];
     int n = 0;
     sprintf(g, "%.4f", g_gammaOut);
+    sprintf(gain, "%.4f", g_cfgBrightness/100.0);
     sprintf(b, "%.8f", (double)g_cfgDepthBias * 1e-6);
     m[n].Name = "GAMMA"; m[n].Definition = g; n++;
+    m[n].Name = "BRIGHTNESS"; m[n].Definition = gain; n++;
     m[n].Name = "BIAS";  m[n].Definition = b; n++;
     if (g_cfgDepth >= 2) { m[n].Name = "TRUEZ"; m[n].Definition = "1"; n++; }
     m[n].Name = NULL; m[n].Definition = NULL;
@@ -729,7 +759,7 @@ static HRESULT compileG(const char *src, const char *entry, const char *prof, ID
 static void makePipeline(void)
 {
     ID3DBlob *vsb = NULL, *psb = NULL, *err = NULL;
-    D3D11_INPUT_ELEMENT_DESC ie[7];
+    D3D11_INPUT_ELEMENT_DESC ie[10];
     D3D11_BUFFER_DESC bd;
     D3D11_RASTERIZER_DESC rd;
     D3D11_DEPTH_STENCIL_DESC dd;
@@ -766,7 +796,13 @@ static void makePipeline(void)
     ie[5].Format = DXGI_FORMAT_R32_UINT; ie[5].AlignedByteOffset = 44;
     ie[6].SemanticName = "TEXCOORD"; ie[6].SemanticIndex = 4;
     ie[6].Format = DXGI_FORMAT_R32_UINT; ie[6].AlignedByteOffset = offsetof(Vc2Vertex,address);
-    ID3D11Device_CreateInputLayout(g_dev, ie, 7, ID3D10Blob_GetBufferPointer(vsb),
+    ie[7].SemanticName = "COLOR"; ie[7].SemanticIndex = 1;
+    ie[7].Format = DXGI_FORMAT_R8G8B8A8_UNORM; ie[7].AlignedByteOffset = offsetof(Vc2Vertex,specular);
+    ie[8].SemanticName = "TEXCOORD"; ie[8].SemanticIndex = 5;
+    ie[8].Format = DXGI_FORMAT_R32_UINT; ie[8].AlignedByteOffset = offsetof(Vc2Vertex,fog_colour);
+    ie[9].SemanticName = "TEXCOORD"; ie[9].SemanticIndex = 6;
+    ie[9].Format = DXGI_FORMAT_R32_FLOAT; ie[9].AlignedByteOffset = offsetof(Vc2Vertex,fog);
+    ID3D11Device_CreateInputLayout(g_dev, ie, 10, ID3D10Blob_GetBufferPointer(vsb),
                                    ID3D10Blob_GetBufferSize(vsb), &g_il);
     ID3D10Blob_Release(vsb); ID3D10Blob_Release(psb);
 
@@ -1038,6 +1074,8 @@ static void ovPush(const float *p, DWORD col)
     g_ovVerts[g_ovCount].depth = 1.0f;
     g_ovVerts[g_ovCount].style = 0;
     g_ovVerts[g_ovCount].address = 0;
+    g_ovVerts[g_ovCount].specular = g_ovVerts[g_ovCount].fog_colour = 0;
+    g_ovVerts[g_ovCount].fog = 1;
     g_ovCount++;
 }
 
@@ -1266,6 +1304,9 @@ static void drawWith(ID3D11RenderTargetView *rtv, ID3D11DepthStencilView *dsv,
     D3D11_MAPPED_SUBRESOURCE m;
     D3D11_VIEWPORT vp;
     UINT stride = sizeof(Vc2Vertex), offset = 0;
+    /* The captured screen already contains UI; present that UI only once. */
+    unsigned visibleCount = g_scrVisible && g_scrHave && g_scrSRV && !g_inScope && g_ovStart < g_localCount
+        ? g_ovStart : g_localCount;
 
     if (!g_noClear) {
         ID3D11DeviceContext_ClearRenderTargetView(g_ctx, rtv, clear);
@@ -1294,16 +1335,16 @@ static void drawWith(ID3D11RenderTargetView *rtv, ID3D11DepthStencilView *dsv,
     ID3D11DeviceContext_PSSetShader(g_ctx, g_ps, NULL, 0);
     ID3D11DeviceContext_PSSetShaderResources(g_ctx, 0, 1, &g_atlSRV);
     ID3D11DeviceContext_PSSetSamplers(g_ctx, 0, 1, &g_samp);
-    if (!g_localCount) return;
+    if (!visibleCount) return;
     if (g_cfgDepth >= 2) {
         /* TRUE Z: the world resolves itself in the depth buffer; only the
          * flat overlay at the tail (drum, lives, credits, our HUD) is drawn
          * on top with the test off, through the unzoomed matrix when there
          * is one. Nothing here depends on the buffer's paint order. */
         unsigned ov = g_ovStart;
-        if (ov > g_localCount) ov = g_localCount;
+        if (ov > visibleCount) ov = visibleCount;
         if (ov) drawNativeRuns(0,ov,0);
-        if (ov < g_localCount) {
+        if (ov < visibleCount) {
             const float *mo = (!g_cfgHudZoom && mvpFlat) ? mvpFlat : mvp;
             if (mo != mvp && SUCCEEDED(ID3D11DeviceContext_Map(g_ctx, (ID3D11Resource *)g_cb, 0,
                           D3D11_MAP_WRITE_DISCARD, 0, &m))) {
@@ -1312,7 +1353,7 @@ static void drawWith(ID3D11RenderTargetView *rtv, ID3D11DepthStencilView *dsv,
             }
             ID3D11DeviceContext_OMSetDepthStencilState(g_ctx, g_dssUI, 0);
             if (g_cfgHudSharp && g_psOv) ID3D11DeviceContext_PSSetShader(g_ctx, g_psOv, NULL, 0);
-            drawNativeRuns(ov,g_localCount-ov,1);
+            drawNativeRuns(ov,visibleCount-ov,1);
             if (g_cfgHudSharp && g_psOv) ID3D11DeviceContext_PSSetShader(g_ctx, g_ps, NULL, 0);
             ID3D11DeviceContext_OMSetDepthStencilState(g_ctx, g_dss, 0);
         }
@@ -1321,17 +1362,17 @@ static void drawWith(ID3D11RenderTargetView *rtv, ID3D11DepthStencilView *dsv,
     {
         unsigned ov = g_ovStart;
         int split = (!g_cfgHudZoom && mvpFlat && mvpFlat != mvp &&
-                     ov < g_localCount);
+                     ov < visibleCount);
         if (!split) {
             /* still worth the sharper fetch on the overlay when there is no
              * zoom to undo - it costs one extra draw call and nothing else */
-            if (g_cfgHudSharp && g_psOv && ov < g_localCount) {
+            if (g_cfgHudSharp && g_psOv && ov < visibleCount) {
                 if (ov) drawNativeRuns(0,ov,0);
                 ID3D11DeviceContext_PSSetShader(g_ctx, g_psOv, NULL, 0);
-                drawNativeRuns(ov,g_localCount-ov,0);
+                drawNativeRuns(ov,visibleCount-ov,0);
                 ID3D11DeviceContext_PSSetShader(g_ctx, g_ps, NULL, 0);
             } else {
-                drawNativeRuns(0,g_localCount,0);
+                drawNativeRuns(0,visibleCount,0);
             }
             return;
         }
@@ -1343,7 +1384,7 @@ static void drawWith(ID3D11RenderTargetView *rtv, ID3D11DepthStencilView *dsv,
         }
         if (g_cfgHudSharp && g_psOv)
             ID3D11DeviceContext_PSSetShader(g_ctx, g_psOv, NULL, 0);
-        drawNativeRuns(ov,g_localCount-ov,0);
+        drawNativeRuns(ov,visibleCount-ov,0);
         if (g_cfgHudSharp && g_psOv)
             ID3D11DeviceContext_PSSetShader(g_ctx, g_ps, NULL, 0);
     }
@@ -1363,9 +1404,9 @@ static void setScreenPose(float x, float y, float z, float yaw)
     g_scrR[0] = cosf(yaw); g_scrR[1] = 0; g_scrR[2] = -sinf(yaw);
     g_scrU[0] = 0; g_scrU[1] = 1; g_scrU[2] = 0;
     g_scrN[0] = -fwd[0]; g_scrN[1] = 0; g_scrN[2] = -fwd[2];
-    g_scrC[0] = x + fwd[0] * 2.0f;
+    g_scrC[0] = x + fwd[0] * HOTD_PANEL_DISTANCE_M;
     g_scrC[1] = y;
-    g_scrC[2] = z + fwd[2] * 2.0f;
+    g_scrC[2] = z + fwd[2] * HOTD_PANEL_DISTANCE_M;
 
     if (!g_scrVB) return;
     for (i = 0; i < 6; i++) {
@@ -1560,6 +1601,7 @@ static void gunFace(Vc2Vertex *out, unsigned *n, const float (*c)[3],
         out[*n].colour = sc;
         out[*n].u = -1.0f; out[*n].v = -1.0f; out[*n].depth = 0.0f;
         out[*n].address = 0;
+        out[*n].specular = out[*n].fog_colour = 0; out[*n].fog = 1;
         (*n)++;
     }
 }
@@ -1814,6 +1856,7 @@ static void gunLoad(void)
                     else          { out[nout].u = -1.0f;     out[nout].v = -1.0f;     }
                     out[nout].depth = 0.0f;
                     out[nout].address = 0;
+                    out[nout].specular = out[nout].fog_colour = 0; out[nout].fog = 1;
                     nout++;
                 }
             }
@@ -2301,7 +2344,7 @@ static int headPoseReady(int anchored,XrSessionState state,XrResult located,
 }
 
 static XrActionSet g_actSet;
-static XrAction    g_actAim, g_actFire, g_actStart, g_actBack, g_actGrip, g_actMenu, g_actHaptic;
+static XrAction    g_actAim, g_actFire, g_actStart, g_actBack, g_actGrip, g_actMenu, g_actMenuX, g_actHaptic;
 static volatile float g_zoomLevel = 1.0f;   /* 1 = no zoom; optional cinematic zoom */
 static int g_autoOn;                        /* the game is in a zoom moment  */
 static int g_resetControls;
@@ -2370,6 +2413,7 @@ static void initActions(XrInstance inst, XrSession session)
     MAKE(g_actBack,   "back",   "Reload / Cancel", XR_ACTION_TYPE_BOOLEAN_INPUT);
     MAKE(g_actGrip,   "recentre", "Recentre",      XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actMenu,   "menu_vertical", "Menu up / down", XR_ACTION_TYPE_FLOAT_INPUT);
+    MAKE(g_actMenuX,  "menu_horizontal", "Menu left / right", XR_ACTION_TYPE_FLOAT_INPUT);
     MAKE(g_actHaptic, "haptic",   "Recoil",           XR_ACTION_TYPE_VIBRATION_OUTPUT);
 #undef MAKE
 
@@ -2400,6 +2444,8 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actGrip, "/user/hand/right/input/squeeze/value");
     BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
     BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
+    BIND(g_actMenuX, "/user/hand/left/input/thumbstick/x");
+    BIND(g_actMenuX, "/user/hand/right/input/thumbstick/x");
     suggest(inst, "/interaction_profiles/oculus/touch_controller", bb, bn);
 
     bn = 0;
@@ -2417,6 +2463,8 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actGrip, "/user/hand/right/input/squeeze/value");
     BIND(g_actMenu, "/user/hand/left/input/thumbstick/y");
     BIND(g_actMenu, "/user/hand/right/input/thumbstick/y");
+    BIND(g_actMenuX, "/user/hand/left/input/thumbstick/x");
+    BIND(g_actMenuX, "/user/hand/right/input/thumbstick/x");
     suggest(inst, "/interaction_profiles/valve/index_controller", bb, bn);
 
     bn = 0;
@@ -2434,6 +2482,8 @@ static void initActions(XrInstance inst, XrSession session)
     BIND(g_actGrip, "/user/hand/right/input/squeeze/click");
     BIND(g_actMenu, "/user/hand/left/input/trackpad/y");
     BIND(g_actMenu, "/user/hand/right/input/trackpad/y");
+    BIND(g_actMenuX, "/user/hand/left/input/trackpad/x");
+    BIND(g_actMenuX, "/user/hand/right/input/trackpad/x");
     suggest(inst, "/interaction_profiles/htc/vive_controller", bb, bn);
 
     for (h = 0; h < 2; h++) {
@@ -2454,7 +2504,7 @@ static void initActions(XrInstance inst, XrSession session)
     if (XR_FAILED(pxrAttachSessionActionSets(session, &at)))
         die("could not attach the action set");
     note("controllers wired: trigger shoot, gun up 50deg/down 45deg + trigger reload, A/X start, B/Y reload/cancel,\n"
-         "                   stick up/down mode menu, grip recentre\n");
+         "                   stick four-way menus, grip recentre\n");
 }
 #undef BIND
 
@@ -2572,7 +2622,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     unsigned triggerActions[2];
     static HotdTrigger triggers[2];
     static int prevGrip;
-    static unsigned menuHeld[2];
+    static unsigned menuHeld[2],menuHorizontal[2];
     static unsigned prevButtons, prev2;
     unsigned starts;
     int recentre = 0, h, hand;
@@ -2585,6 +2635,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     if (g_resetControls) {
         prevGrip = 0;
         menuHeld[0] = menuHeld[1] = 0;
+        menuHorizontal[0] = menuHorizontal[1] = 0;
         prevButtons = prev2 = 0;
         memset(triggers,0,sizeof(triggers));
         g_resetControls = 0;
@@ -2600,6 +2651,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     if (pxrSyncActions(session, &si) != XR_SUCCESS) {
         triggers[0].action=triggers[1].action=0;
         menuHeld[0]=menuHeld[1]=0;
+        menuHorizontal[0]=menuHorizontal[1]=0;
         return 0;
     }
 
@@ -2645,6 +2697,12 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         int active=pxrGetActionStateFloat(session,&gi,&stick)==XR_SUCCESS && stick.isActive;
         menuHeld[h]=hotd_menu_stick(menuHeld[h],active,stick.currentState);
         buttons|=menuHeld[h];
+        gi.action=g_actMenuX;
+        memset(&stick,0,sizeof(stick));stick.type=XR_TYPE_ACTION_STATE_FLOAT;
+        active=pxrGetActionStateFloat(session,&gi,&stick)==XR_SUCCESS && stick.isActive;
+        menuHorizontal[h]=hotd_menu_stick(menuHorizontal[h],active,stick.currentState);
+        if(menuHorizontal[h]==VC2_BTN_UP)buttons|=VC2_BTN_RIGHT;
+        if(menuHorizontal[h]==VC2_BTN_DOWN)buttons|=VC2_BTN_LEFT;
     }
     {
         float targetZoom=1.0f;
@@ -3083,7 +3141,7 @@ static int runVR(void)
         /* the screen shows itself whenever the 3D scene is nearly empty -
          * that is the menus, the scores, the name entry, the attract mode */
         g_scrVisible = (g_scrMode == 1) ||
-                       (g_scrMode == 0 && g_localCount < 900);
+                       (g_scrMode == 0 && g_ovStart < 900);
 
         for (i = 0; i < 2; i++) { ZeroMemory(&views[i], sizeof(views[i])); views[i].type = XR_TYPE_VIEW; }
         vli.viewConfigurationType = XR_VIEW_CONFIGURATION_TYPE_PRIMARY_STEREO;
@@ -3380,7 +3438,7 @@ static int runWindow(void)
         pullFrame();
         pullScreen();
         g_scrVisible = (g_scrMode == 1) ||
-                       (g_scrMode == 0 && g_localCount < 900);
+                       (g_scrMode == 0 && g_ovStart < 900);
         scale = 1.0f / g_unitsPerMetre;
 
         mIdent(model);
@@ -3549,7 +3607,7 @@ static int runStereo(void)
         pullFrame();
         pullScreen();
         g_scrVisible = (g_scrMode == 1) ||
-                       (g_scrMode == 0 && g_localCount < 900);
+                       (g_scrMode == 0 && g_ovStart < 900);
 
         /* a head pose built the way a runtime would report one */
         cy2 = cosf(w_yaw * 0.5f); sy2 = sinf(w_yaw * 0.5f);
@@ -3636,11 +3694,18 @@ int main(int argc, char **argv)
         unsigned cheat=cheatArg(argv[i]);
         if (!strcmp(argv[i], "--window")) window = 1;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
+        else if (!strcmp(argv[i], "--native-lighting")) g_cfgNativeLighting = 1;
+        else if (!strcmp(argv[i], "--no-native-lighting")) g_cfgNativeLighting = 0;
         else if (!strcmp(argv[i], "--laser")) g_cfgLaser = 1;
         else if (!strcmp(argv[i], "--no-laser")) g_cfgLaser = 0;
         else if (!strcmp(argv[i], "--crosshair")) g_cfgCrosshair = 1;
         else if (!strcmp(argv[i], "--no-crosshair")) g_cfgCrosshair = 0;
         else if (!strcmp(argv[i], "--seconds") && i+1 < argc) seconds = atoi(argv[++i]);
+        else if(!strcmp(argv[i],"--brightness")) {
+            if(i+1>=argc || !parseBrightness(argv[++i],&g_cfgBrightness)) {
+                note("--brightness requires an integer from 25 to 400 (percent).\n");return 2;
+            }
+        }
         else if(!strcmp(argv[i],"--rapid-fire-rate")) {
             if(i+1>=argc || !hotd_parse_rapid_rate(argv[++i],&g_cfgRapidRate)) {
                 note("--rapid-fire-rate requires an integer from 1 to 30 (shots/sec).\n");return 2;
@@ -3652,9 +3717,11 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--brightness N] [--native-lighting | --no-native-lighting] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
+    note("Scene brightness: %d%%\n",g_cfgBrightness);
+    note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
     note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
     for (i = 0; i < 100 && !openShare(); i++) Sleep(100);

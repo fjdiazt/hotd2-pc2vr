@@ -13,6 +13,7 @@
 #include "game_profile.h"
 #include "game_input.h"
 #include "texture_atlas.h"
+#include "lighting.h"
 
 static FILE *logfile;
 static Vc2Frame *frame;
@@ -20,9 +21,14 @@ static HANDLE mapping;
 static HWND game_window;
 static unsigned count, calls, dropped, frame_no, atlas_dirty;
 static Vc2Vertex vertices[VC2_MAX_VERTS];
+#define HOTD_MAX_HUD_VERTS (4096*6)
+static Vc2Vertex hud_vertices[HOTD_MAX_HUD_VERTS];
+static unsigned hud_count;
 static HotdLens lens;
 static unsigned lens_valid;
 static unsigned capture_kind,shot_group;
+static unsigned capture_skip;
+static unsigned capture_model;
 static float shot_origins[64][3];
 static D3DMATRIX world, view, projection;
 static D3DVIEWPORT7 viewport;
@@ -257,11 +263,12 @@ static HRESULT WINAPI keyboard_state(void *self,DWORD size,void *out)
         if(buttons[1]&VC2_BTN_START) keys[DIK_TAB]=0x80;
         if(buttons[0]&VC2_BTN_BACK) keys[DIK_RCONTROL]=0x80;
         if(buttons[1]&VC2_BTN_BACK) keys[DIK_LCONTROL]=0x80;
-        if(*(DWORD *)(game_base+0x5C8E98)==4) {
-            unsigned nav=(buttons[0]|buttons[1])&(VC2_BTN_UP|VC2_BTN_DOWN);
-            if(nav==VC2_BTN_UP)keys[DIK_UP]=0x80;
-            if(nav==VC2_BTN_DOWN)keys[DIK_DOWN]=0x80;
-        }
+        unsigned nav=(buttons[0]|buttons[1])&(VC2_BTN_UP|VC2_BTN_DOWN);
+        if(nav==VC2_BTN_UP)keys[DIK_UP]=0x80;
+        if(nav==VC2_BTN_DOWN)keys[DIK_DOWN]=0x80;
+        nav=(buttons[0]|buttons[1])&(VC2_BTN_LEFT|VC2_BTN_RIGHT);
+        if(nav==VC2_BTN_LEFT)keys[DIK_LEFT]=0x80;
+        if(nav==VC2_BTN_RIGHT)keys[DIK_RIGHT]=0x80;
     }
     return hr;
 }
@@ -443,18 +450,55 @@ static void read_camera(IDirect3DDevice7 *device)
     }
 }
 
-typedef struct { DWORD colour,style,address; } DrawStyle;
+static HotdLighting draw_lighting;
+typedef struct { DWORD colour,style,address,fog_colour; const HotdLighting *lighting; } DrawStyle;
+static DWORD read_state(IDirect3DDevice7 *device,D3DRENDERSTATETYPE state,DWORD fallback)
+{
+    DWORD value=fallback;
+    if(FAILED(IDirect3DDevice7_GetRenderState(device,state,&value)))return fallback;
+    return value;
+}
+static float read_float_state(IDirect3DDevice7 *device,D3DRENDERSTATETYPE state,float fallback)
+{
+    DWORD bits;memcpy(&bits,&fallback,4);bits=read_state(device,state,bits);
+    memcpy(&fallback,&bits,4);return fallback;
+}
+static void read_lighting(IDirect3DDevice7 *device,DWORD fvf)
+{
+    HotdLighting *s=&draw_lighting;
+    memset(s,0,sizeof(*s));s->world=world;s->view=view;
+    s->material.diffuse.r=s->material.diffuse.g=s->material.diffuse.b=s->material.diffuse.a=1;
+    if((fvf&D3DFVF_POSITION_MASK)!=D3DFVF_XYZRHW)IDirect3DDevice7_GetMaterial(device,&s->material);
+#define READ(field,state,value) s->field=read_state(device,D3DRENDERSTATE_##state,value)
+    READ(lighting,LIGHTING,1);READ(colorvertex,COLORVERTEX,1);
+    READ(diffuse_source,DIFFUSEMATERIALSOURCE,D3DMCS_COLOR1);READ(ambient_source,AMBIENTMATERIALSOURCE,D3DMCS_MATERIAL);
+    READ(specular_source,SPECULARMATERIALSOURCE,D3DMCS_COLOR2);READ(emissive_source,EMISSIVEMATERIALSOURCE,D3DMCS_MATERIAL);
+    READ(ambient,AMBIENT,0);READ(specular_enable,SPECULARENABLE,0);READ(local_viewer,LOCALVIEWER,1);
+    READ(normalize_normals,NORMALIZENORMALS,0);READ(fog_enable,FOGENABLE,0);
+    READ(fog_vertex_mode,FOGVERTEXMODE,D3DFOG_NONE);READ(fog_table_mode,FOGTABLEMODE,D3DFOG_NONE);
+    READ(range_fog,RANGEFOGENABLE,0);
+#undef READ
+    s->fog_start=read_float_state(device,D3DRENDERSTATE_FOGSTART,0);
+    s->fog_end=read_float_state(device,D3DRENDERSTATE_FOGEND,1);
+    s->fog_density=read_float_state(device,D3DRENDERSTATE_FOGDENSITY,1);
+    if(s->lighting && (fvf&D3DFVF_POSITION_MASK)!=D3DFVF_XYZRHW && device->lpVtbl->GetLightEnable && device->lpVtbl->GetLight)
+        for(DWORD i=0;i<16;i++) {
+            BOOL enabled=FALSE;D3DLIGHT7 light;
+            if(SUCCEEDED(IDirect3DDevice7_GetLightEnable(device,i,&enabled)) && enabled &&
+               SUCCEEDED(IDirect3DDevice7_GetLight(device,i,&light)))s->lights[s->light_count++]=light;
+        }
+    hotd_lighting_prepare(s);
+}
 static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
 {
     DWORD blend=0,src=2,dst=1,zwrite=1,test=0,func=8,ref=0,alphaop=2,alphaarg=2;
-    DWORD lighting=0,colorvertex=0,matsrc=0,cull=D3DCULL_NONE;
+    DWORD cull=D3DCULL_NONE;
     DWORD address_u=D3DTADDRESS_WRAP,address_v=D3DTADDRESS_WRAP;
-    D3DMATERIAL7 material;
-    DrawStyle style={0xFFFFFFFF,0,0};
+    DrawStyle style={.colour=0xFFFFFFFF};
 #define RS(name,out) IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_##name,&out)
     RS(ALPHABLENDENABLE,blend);RS(SRCBLEND,src);RS(DESTBLEND,dst);RS(ZWRITEENABLE,zwrite);
     RS(ALPHATESTENABLE,test);RS(ALPHAFUNC,func);RS(ALPHAREF,ref);
-    RS(LIGHTING,lighting);RS(COLORVERTEX,colorvertex);RS(DIFFUSEMATERIALSOURCE,matsrc);
+
     RS(CULLMODE,cull);
 #undef RS
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ALPHAOP,&alphaop);
@@ -462,10 +506,18 @@ static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ADDRESSU,&address_u);
     IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ADDRESSV,&address_v);
     style.address=hotd_address(address_u,address_v);
-    if((fvf&D3DFVF_POSITION_MASK)!=D3DFVF_XYZRHW && lighting &&
-       (!colorvertex || matsrc==D3DMCS_MATERIAL || !(fvf&D3DFVF_DIFFUSE)) &&
-       SUCCEEDED(IDirect3DDevice7_GetMaterial(device,&material)))
-        style.colour=hotd_rgba(material.diffuse.r,material.diffuse.g,material.diffuse.b,material.diffuse.a);
+    if(!frame || !(frame->render_flags&HOTD_RENDER_UNLIT)) {
+        read_lighting(device,fvf);style.lighting=&draw_lighting;
+        DWORD fog=read_state(device,D3DRENDERSTATE_FOGCOLOR,0);
+        style.fog_colour=(fog&0xFF00u)|((fog&255u)<<16)|((fog>>16)&255u);
+    } else if((fvf&D3DFVF_POSITION_MASK)!=D3DFVF_XYZRHW && read_state(device,D3DRENDERSTATE_LIGHTING,0)) {
+        DWORD colorvertex=read_state(device,D3DRENDERSTATE_COLORVERTEX,0);
+        DWORD source=read_state(device,D3DRENDERSTATE_DIFFUSEMATERIALSOURCE,0);
+        D3DMATERIAL7 material;
+        if((!colorvertex || source==D3DMCS_MATERIAL || !(fvf&D3DFVF_DIFFUSE)) &&
+           SUCCEEDED(IDirect3DDevice7_GetMaterial(device,&material)))
+            style.colour=hotd_rgba(material.diffuse.r,material.diffuse.g,material.diffuse.b,material.diffuse.a);
+    }
     style.style=hotd_style(blend,src,dst,zwrite,alphaop==D3DTOP_MODULATE ||
         (alphaop==D3DTOP_SELECTARG1 && (alphaarg&D3DTA_SELECTMASK)==D3DTA_DIFFUSE),test,func,ref) |
         ((cull&3u)<<HOTD_CULL_SHIFT);
@@ -475,7 +527,7 @@ static DrawStyle read_draw_style(IDirect3DDevice7 *device,DWORD fvf)
 static int convert_vertex(const BYTE *v,DWORD fvf,Texture *tex,DrawStyle style,Vc2Vertex *out)
 {
     unsigned pos=fvf&D3DFVF_POSITION_MASK,offset;
-    DWORD colour=0xFFFFFFFF;
+    DWORD colour=0xFFFFFFFF,specular=0;
     float p[3],tmp[3];
     const float *f=(const float *)v;
     if(pos==D3DFVF_XYZRHW) {
@@ -491,8 +543,17 @@ static int convert_vertex(const BYTE *v,DWORD fvf,Texture *tex,DrawStyle style,V
     if(fvf&D3DFVF_NORMAL)offset+=12;
     if(fvf&0x20)offset+=4;
     if(fvf&D3DFVF_DIFFUSE){memcpy(&colour,v+offset,4);offset+=4;}
-    if(fvf&D3DFVF_SPECULAR)offset+=4;
-    out->colour=(fvf&D3DFVF_DIFFUSE) ? (colour&0xFF00FF00u)|((colour&255)<<16)|((colour>>16)&255):style.colour;
+    if(fvf&D3DFVF_SPECULAR){memcpy(&specular,v+offset,4);offset+=4;}
+    if(style.lighting) {
+        HotdLitVertex lit;
+        hotd_light_vertex(style.lighting,f,(fvf&D3DFVF_NORMAL)?f+(pos==D3DFVF_XYZRHW?4:3):NULL,colour,specular,fvf,&lit);
+        out->colour=hotd_rgba(lit.diffuse[0],lit.diffuse[1],lit.diffuse[2],lit.diffuse[3]);
+        out->specular=hotd_rgba(lit.specular[0],lit.specular[1],lit.specular[2],0);
+        out->fog_colour=style.fog_colour|(lit.fog_mode<<24);out->fog=lit.fog;
+    } else {
+        out->colour=(fvf&D3DFVF_DIFFUSE) ? (colour&0xFF00FF00u)|((colour&255)<<16)|((colour>>16)&255):style.colour;
+        out->specular=out->fog_colour=0;out->fog=1;
+    }
     out->style=style.style|capture_kind;
     out->address=style.address;
     out->u=out->v=-1;out->depth=0;
@@ -544,6 +605,8 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     Texture *texture;
     DrawStyle style;
     DWORD z_enable=0;
+    int hud=0;
+    if(capture_skip)return;
     calls++;
     read_camera(device);
     for(i=0;i<fvf_count && fvf_logged[i]!=fvf;i++);
@@ -557,17 +620,14 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
             (unsigned long)viewport.dwWidth,(unsigned long)viewport.dwHeight);
     }
     if(!frame || !data || !stride || total<3)return;
-    if((fvf&D3DFVF_POSITION_MASK)==D3DFVF_XYZRHW) {
-        const float *v=data;
-        if(fabsf(v[2]-0.1f)<0.00001f && fabsf(v[3]-0.5f)<0.00001f)return;
-    }
+    /* Native sprites/bitmaps are screen-space UI at any sort depth, in every mode. */
+    hud=(fvf&D3DFVF_POSITION_MASK)==D3DFVF_XYZRHW && !capture_kind && !capture_model;
     IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_ZENABLE,&z_enable);
-    /* Native 2D remains on the captured panel; never inflate screen-space HUD into the world. */
-    if(!z_enable)return;
+    if(!z_enable && !hud)return;
     texture=capture_texture(device);
     trace_draw_state(device,fvf,texture,data);
     style=read_draw_style(device,fvf);
-    if(capture_kind&HOTD_SHOT) {
+    if(!hud && (capture_kind&HOTD_SHOT)) {
         const float origin[3]={0};float tmp[3],*anchor=shot_origins[capture_kind>>26];
         transform_point(origin,&world,tmp);transform_point(tmp,&view,anchor);anchor[2]=-anchor[2];
     }
@@ -577,13 +637,23 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
         if(type==D3DPT_TRIANGLEFAN){q[0]=0;q[1]=i+1;q[2]=i+2;}
         else if(type==D3DPT_TRIANGLESTRIP && (i&1)){q[0]=i+1;q[1]=i;}
         else if(type!=D3DPT_TRIANGLELIST && type!=D3DPT_TRIANGLESTRIP)break;
-        if(count+3>VC2_MAX_VERTS){dropped++;break;}
+        if((hud?hud_count:count)+3>(hud?HOTD_MAX_HUD_VERTS:VC2_MAX_VERTS)){dropped++;break;}
         for(k=0;k<3;k++) {
             unsigned idx=indices?indices[q[k]]:q[k];
             if(idx>=n || !convert_vertex((const BYTE *)data+idx*stride,fvf,texture,style,tri+k))break;
+            if(hud) {
+                const float *v=(const float *)((const BYTE *)data+idx*stride);
+                float sx=(v[0]-viewport.dwX)*640/viewport.dwWidth,sy=(v[1]-viewport.dwY)*480/viewport.dwHeight;
+                tri[k].x=(sx/320-1)*HOTD_PANEL_HALF_WIDTH_M*frame->units_per_metre;
+                tri[k].y=(1-sy/240)*HOTD_PANEL_HALF_HEIGHT_M*frame->units_per_metre;
+                tri[k].z=-HOTD_PANEL_DISTANCE_M*frame->units_per_metre;
+                tri[k].depth=1;
+                tri[k].style=(tri[k].style&~(HOTD_WORLD|HOTD_SHOT|HOTD_SHOT_GROUP_MASK|HOTD_CULL_MASK))|HOTD_NO_ZWRITE;
+            }
         }
         if(k!=3){dropped++;continue;}
-        memcpy(vertices+count,tri,sizeof(tri));count+=3;
+        if(hud){memcpy(hud_vertices+hud_count,tri,sizeof(tri));hud_count+=3;}
+        else {memcpy(vertices+count,tri,sizeof(tri));count+=3;}
     }
 }
 
@@ -629,13 +699,33 @@ static unsigned native_model_kind(const BYTE *record)
         }
     return HOTD_WORLD;
 }
+static int native_letterbox(const BYTE *record)
+{
+    DWORD model,bar;
+    float matrix[16];
+    memcpy(&model,record+0xC,4);memcpy(&bar,game_base+0x5A66A4+0x93E*16,4);
+    if(!bar || model!=bar)return 0;
+    memcpy(matrix,record+0x34,sizeof(matrix));
+    /* The same black model also supplies pause dimming and full-screen fades. */
+    if(!(fabsf(matrix[13])>=.349f && fabsf(matrix[13])<=.451f) ||
+       !(fabsf(fabsf(matrix[14])-1)<.0001f))return 0;
+    for(unsigned i=0;i<16;i++)if(i!=13 && i!=14 &&
+        !(fabsf(matrix[i]-(i%5==0?1.0f:0.0f))<.0001f))return 0;
+    return 1;
+}
 static int native_model_draw(const BYTE *record,int pass,NativeModel original)
 {
-    unsigned previous=capture_kind;
+    unsigned previous=capture_kind,previous_skip=capture_skip,previous_model=capture_model;
     int result;
+    capture_model=1;
+    capture_skip|=native_letterbox(record);
+    if(capture_skip && !previous_skip) {
+        static unsigned logged;
+        if(!logged++){logline("native letterbox bars omitted from VR capture");}
+    }
     capture_kind=native_model_kind(record);
     result=original(record,pass);
-    capture_kind=previous;
+    capture_kind=previous;capture_skip=previous_skip;capture_model=previous_model;
     return result;
 }
 static int __cdecl native_model(const BYTE *record,int pass)
@@ -730,7 +820,10 @@ static void publish_frame(void)
     if(!atlas_dirty)frame->seq++;
     MemoryBarrier();
     memcpy(frame->verts,vertices,count*sizeof(vertices[0]));
-    frame->vertex_count=count;frame->frame=frame_no;
+    unsigned hud_n=hud_count<VC2_MAX_VERTS-count?hud_count:VC2_MAX_VERTS-count;
+    dropped+=(hud_count-hud_n)/3;
+    memcpy(frame->verts+count,hud_vertices,hud_n*sizeof(hud_vertices[0]));
+    frame->vertex_count=count+hud_n;frame->frame=frame_no;
     frame->reserved[0]=count;frame->reserved[1]=0;frame->reserved[2]=count+1;
     frame->lens=lens;frame->lens_valid=lens_valid;
     frame->draw_calls=calls;frame->dropped_triangles=dropped;frame->texture_count=texture_count;
@@ -742,7 +835,7 @@ static void publish_frame(void)
     if(frame_no==1 || frame_no%300==0 || texture_failures)logline("frame=%u draws=%u vertices=%u dropped=%u textures=%u evictions=%u texture_failures=%u lens=%u screen=%u",
         frame_no,calls,count,dropped,texture_count,texture_evictions,texture_failures,lens_valid,frame->screen_ok);
     texture_failures=0;
-    count=calls=dropped=shot_group=0;
+    count=hud_count=calls=dropped=shot_group=0;
 }
 static HRESULT (WINAPI *original_create_device)(IDirect3D7 *,REFCLSID,IDirectDrawSurface7 *,IDirect3DDevice7 **);
 static HRESULT WINAPI create_device(IDirect3D7 *self,REFCLSID cls,IDirectDrawSurface7 *target,IDirect3DDevice7 **out)
@@ -846,6 +939,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     if(!frame)return FALSE;
     memset(frame,0,sizeof(*frame));frame->magic=VC2_SHARE_MAGIC;frame->version=VC2_SHARE_VERSION;
     frame->game_pid=GetCurrentProcessId();
+    frame->render_flags=GetPrivateProfileIntA("vr","native_lighting",1,ini_path)?0:HOTD_RENDER_UNLIT;
+    logline("native lighting: %s",frame->render_flags&HOTD_RENDER_UNLIT?"off":"on");
     frame->units_per_metre=(float)GetPrivateProfileIntA("bridge","units_per_metre",10,ini_path);
     if(frame->units_per_metre<1 || frame->units_per_metre>100000)frame->units_per_metre=10;
     /* Refuse input writes unless all signature sites and the PE image size match. */

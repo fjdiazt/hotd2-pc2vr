@@ -11,9 +11,9 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", action="store_true", help="briefly own both gun axes, without firing")
 args = parser.parse_args()
-SIZE = 84505004
+SIZE = 87385004
 memory = mmap.mmap(-1, SIZE, tagname=r"Local\HOTD2_PC2VR_Frame", access=mmap.ACCESS_WRITE if args.input else mmap.ACCESS_READ)
-assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 11), "HOTD2 bridge not running or protocol mismatch"
+assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 12), "HOTD2 bridge not running or protocol mismatch"
 
 def snapshot():
     deadline = time.monotonic() + 3
@@ -23,7 +23,7 @@ def snapshot():
             continue
         n = struct.unpack_from("<I", memory, 16)[0]
         assert n <= 240000 and n % 3 == 0
-        data = memory[:156 + n * 52]
+        data = memory[:156 + n * 64]
         after = struct.unpack_from("<I", memory)[0]
         if before == after:
             return data
@@ -40,9 +40,10 @@ assert all(math.isfinite(v) for v in (fx, fy, cx, cy)) and fx > 0 and fy > 0
 n = struct.unpack_from("<I", data, 16)[0]
 assert n > 0, "No 3D scene: wait for attract gameplay or start a game"
 for i in range(n):
-    v = struct.unpack_from("<3fI7f2I", data, 156 + i * 52)
+    v = struct.unpack_from("<3fI7f4If", data, 156 + i * 64)
     assert all(math.isfinite(x) for x in v[:3] + v[4:11]), f"Nonfinite vertex {i}"
     assert 0 <= v[9] <= 1 and 0 <= v[10] <= 1, "Atlas tile outside bounds"
+    assert math.isfinite(v[15]) and (v[14] >> 24) <= 3, "Invalid native fog"
     assert v[12] <= 10 and (v[12] & 3) <= 2 and ((v[12] >> 2) & 3) <= 2, "Invalid texture address modes"
 report = {"frame": struct.unpack_from("<I", data, 12)[0], "vertices": n,
           "lens": [fx, fy, cx, cy], "draw_calls": struct.unpack_from("<I", data, 140)[0],

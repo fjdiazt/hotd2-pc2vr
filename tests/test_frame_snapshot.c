@@ -11,6 +11,8 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes);
 
 static int interrupt_copy;
 static unsigned controller_starts,controller_fires,controller_lost;
+static float controller_sticks[2][2];
+static int controller_sticks_active;
 static XrResult XRAPI_CALL controller_sync(XrSession session,const XrActionsSyncInfo *info)
 {(void)session;(void)info;return XR_SUCCESS;}
 static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionStateGetInfo *info,XrActionStateBoolean *out)
@@ -21,7 +23,15 @@ static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionSt
     return XR_SUCCESS;
 }
 static XrResult XRAPI_CALL controller_float(XrSession session,const XrActionStateGetInfo *info,XrActionStateFloat *out)
-{(void)session;(void)info;out->isActive=XR_FALSE;out->currentState=0;return XR_SUCCESS;}
+{
+    unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
+    (void)session;out->isActive=XR_FALSE;out->currentState=0;
+    if(info->action==g_actMenu || info->action==g_actMenuX) {
+        out->isActive=controller_sticks_active;
+        out->currentState=controller_sticks[hand][info->action==g_actMenuX];
+    }
+    return XR_SUCCESS;
+}
 static XrResult XRAPI_CALL controller_pose(XrSpace space,XrSpace base,XrTime time,XrSpaceLocation *out)
 {
     unsigned hand=space==g_aimSpace[0]?0u:1u;
@@ -102,6 +112,7 @@ static void check_controller_modes(void)
     g_aimSpace[0]=(XrSpace)(uintptr_t)1;g_aimSpace[1]=(XrSpace)(uintptr_t)2;
     g_actStart=(XrAction)(uintptr_t)3;g_actFire=(XrAction)(uintptr_t)4;
     g_actBack=(XrAction)(uintptr_t)5;
+    g_actMenu=(XrAction)(uintptr_t)6;g_actMenuX=(XrAction)(uintptr_t)7;
     g_cfgHaptic=0;g_localCount=0;g_unitsPerMetre=10;g_cfgAkimbo=0;g_resetControls=1;
     g_activePlayers=0;
     controller_tick();assert(!g_gunValid && !g_gun2Valid);
@@ -136,6 +147,20 @@ static void check_controller_modes(void)
     g_activePlayers=3;controller_tick();
     assert(g_gunValid && g_gun2Valid && g_gunPose.position.x>0 && g_gun2Pose.position.x<0);
     assert(!(g_frame->aim_buttons&VC2_BTN_PAIR_START));
+    /* Both sticks navigate independently of gun visibility or player joining. */
+    controller_starts=controller_fires=0;g_activePlayers=0;controller_sticks_active=1;
+    const unsigned directions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_RIGHT,VC2_BTN_LEFT};
+    const unsigned nav_mask=VC2_BTN_UP|VC2_BTN_DOWN|VC2_BTN_LEFT|VC2_BTN_RIGHT;
+    for(unsigned hand=0;hand<2;hand++)for(unsigned dir=0;dir<4;dir++) {
+        memset(controller_sticks,0,sizeof(controller_sticks));controller_tick();
+        controller_sticks[hand][dir/2]=dir&1?-.8f:.8f;controller_tick();
+        assert((g_frame->aim_buttons&nav_mask)==directions[dir]);
+        assert(!(g_frame->aim_buttons&VC2_BTN_FIRE) && !(g_frame->aim2_buttons&VC2_BTN_FIRE));
+        controller_sticks[hand][dir/2]=dir&1?-.4f:.4f;controller_tick();
+        assert((g_frame->aim_buttons&nav_mask)==directions[dir]);
+    }
+    controller_sticks_active=0;controller_tick();assert(!(g_frame->aim_buttons&nav_mask));
+    memset(controller_sticks,0,sizeof(controller_sticks));
 }
 static void snapshot_copy(void *dst,const void *src,size_t bytes)
 {
@@ -193,7 +218,9 @@ int main(void)
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
     g_cheatFlags=HOTD_CHEAT_MASK;pushCheats();
     assert(g_frame->cheat_flags==HOTD_CHEAT_MASK && !g_frame->aim_seq && !g_frame->aim_buttons);
-    assert(g_frame->rapid_fire_rate==4);
+    assert(g_frame->rapid_fire_rate==4 && !g_frame->render_flags);
+    g_cfgNativeLighting=0;pushCheats();assert(g_frame->render_flags==HOTD_RENDER_UNLIT);
+    g_cfgNativeLighting=1;pushCheats();assert(!g_frame->render_flags);
     g_cfgRapidRate=5;pushCheats();assert(g_frame->rapid_fire_rate==5);
     g_cfgRapidRate=4;
     g_cheatFlags=0;pushCheats();assert(!g_frame->cheat_flags);
@@ -201,10 +228,12 @@ int main(void)
     g_frame->seq=g_frame->atlas_seq=2;g_frame->frame=1;g_frame->vertex_count=3;
     g_frame->verts[0].x=11;g_frame->atlas[0]=111;g_frame->active_players=1;
     g_frame->verts[0].address=hotd_address(2,3);
+    g_frame->verts[0].specular=0x00332211;g_frame->verts[0].fog_colour=0x01112233;g_frame->verts[0].fog=.25f;
     g_frame->shot_origins[0][0]=11;
     assert(pullFrame() && g_local[0].x==11 && g_atlPix[0]==111 && g_lastFrame==1 && g_activePlayers==1);
-    assert(g_shotOrigins[0][0]==11);
     assert(g_local[0].address==hotd_address(2,3));
+    assert(g_local[0].specular==0x00332211 && g_local[0].fog_colour==0x01112233 && g_local[0].fog==.25f);
+    assert(g_shotOrigins[0][0]==11);
     Vc2Vertex *oldVertices=g_local;
     unsigned *oldAtlas=g_atlPix;
     g_frame->seq=g_frame->atlas_seq=3;g_frame->frame=2;
@@ -222,6 +251,10 @@ int main(void)
     g_frame->seq+=2;g_frame->frame=3;g_frame->verts[0].x=33;
     oldAtlas=g_atlPix;
     assert(pullFrame() && g_local[0].x==33 && g_atlPix==oldAtlas && g_atlPix[0]==222);
+    g_frame->vertex_count=6;g_frame->reserved[2]=4;g_frame->units_per_metre=10;g_frame->seq+=2;
+    g_frame->verts[3]=(Vc2Vertex){.x=-10,.y=7.5f,.z=-20,.depth=1};
+    assert(pullFrame() && g_localCount==6 && g_ovStart==3);
+    assert(g_local[3].z==-HOTD_PANEL_DISTANCE_M*g_unitsPerMetre && !(g_local[3].style&HOTD_WORLD));
     check_world_aim();
     check_near_aim_and_splashes();
     check_controller_modes();

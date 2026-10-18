@@ -120,6 +120,39 @@ Session overrides:
 
 Use `-Laser` / `-Crosshair` or `--laser` / `--crosshair` to enable either over a disabled INI setting. Direct CLI flags use the last supplied value. The PowerShell script rejects contradictory switches.
 
+### Advanced graphics
+
+```ini
+[vr]
+native_lighting=1
+```
+
+Native lighting defaults on. It reproduces the game's lights, ambient/material shading, specular highlights and fog. Set `native_lighting=0` to restore the earlier texture/material-color rendering and bypass CPU light queries, normal preparation and per-vertex lighting. This disables the whole lighting conversion, including specular and fog; menus and HUD retain their native colors.
+
+Session overrides (INI remains unchanged):
+
+```powershell
+.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -NoNativeLighting
+.\build\HOTD2VR.exe --no-native-lighting
+```
+
+Use `-NativeLighting` or `--native-lighting` to force it on. Last direct CLI switch wins. Restart/reconnect the viewer to apply a change; the injected game's native desktop rendering stays unchanged. Rebuild and restart both bridge and viewer together when upgrading to the lighting-capable build.
+
+Lighting adds CPU work; actual VR frame-time cost remains unmeasured. Disabling it skips those calculations but retains the same transport format. MSAA, supersampling, gamma, depth and sharp HUD filtering are already available; see the settings table below.
+
+Scene brightness is separate from gamma: `[vr] brightness=100` is neutral; integer values 25–400 darken or brighten the converted scene. Brightness defaults to **85%**. Missing or invalid INI values use 85. Gain applies after fog/specular and before sRGB gamma compensation, with native lighting on or off. HUD, gun/aim graphics, the captured-screen panel and native desktop game stay unchanged.
+
+For 80% scene brightness, without changing the INI:
+
+```powershell
+.\Start-HOTD2.ps1 -Brightness 80
+.\build\HOTD2VR.exe --brightness 80
+```
+
+Restart the viewer to apply it. The last direct CLI value wins; invalid CLI values are rejected.
+
+These controls already cover VC2VR's main picture settings. Its extra scene-reconstruction passes and backdrop fixes are game-specific. Precise native-crosshair suppression and configurable HUD size/distance remain possible follow-ups; a settings menu is not implemented yet.
+
 ### Other shipped settings
 
 These are the values in the shipped INI; an existing active file can differ.
@@ -129,9 +162,11 @@ These are the values in the shipped INI; an existing active file can differ.
 | `[vr] akimbo` | `1` | Paired joining; `0` uses independent player joining |
 | `[vr] gunmodel` / `gunscale` | `gun.obj` / `100` | Gun asset and its size in percent |
 | `[vr] depth` / `depthbias` | `2` / `0` | Reconstructed depth buffer and optional sort bias |
-| `[vr] msaa` | `4` | Antialiasing samples |
+| `[vr] msaa` | `4` | Antialiasing samples: 1, 2, 4 or 8 |
 | `[vr] supersample` | `100` | Eye-buffer resolution in percent; separate from world size |
-| `[vr] gamma` | `220` | Color correction in percent; `100` disables the correction |
+| `[vr] gamma` | `220` | sRGB eye-buffer compensation in percent; `100` disables it |
+| `[vr] brightness` | `85` | Converted-scene brightness in percent, 25–400; HUD and guns unchanged |
+| `[vr] hudsharp` | `1` (if absent) | Sharp HUD texture filtering |
 | `[vr] haptic` / `focusgame` | `1` / `1` | Shot feedback and initial native-window focus |
 | `[vr] autozoom` | `0` | Automatic cinematic zoom disabled in the shipped configuration |
 | `[bridge] windowed` / `background` | `1` / `1` | Native windowed mode and rendering while another window has focus |
@@ -186,7 +221,9 @@ Implementation and test evidence: [docs/cheats.md](docs/cheats.md).
 
 This differs from VC2VR's `HGL_VIEW.DLL` integration and extra rotated-camera passes. HOTD2 uses an injected capture bridge and relaxes native per-mesh screen-edge rejection. It does not inherit VC2VR's complete 360-degree scene coverage: only geometry submitted by HOTD2 is available, and whole-object/stage culling or never-authored surfaces can still leave gaps when you turn or lean.
 
-The bridge also repairs alpha after native bitmap uploads so menu art remains visible. Native letterbox bars are omitted from VR capture during gameplay; pause dimming and full-screen blackouts remain. These capture changes leave the native game rendering path running.
+The bridge also repairs alpha after native bitmap uploads so menu art remains visible. Screen-space UI is captured in every game mode, including tutorial, story, game-over and menus, without a native depth cutoff. It uses a canvas 2 m away and 2 × 1.5 m in size, anchored to the recenter origin. Native transparency and submission order remain; UI draws above world geometry and never becomes an aim or splash target. The captured-screen panel replaces that HUD layer when its texture is available, avoiding duplicate UI. Model geometry, including untagged traveling tracers, keeps its world depth. Native letterbox bars are omitted from VR capture during gameplay; pause dimming and full-screen blackouts remain. These capture changes leave the native game rendering path running.
+
+Texture capture preserves each material's independent U/V wrap, mirror and clamp modes. World and HUD shaders apply addressing after UV interpolation, preserving the native mapping on mirrored model halves. Opening-car material inspection and offscreen viewer replay passed; boss/headset appearance still needs confirmation. Rebuild and restart both bridge and viewer after capture-format changes.
 
 ## Troubleshooting and current limits
 
