@@ -460,18 +460,19 @@ the selected Save/Load destination before confirmation, without issuing RPCs,
 changing the game, or reading native game addresses. User confirmed the pre-selection Save/Load captions in VR at stage 3, scene 11. Full scene prerequisite coverage remains unverified.
 
 
-## Half-size shot sparks
+## Reduced shot sparks
 
 The original shot-depth fix (`3c459e3`) preserved projected spark size while
 moving camera-plane flashes onto world surfaces. Shot flashes now render at
-50 percent of their previous width and height, contracted around their exact
+35 percent of their original width and height, contracted around their exact
 native shot anchor after depth placement. Surface depth, hit position, both
 hands, animation-layer alignment and aimreach fallback remain unchanged.
 Native desktop rendering, world impacts/blood and traveling tracers are unaffected.
 
 The actual viewer regression failed before the change and passes afterward,
-covering both off-center guns, half width/height, unchanged anchors/depth,
+covering both off-center guns, reduced width/height, unchanged anchors/depth,
 asymmetric animation layers, fallback placement and untouched world geometry.
 Viewer build, snapshot/controllers, world scale, aim indicators, WARP rendering,
 menu and output-ownership checks pass. No game/VR launch; headset size acceptance
-remains pending.
+remains pending. The initial 50-percent setting was subsequently reduced to
+35 percent at the user's request; the running 50-percent VR session was retained.

@@ -1032,8 +1032,8 @@ static void placeShotEffects(void)
             float x=center[0]*z/center[2],y=center[1]*z/center[2];
             for(unsigned i=start;i<end;i++)if(g_local[i].z<-.0001f) {
                 float scale=z/g_local[i].z;
-                g_local[i].x=x+.5f*(g_local[i].x*scale-x);
-                g_local[i].y=y+.5f*(g_local[i].y*scale-y);g_local[i].z=z;
+                g_local[i].x=x+.35f*(g_local[i].x*scale-x);
+                g_local[i].y=y+.35f*(g_local[i].y*scale-y);g_local[i].z=z;
             }
         }
         start=end;
