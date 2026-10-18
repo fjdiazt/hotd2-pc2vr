@@ -21,11 +21,19 @@
 #include "player_hud.h"
 #include "audio_control.h"
 #include "desktop_pause.h"
+#include "checkpoint.h"
 
 static FILE *logfile;
 static Vc2Frame *frame;
 static HANDLE mapping;
 static HWND game_window;
+static int checkpoint_continue,checkpoint_stage,checkpoint_scene=-1,checkpoint_armed,checkpoint_ready,checkpoint_bootstrap;
+static HotdCheckpoint checkpoint_target,checkpoint_saved;
+static DWORD checkpoint_retry;
+static char checkpoint_path[MAX_PATH];
+static void (__cdecl *checkpoint_load_original)(void);
+static void (__cdecl *checkpoint_start_original)(void **,int);
+static void (__cdecl *checkpoint_event_original)(void);
 static unsigned count, calls, dropped, frame_no, atlas_dirty;
 static Vc2Vertex vertices[VC2_MAX_VERTS];
 #define HOTD_MAX_HUD_VERTS (4096*6)
@@ -221,6 +229,132 @@ static int write_code(BYTE *at, const BYTE *bytes, unsigned n)
     memcpy(at, bytes, n);
     FlushInstructionCache(GetCurrentProcess(), at, n);
     VirtualProtect(at, n, old, &unused);
+    return 1;
+}
+
+static int checkpoint_word(DWORD address,DWORD *value)
+{
+    uintptr_t offset=(uintptr_t)address-(uintptr_t)game_base;
+    if((address&3) || offset<0x577200 || offset>0x5A1A00-4)return 0;
+    memcpy(value,(const void *)(uintptr_t)address,4);return 1;
+}
+static int checkpoint_script(HotdCheckpoint point,unsigned variant,DWORD *out)
+{
+    DWORD scenes,variants=0,script,opcode;
+    if(!hotd_checkpoint_valid(point) || variant>1)return 0;
+    memcpy(&scenes,game_base+0x577200+(point.stage-1)*4,4);
+    for(int i=0;i<=point.scene;i++)
+        if(!checkpoint_word(scenes+i*4,&variants) || !variants || variants==0xFFFFFFFFu)return 0;
+    if(!checkpoint_word(variants+variant*4,&script) || !checkpoint_word(script,&opcode) ||
+       !opcode || opcode>=0x60 || opcode==0x2A || opcode==0x34 || opcode==0x3C || opcode==0x4C)return 0;
+    *out=script;return 1;
+}
+static int checkpoint_scene_available(HotdCheckpoint point)
+{
+    DWORD script;return checkpoint_script(point,1,&script);
+}
+static void __cdecl checkpoint_event(void)
+{
+    DWORD script;
+    checkpoint_event_original();
+    if(checkpoint_bootstrap && *(DWORD *)(game_base+0x5C8E98)==6 && *(DWORD *)(game_base+0x5CA08C)==0 &&
+       *(short *)(game_base+0x5A1A08)==checkpoint_target.stage-1 &&
+       *(short *)(game_base+0x5A2BC0)==checkpoint_target.scene) {
+        /* Native scene variant 0 supplies resources/section setup before variant 1 gameplay. */
+        if(checkpoint_script(checkpoint_target,0,&script)) {
+            *(short *)(game_base+0x5A2BB0)=0;*(DWORD *)(game_base+0x5C7108)=script;
+            logline("checkpoint scene setup: stage=%d scene=%d variant=0",checkpoint_target.stage,checkpoint_target.scene);
+        } else logline("checkpoint scene setup unavailable; native gameplay entry retained");
+    }
+    checkpoint_bootstrap=0;
+}
+static void __cdecl checkpoint_load(void)
+{
+    checkpoint_armed=0;
+    checkpoint_bootstrap=0;
+    /* Only fresh Arcade starts; demos, Original, Training and Boss modes stay native. */
+    if(*(DWORD *)(game_base+0x5CA08C)==0) {
+        if(checkpoint_stage) {
+            checkpoint_target=(HotdCheckpoint){checkpoint_stage,checkpoint_scene>=0?
+                checkpoint_scene:hotd_checkpoint_first_scene(checkpoint_stage)};
+            checkpoint_armed=1;
+        } else if(checkpoint_continue) {
+            checkpoint_armed=hotd_checkpoint_read(checkpoint_path,&checkpoint_target);
+            if(!checkpoint_armed)logline("checkpoint resume: no valid saved location; normal Arcade start");
+        }
+        if(checkpoint_armed)*(short *)(game_base+0x5A1A08)=(short)(checkpoint_target.stage-1);
+    }
+    checkpoint_load_original();
+}
+static void __cdecl checkpoint_start(void **out,int mode)
+{
+    if(checkpoint_armed && *(DWORD *)(game_base+0x5CA08C)==0) {
+        if(checkpoint_scene_available(checkpoint_target)) {
+            *(short *)(game_base+0x5A2BC0)=(short)checkpoint_target.scene;
+            checkpoint_bootstrap=checkpoint_target.scene!=hotd_checkpoint_first_scene(checkpoint_target.stage);
+            logline("checkpoint start: stage=%d scene=%d (experimental scene entry)",checkpoint_target.stage,checkpoint_target.scene);
+        } else {
+            logline("checkpoint rejected: stage=%d scene=%d has no Arcade script; starting normally",checkpoint_target.stage,checkpoint_target.scene);
+            *(short *)(game_base+0x5A1A08)=*(short *)(game_base+0x5A2BC0)=0;
+            checkpoint_load_original();
+        }
+    }
+    checkpoint_armed=0;
+    checkpoint_start_original(out,mode);
+}
+static void checkpoint_record(unsigned active)
+{
+    HotdCheckpoint point;
+    DWORD now;
+    if(!checkpoint_ready || !checkpoint_continue || !active ||
+       *(DWORD *)(game_base+0x5C8E98)!=6 || *(DWORD *)(game_base+0x5CA08C)!=0 ||
+       *(DWORD *)(game_base+0x5C90A4)!=2)return;
+    point=(HotdCheckpoint){*(short *)(game_base+0x5A1A08)+1,*(short *)(game_base+0x5A2BC0)};
+    if((point.stage==checkpoint_saved.stage && point.scene==checkpoint_saved.scene) || !hotd_checkpoint_valid(point))return;
+    now=GetTickCount();
+    if(checkpoint_retry && (LONG)(now-checkpoint_retry)<0)return;
+    if(!checkpoint_scene_available(point))return;
+    if(hotd_checkpoint_write(checkpoint_path,point)) {
+        checkpoint_saved=point;checkpoint_retry=0;
+        logline("checkpoint saved: stage=%d scene=%d",point.stage,point.scene);
+    } else {
+        checkpoint_retry=now+5000;
+        logline("checkpoint save failed: error=%lu; retry in 5 seconds",(unsigned long)GetLastError());
+    }
+}
+
+static int checkpoint_environment(const wchar_t *key,int minimum,int maximum,int *value)
+{
+    wchar_t text[16];DWORD n=GetEnvironmentVariableW(key,text,16);
+    if(!n)return GetLastError()==ERROR_ENVVAR_NOT_FOUND;
+    return n<16 && hotd_checkpoint_number(text,minimum,maximum,value);
+}
+static int install_checkpoints(void)
+{
+    static const BYTE load[]={0xE8,0x51,0x32,0xFB,0xFF},start[]={0xE8,0x57,0,0,0},event[]={0xE8,0xAB,0xE4,0xFF,0xFF};
+    BYTE patch[5]={0xE8};DWORD jump;char *slash;
+    checkpoint_continue=GetPrivateProfileIntA("vr","continue_game",0,ini_path)!=0;
+    if(!checkpoint_environment(L"HOTD2VR_START_STAGE",1,6,&checkpoint_stage) ||
+       !checkpoint_environment(L"HOTD2VR_START_SCENE",0,HOTD_CHECKPOINT_MAX_SCENE,&checkpoint_scene) ||
+       !checkpoint_environment(L"HOTD2VR_CONTINUE_GAME",0,1,&checkpoint_continue) ||
+       (checkpoint_scene>=0 && !checkpoint_stage))return 0;
+    if(!checkpoint_stage && !checkpoint_continue)return 1;
+    strcpy(checkpoint_path,ini_path);slash=strrchr(checkpoint_path,'\\');
+    if(!slash || slash-checkpoint_path+sizeof("HOTD2VR.checkpoint.ini")>=MAX_PATH)return 0;
+    strcpy(slash+1,"HOTD2VR.checkpoint.ini");
+    if(memcmp(game_base+0x5FF0A,load,sizeof(load)) || memcmp(game_base+0x5FFD4,start,sizeof(start)) ||
+       memcmp(game_base+0x60710,event,sizeof(event)))return 0;
+    checkpoint_load_original=(void *)((uintptr_t)game_base+0x13160);
+    checkpoint_start_original=(void *)((uintptr_t)game_base+0x60030);
+    checkpoint_event_original=(void *)((uintptr_t)game_base+0x5EBC0);
+    jump=(DWORD)((BYTE *)checkpoint_load-(game_base+0x5FF0A+5));memcpy(patch+1,&jump,4);
+    if(!write_code(game_base+0x5FF0A,patch,sizeof(patch)))return 0;
+    jump=(DWORD)((BYTE *)checkpoint_start-(game_base+0x5FFD4+5));memcpy(patch+1,&jump,4);
+    if(!write_code(game_base+0x5FFD4,patch,sizeof(patch)))return 0;
+    jump=(DWORD)((BYTE *)checkpoint_event-(game_base+0x60710+5));memcpy(patch+1,&jump,4);
+    if(!write_code(game_base+0x60710,patch,sizeof(patch)))return 0;
+    checkpoint_ready=1;
+    logline("checkpoint controls: ready; autosave=%d explicit_stage=%d scene=%d file=%s",checkpoint_continue,checkpoint_stage,checkpoint_scene,checkpoint_path);
     return 1;
 }
 
@@ -1289,6 +1423,7 @@ static void publish_frame(void)
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;
+    checkpoint_record(frame->active_players);
     unsigned pressure=stage_records.overflow || visibility_queue_drops;
     int report=frame_no==1 || frame_no%300==0 || texture_failures ||
         (pressure!=visibility_pressure && frame_no-visibility_last_pressure_log>=60);
@@ -1425,6 +1560,7 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     frame->input_supported=input_ready;
     logline("HOTD2 bridge pid=%lu input_profile=%d",(unsigned long)GetCurrentProcessId(),input_ready);
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
+    if(!install_checkpoints()){logline("checkpoint configuration/signature invalid; injection refused");return FALSE;}
     {
         static const BYTE signature[]={0x83,0xEC,0x1C,0x8B,0x44,0x24,0x20};
         int ready=native_shot_profile(game_base) &&

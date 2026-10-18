@@ -13,6 +13,10 @@ if ($LASTEXITCODE) { throw 'Launcher build failed.' }
 if ($LASTEXITCODE) { throw 'Startup test build failed.' }
 & "$out\test_startup.exe"
 if ($LASTEXITCODE) { throw 'Startup test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_checkpoint.exe" "$root\tests\test_checkpoint.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Checkpoint test build failed.' }
+& "$out\test_checkpoint.exe"
+if ($LASTEXITCODE) { throw 'Checkpoint test failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_lighting.exe" "$root\tests\test_lighting.c"
 if ($LASTEXITCODE) { throw 'Lighting test build failed.' }
 & "$out\test_lighting.exe"

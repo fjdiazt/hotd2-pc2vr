@@ -101,6 +101,18 @@ Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwap
 
 Ownership comes from the native player ammo/lives draw routines, including deferred sprite copies. Shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 18 bridge/viewer builds are required. Akimbo headset placement is user-confirmed; non-akimbo placement still needs runtime confirmation.
 
+### Experimental scene checkpoints
+
+To start a new Arcade game at another chapter, use `./Start-HOTD2.ps1 -StartStage 6`. `-StartStage` accepts 1–6. Optional `-StartScene 3` selects the native zero-based scene ID within that stage; omitted scene uses the chapter entrance (scene 7 for chapter 3, scene 0 for the others). These options change the next **new Arcade start after the normal menus**, rather than jumping immediately from the title. Original, Training, Boss and attract modes keep their native behavior.
+
+Enable `[vr] continue_game=1` to record the latest Arcade stage/scene and resume it on subsequent new Arcade starts. Default is `0`. Launcher switches `-ContinueGame` / `-NoContinueGame` override this for one launch; opposing PowerShell switches are rejected. Explicit `-StartStage` / `-StartScene` take priority over the saved location. With recording enabled, subsequent scene changes update the checkpoint even after an explicit jump.
+
+The bridge stores `[checkpoint] version=1`, `stage=1..6` and `scene=0..255` in `HOTD2VR.checkpoint.ini` beside its DLL, separate from both configuration and native game saves. It writes only when the location changes during active Arcade gameplay, using a flushed temporary file and atomic replacement. No player health, score, inventory, enemy state, route history or exact script position is saved. Resume restarts the selected scene. Disabling the feature retains the file; deleting it starts normally until another checkpoint is recorded.
+
+Direct launcher equivalents are `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. These startup options belong to `HOTD2Launch.exe`, not the viewer; `--native-window` cannot be combined with an explicit checkpoint request because it skips bridge injection. Stage/scene selection is CLI-only; only the recording/resume toggle is in the INI. A settings-menu control is not implemented here.
+
+This is a debugging checkpoint facility, **not a full save state**. Scene IDs are script boundaries, not labeled or validated checkpoints. Existing Arcade-script entries are checked before use; unavailable entries fall back to a normal chapter-1 start and log rejection. Mid-scene starts run the scene's native variant-0 setup script before its variant-1 gameplay script when available, loading its section/resources through the normal event system. Chapter entrances retain the native variant choice. Valid scripts can still depend on earlier flags, actors or route choices, or lack complete setup. Those prerequisites and full chapter/scene coverage need runtime qualification. Failed writes retain the previous file and retry after five seconds; startup and save results appear in `HOTD2Bridge.log`.
+
 ### Pausing
 
 A/X uses the game's normal pause. Both the VR view and the injected game's desktop window retain the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue in VR, so you can look around the frozen scene. Press the same player's A/X again to resume.

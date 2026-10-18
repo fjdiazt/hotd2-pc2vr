@@ -22,6 +22,29 @@ int main(void)
     assert(readLaunchOptions(4,skip,ini,&options) && options.skip_splash && options.wait && !options.native_window);
     assert(!readLaunchOptions(3,bad,ini,&options));
     assert(!readLaunchOptions(1,plain,ini,&options));
+    wchar_t *stage[]={L"launcher",L"game.exe",L"--start-stage",L"6",L"--start-scene",L"3",L"--continue-game"};
+    assert(readLaunchOptions(7,stage,ini,&options) && options.start_stage==6 && options.start_scene==3 && options.continue_game==1);
+    assert(setCheckpointEnvironment(&options));
+    wchar_t value[16];assert(GetEnvironmentVariableW(L"HOTD2VR_START_STAGE",value,16) && !wcscmp(value,L"6"));
+    assert(GetEnvironmentVariableW(L"HOTD2VR_START_SCENE",value,16) && !wcscmp(value,L"3"));
+    assert(GetEnvironmentVariableW(L"HOTD2VR_CONTINUE_GAME",value,16) && !wcscmp(value,L"1"));
+    assert(readLaunchOptions(2,plain,ini,&options) && !options.start_stage && options.start_scene==-1 && options.continue_game==-1);
+    assert(setCheckpointEnvironment(&options));
+    assert(!GetEnvironmentVariableW(L"HOTD2VR_START_STAGE",value,16) && GetLastError()==ERROR_ENVVAR_NOT_FOUND);
+    assert(!GetEnvironmentVariableW(L"HOTD2VR_START_SCENE",value,16) && GetLastError()==ERROR_ENVVAR_NOT_FOUND);
+    assert(!GetEnvironmentVariableW(L"HOTD2VR_CONTINUE_GAME",value,16) && GetLastError()==ERROR_ENVVAR_NOT_FOUND);
+    wchar_t *invalid[][5]={
+        {L"launcher",L"game.exe",L"--start-scene",L"2"},
+        {L"launcher",L"game.exe",L"--start-stage",L"0"},
+        {L"launcher",L"game.exe",L"--start-stage",L"7"},
+        {L"launcher",L"game.exe",L"--start-stage",L"1junk"},
+        {L"launcher",L"game.exe",L"--start-stage",L"-1"},
+        {L"launcher",L"game.exe",L"--start-stage",L"9999999999999999999999999999"},
+        {L"launcher",L"game.exe",L"--native-window",L"--continue-game"}};
+    for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);i++)assert(!readLaunchOptions(4,invalid[i],ini,&options));
+    assert(!readLaunchOptions(3,stage,ini,&options));
+    wchar_t *resume[]={L"launcher",L"game.exe",L"--continue-game",L"--no-continue-game"};
+    assert(readLaunchOptions(4,resume,ini,&options) && options.continue_game==0);
     assert(DeleteFileW(ini));
 
     const BYTE signature[]={0xC7,0x05,0x98,0x8E,0x9C,0x00,0x10,0x00,0x00,0x00};
