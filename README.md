@@ -87,7 +87,7 @@ With both outputs enabled, the preview uses the existing independent desktop cam
 | Thumbstick up/down | Navigate the game-mode selection menu |
 | Grip | Recenter the VR view |
 
-Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Holding B/Y does not block a later trigger pull. Thumbstick navigation is restricted to the native mode-selection screen; VR thumbstick zoom and click-to-toggle-screen bindings are removed.
+Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Holding B/Y does not block a later trigger pull. Thumbstick navigation is restricted to the native mode-selection screen; VR thumbstick zoom and click-to-toggle-screen bindings are removed.
 
 ### Pausing
 

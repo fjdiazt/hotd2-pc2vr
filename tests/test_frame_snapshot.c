@@ -12,6 +12,7 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes);
 static int interrupt_copy;
 static unsigned controller_starts,controller_fires,controller_lost;
 static float controller_sticks[2][2];
+static XrQuaternionf controller_rotations[2]={{0,0,0,1},{0,0,0,1}};
 static int controller_sticks_active;
 static XrResult XRAPI_CALL controller_sync(XrSession session,const XrActionsSyncInfo *info)
 {(void)session;(void)info;return XR_SUCCESS;}
@@ -37,11 +38,46 @@ static XrResult XRAPI_CALL controller_pose(XrSpace space,XrSpace base,XrTime tim
     unsigned hand=space==g_aimSpace[0]?0u:1u;
     (void)base;(void)time;
     out->locationFlags=controller_lost&(1u<<hand)?0:XR_SPACE_LOCATION_POSITION_VALID_BIT|XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
-    out->pose.orientation.w=1;out->pose.position.x=hand?.2f:-.2f;
+    out->pose.orientation=controller_rotations[hand];out->pose.position.x=hand?.2f:-.2f;
     return XR_SUCCESS;
 }
 static void controller_tick(void)
-{assert(!handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0));}
+{const XrQuaternionf head={0,0,0,1};assert(!handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0,&head));}
+static XrQuaternionf test_rotation(float pitch,float yaw,float roll)
+{
+    const float d=.00872664626f;
+    float sx=sinf(pitch*d),cx=cosf(pitch*d),sy=sinf(yaw*d),cy=cosf(yaw*d),sz=sinf(roll*d),cz=cosf(roll*d);
+    XrQuaternionf q={cy*sx*cz+sy*cx*sz,sy*cx*cz-cy*sx*sz,cy*cx*sz-sy*sx*cz,cy*cx*cz+sy*sx*sz};
+    return q;
+}
+static void check_head_relative_reload(void)
+{
+    const float angles[]={49.9f,50.1f,-44.9f,-45.1f,0,0,0,0};
+    const float sideways[]={0,0,0,0,59.9f,60.1f,-59.9f,-60.1f};
+    g_cfgAkimbo=1;controller_lost=0;controller_starts=0;controller_sticks_active=0;
+    for(unsigned h=0;h<2;h++)for(unsigned turn=0;turn<3;turn++)for(unsigned a=0;a<8;a++) {
+        XrQuaternionf head=test_rotation(turn==0?0:turn==1?35:-35,turn*70.0f,turn==2?25:0);
+        XrQuaternionf relative=test_rotation(angles[a],sideways[a],0),gun;
+        /* Compose head * relative. */
+        gun.x=head.w*relative.x+head.x*relative.w+head.y*relative.z-head.z*relative.y;
+        gun.y=head.w*relative.y-head.x*relative.z+head.y*relative.w+head.z*relative.x;
+        gun.z=head.w*relative.z+head.x*relative.y-head.y*relative.x+head.z*relative.w;
+        gun.w=head.w*relative.w-head.x*relative.x-head.y*relative.y-head.z*relative.z;
+        controller_rotations[h]=gun;controller_fires=1u<<h;g_resetControls=1;
+        assert(!handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,1.7f,3,4,5,&head));
+        unsigned action=h==1?g_frame->aim_buttons:g_frame->aim2_buttons;
+        assert((action&(VC2_BTN_FIRE|VC2_BTN_RELOAD))==((a==1||a==3||a==5||a==7)?VC2_BTN_RELOAD:VC2_BTN_FIRE));
+    }
+    controller_rotations[0]=controller_rotations[1]=(XrQuaternionf){0,0,0,1};
+    XrQuaternionf invalid={0},head={0,0,0,1};controller_fires=1;g_resetControls=1;
+    assert(!handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0,&invalid));
+    assert(!(g_frame->aim2_buttons&(VC2_BTN_FIRE|VC2_BTN_RELOAD)));
+    assert(!handleControllers(XR_NULL_HANDLE,XR_NULL_HANDLE,0,0,0,0,0,&head));
+    assert(!(g_frame->aim2_buttons&(VC2_BTN_FIRE|VC2_BTN_RELOAD))); /* Invalid head disarms until release. */
+    controller_fires=0;controller_tick();controller_fires=1;controller_tick();
+    assert(g_frame->aim2_buttons&VC2_BTN_FIRE);
+    controller_fires=0;g_resetControls=1;controller_tick();
+}
 static void test_plane(unsigned at,float x,float z,unsigned style)
 {
     g_local[at]=(Vc2Vertex){.x=x-10,.y=-10,.z=z,.style=style};
@@ -281,6 +317,7 @@ int main(void)
     check_world_aim();
     check_near_aim_and_splashes();
     check_controller_modes();
+    check_head_relative_reload();
     free(g_frame);
     puts("Viewer: independent/paired players, gun visibility, INI/CLI cheats, heartbeat and coherent snapshots passed.");
     return 0;

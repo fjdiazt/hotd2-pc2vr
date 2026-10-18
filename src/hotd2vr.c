@@ -2484,7 +2484,7 @@ static void initActions(XrInstance inst, XrSession session)
     at.actionSets = &g_actSet;
     if (XR_FAILED(pxrAttachSessionActionSets(session, &at)))
         die("could not attach the action set");
-    note("controllers wired: trigger shoot, gun up 50deg/down 45deg + trigger reload, A/X start, B/Y reload/cancel,\n"
+    note("controllers wired: trigger shoot, head-relative up 50deg/down 45deg/sides 60deg + trigger reload, A/X start, B/Y reload/cancel,\n"
          "                   stick four-way menus, grip recentre\n");
 }
 #undef BIND
@@ -2589,8 +2589,18 @@ static void buzz(XrSession session, int h, float seconds, float amp)
     pxrApplyHapticFeedback(session, &hi, (const XrHapticBaseHeader *)&v);
 }
 
+static int headRelativeDirection(const XrQuaternionf *head,const float *direction,float *relative)
+{
+    float length=head->x*head->x+head->y*head->y+head->z*head->z+head->w*head->w;
+    if(!isfinite(length) || length<.000001f)return 0;
+    length=sqrtf(length);
+    XrQuaternionf inverse={-head->x/length,-head->y/length,-head->z/length,head->w/length};
+    quatRotate(&inverse,direction,relative);
+    return isfinite(relative[0]) && isfinite(relative[1]) && isfinite(relative[2]);
+}
+
 static int handleControllers(XrSession session, XrSpace space, XrTime when,
-                             float yaw0, float ox, float oy, float oz)
+                             float yaw0, float ox, float oy, float oz,const XrQuaternionf *head)
 {
     XrActionsSyncInfo si;
     XrActiveActionSet act;
@@ -2657,14 +2667,15 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         (bstart[1].isActive && bstart[1].currentState ? 2u:0u);
     g_frame->akimbo=1; /* Both native player input blocks are available in either mode. */
     for(h=0;h<2;h++) {
-        float direction[3]={0};
+        float direction[3]={0},relative[3]={0};
         XrSpaceLocationFlags required=XR_SPACE_LOCATION_POSITION_VALID_BIT|XR_SPACE_LOCATION_ORIENTATION_VALID_BIT;
         memset(poses+h,0,sizeof(poses[h]));poses[h].type=XR_TYPE_SPACE_LOCATION;
         poseValid[h]=XR_SUCCEEDED(pxrLocateSpace(g_aimSpace[h],space,when,poses+h)) &&
             (poses[h].locationFlags&required)==required;
         if(poseValid[h])quatRotate(&poses[h].pose.orientation,fwd,direction);
+        int reloadValid=poseValid[h] && headRelativeDirection(head,direction,relative);
         triggerActions[h]=hotd_trigger_action(triggers+h,fire[h].isActive && fire[h].currentState,
-            poseValid[h] && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h),direction[1]);
+            reloadValid && hotd_hand_visible(g_cfgAkimbo,g_activePlayers,h),relative[1],atan2f(relative[0],-relative[2]));
     }
     ZeroMemory(&gi, sizeof(gi)); ZeroMemory(&grip, sizeof(grip));
     gi.type = XR_TYPE_ACTION_STATE_GET_INFO;
@@ -3149,7 +3160,7 @@ static int runVR(void)
             }
 
             if (handleControllers(session, space, fs.predictedDisplayTime,
-                                  originYaw, ox, oy, oz))
+                                  originYaw, ox, oy, oz,&views[0].pose.orientation))
                 haveOrigin = 0;                    /* grip: recentre next frame */
 
             mIdent(model);
