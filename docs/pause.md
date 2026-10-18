@@ -14,3 +14,19 @@ Verification:
 - Actual offscreen D3D11 replay of the retained capture produced a visible street scene from two translated viewpoints, with different rendered images. This verifies retained 3D geometry rather than a flat screenshot.
 
 Evidence is retained under ignored `build/clean-pause-evidence/` in the main checkout: `pause-empty-scene.json`, `pause-probe.json`, `clean-pause-build.log`, `pause-viewer-checks.log`, `paused-retained.bin`, `paused-retained-atlas.bin` and `paused-viewpoints.png`. No VR session was launched for these checks; headset comfort and broader stage/menu coverage remain pending.
+
+## Separate Start and Pause input
+
+Protocol 14 adds `VC2_BTN_PAUSE=128` without changing the frame layout. Trigger sends Fire and Start; A/X sends the existing native Reload/Cancel, including eligible cutscene skip; B/Y sends Pause. Index uses A/B on each hand; Vive uses trackpad click for Reload/Cancel and menu click for Pause. The simple-controller menu button pauses.
+
+The native pause-input predicate at `0x40E9C0` has one direct caller, the unchanged pause routine at `0x40E500`. Its signature-checked hook temporarily replaces only the synthetic Start bits seen by that predicate with per-player Pause press edges, then restores the native input word before other game handlers run. Physical keyboard Start remains available, including simultaneous physical Start and VR trigger. Native pause eligibility, pause ownership, focus/device-disconnect handling and pause/resume side effects remain in the original routines. The bridge never writes the pause-state flag itself.
+
+This separates inputs without menu/gameplay classification. Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases the override. Original game files remain unchanged; restart the game without this worktree's bridge to remove the hook.
+
+Verification in the `feat/input-mapping` worktree:
+
+- The viewer regression first failed because a hidden hand's trigger did not send Start, then passed with the new mapping. Controller checks cover both hands, hidden-player joining, independent Fire/Start, Reload/Cancel and Pause actions, and existing stick navigation. Bridge checks cover pause press edges, paired Start masking, physical keyboard Start, input-word restoration and watchdog expiry. The full build/offline suite passed; existing MSVC CRT deprecation warnings remain.
+- Owned desktop session PID **89676** reached the title/mode menus through trigger Start, joined P1 and then P2 independently, and verified each player's ammo `6 -> 5 -> 6` through Trigger then Reload/Cancel. Trigger did not pause play or resume a paused game. B/Y paused/resumed, holding it did not repeat, an inactive player could not pause, and the other player could not resume the owner's pause.
+- That session requested zero cheats. The game's native lives/ammo flags were initially enabled, so the test cleared those flags only in its owned process before checking firing/reload/pause. Both players' native flags were verified off. The game closed normally and original `Hod2.exe`/`Hod2.ini` hashes stayed unchanged. Evidence: ignored `build/input-mapping-live.json`, `build/input-mapping-live.log` and `build/input-mapping-build.log` in this worktree.
+
+No headset session was launched. Physical controller bindings, complete menu coverage, eligible cutscene skip and full-game behavior still need runtime acceptance; the existing native Cancel route remains unchanged.

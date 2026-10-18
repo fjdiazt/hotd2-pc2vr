@@ -8,8 +8,53 @@ static DWORD __cdecl poll_input(void)
     *(DWORD *)(game_base+0x5C9028)=0x100;
     return 123;
 }
+static unsigned physical_keys;
 static HRESULT WINAPI poll_keyboard(void *self,DWORD size,void *out)
-{(void)self;memset(out,0,size);return DI_OK;}
+{
+    (void)self;memset(out,0,size);
+    if(size==256) {
+        BYTE *keys=out;
+        if(physical_keys&1)keys[DIK_RETURN]=0x80;
+        if(physical_keys&2)keys[DIK_TAB]=0x80;
+    }
+    return DI_OK;
+}
+static DWORD pause_seen;
+static int __cdecl pause_probe(void)
+{pause_seen=*(DWORD *)(game_base+0x5C9028);return 77;}
+static void pause_tick(unsigned p1,unsigned p2,DWORD native,DWORD expected)
+{
+    frame->aim_buttons=p1;frame->aim2_buttons=p2;frame->aim_seq++;
+    *(DWORD *)(game_base+0x5C9028)=native;
+    assert(native_pause()==77 && pause_seen==expected);
+    assert(*(DWORD *)(game_base+0x5C9028)==native); /* All other native consumers retain Start. */
+}
+static void check_pause_input(void)
+{
+    BYTE keys[256];
+    native_pause_original=pause_probe;frame->akimbo=1;physical_start_keys=0;
+    pause_tick(VC2_BTN_START,VC2_BTN_START,0x80108,0x100);
+    pause_tick(VC2_BTN_START,0,0x80108,0x80100);
+    pause_tick(0,VC2_BTN_START,0x80108,0x108);
+    pause_tick(VC2_BTN_PAIR_START|VC2_BTN_START,0,0x80108,0x100);
+    pause_tick(VC2_BTN_START|VC2_BTN_PAUSE,VC2_BTN_START,0x80108,0x108);
+    pause_tick(VC2_BTN_PAUSE,0,0x100,0x100); /* Held pause does not repeat. */
+    pause_tick(0,0,0x100,0x100);
+    pause_tick(0,VC2_BTN_PAUSE,0x100,0x80100);
+    pause_tick(0,0,0x100,0x100);
+    frame->aim_buttons=VC2_BTN_PAUSE;frame->aim2_buttons=VC2_BTN_PAUSE;frame->aim_seq++;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)));
+    assert(!keys[DIK_RETURN] && !keys[DIK_TAB] && !keys[DIK_RCONTROL] && !keys[DIK_LCONTROL]);
+    physical_keys=3;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && physical_start_keys==3);
+    pause_tick(VC2_BTN_START,VC2_BTN_START,0x80108,0x80108); /* Physical Start still pauses. */
+    physical_keys=0;assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !physical_start_keys);
+    frame->aim_buttons=frame->aim2_buttons=VC2_BTN_PAUSE;
+    aim_tick=GetTickCount()-501;
+    *(DWORD *)(game_base+0x5C9028)=0x80108;
+    assert(native_pause()==77 && pause_seen==0x80108); /* Watchdog releases VR ownership. */
+    assert(*(DWORD *)(game_base+0x5C9028)==0x80108);
+}
 static int __cdecl model_draw_probe(const BYTE *record,int pass)
 {
     (void)record;assert(pass==1 && (capture_kind&HOTD_SHOT));return 37;
@@ -204,7 +249,8 @@ int main(void)
     *(DWORD *)(game_base+0x5C8E98)=4;
     assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !keys[DIK_UP] && !keys[DIK_DOWN] &&
         !keys[DIK_LEFT] && !keys[DIK_RIGHT]);
+    check_pause_input();
     free(game_base);free(frame);
-    puts("Input/cheats: reload edges, native flag restore, independent rapid fire, menu/pause guards and watchdogs passed.");
+    puts("Input/cheats: separate pause edges, preserved Start, reload, rapid fire and watchdogs passed.");
     return 0;
 }

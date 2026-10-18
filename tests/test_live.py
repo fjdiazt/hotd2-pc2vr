@@ -13,7 +13,7 @@ parser.add_argument("--input", action="store_true", help="briefly own both gun a
 args = parser.parse_args()
 SIZE = 87385004
 memory = mmap.mmap(-1, SIZE, tagname=r"Local\HOTD2_PC2VR_Frame", access=mmap.ACCESS_WRITE if args.input else mmap.ACCESS_READ)
-assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 13), "HOTD2 bridge not running or protocol mismatch"
+assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 14), "HOTD2 bridge not running or protocol mismatch"
 
 def snapshot():
     deadline = time.monotonic() + 3

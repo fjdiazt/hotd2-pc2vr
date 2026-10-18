@@ -49,6 +49,7 @@ static BYTE *game_base;
 static int input_ready;
 static DWORD aim_seq, aim_tick;
 static unsigned buttons[2];
+static unsigned physical_start_keys;
 static int cheats_supported;
 static unsigned cheat_owned;
 static BYTE saved_cheats[2][2];
@@ -190,6 +191,26 @@ static void update_input(void)
 }
 
 static DWORD (__cdecl *native_input_original)(void);
+static int (__cdecl *native_pause_original)(void);
+static int __cdecl native_pause(void)
+{
+    static unsigned previous;
+    DWORD *input=(DWORD *)(game_base+0x5C9028),saved=*input,pause_input=saved;
+    unsigned held=0;
+    update_input();
+    for(unsigned p=0;p<2;p++) {
+        DWORD start=8u<<(p*16);
+        /* Only the pause reader loses synthetic Start; physical keyboard Start stays native. */
+        if((buttons[p]&VC2_BTN_START) && !(physical_start_keys&(1u<<p)))pause_input&=~start;
+        if(buttons[p]&VC2_BTN_PAUSE)held|=1u<<p;
+        if((held&~previous)&(1u<<p))pause_input|=start;
+    }
+    previous=held;
+    *input=pause_input;
+    int result=native_pause_original();
+    *input=saved;
+    return result;
+}
 static int native_reload(unsigned player,HotdGunInput *gun)
 {
     BYTE *profile=game_base+0x5A5D84+player*0x130;
@@ -256,6 +277,10 @@ static GetDeviceState original_keyboard_state;
 static HRESULT WINAPI keyboard_state(void *self,DWORD size,void *out)
 {
     HRESULT hr = original_keyboard_state(self,size,out);
+    if(size==256) {
+        BYTE *keys=out;
+        physical_start_keys=SUCCEEDED(hr) ? ((keys[DIK_RETURN]&0x80?1u:0u)|(keys[DIK_TAB]&0x80?2u:0u)):0;
+    }
     update_input();
     if(FAILED(hr) && size==256 && active_input()) {
         memset(out,0,size);hr=DI_OK;
@@ -1116,7 +1141,9 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};
         static const BYTE model_signature[]={0x83,0xEC,0x1C,0xA1,0x74,0xEB,0x7D,0x00,0x53};
-        if(!detour(0xCBB0,input_signature,sizeof(input_signature),native_input,(void **)&native_input_original) ||
+        static const BYTE pause_signature[]={0x66,0x83,0x3D,0x00,0x1A,0x9A,0x00,0x00};
+        if(!detour(0xE9C0,pause_signature,sizeof(pause_signature),native_pause,(void **)&native_pause_original) ||
+           !detour(0xCBB0,input_signature,sizeof(input_signature),native_input,(void **)&native_input_original) ||
            !detour(0xA7EF0,model_signature,sizeof(model_signature),native_model,(void **)&native_model_original) ||
            !detour(0xA8440,model_signature,sizeof(model_signature),native_model_alt,(void **)&native_model_alt_original) ||
            !detour(0xA59C0,draw_signature,sizeof(draw_signature),native_strip,(void **)&native_strip_original) ||
@@ -1125,6 +1152,7 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
             logline("native submission/input hook failed");return FALSE;
         }
         logline("native polygon submission hooks ready");
+        logline("native pause input separated from VR Start");
         void **slot=(void **)(game_base+0x172304);
         if(*slot==game_base+0xBA3FF)
             logline("native frame presentation hook: %d",replace_pointer(slot,native_present,(void **)&original_present));

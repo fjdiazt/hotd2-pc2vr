@@ -66,20 +66,24 @@ Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the
 
 | Input | Action |
 | --- | --- |
-| Trigger | Fire, or reload while the gun is tilted beyond the reload threshold |
+| Trigger | Native Start/confirm and fire, or reload while the gun is tilted beyond the reload threshold |
 | Gun up at least 50° or down at least 45°, then trigger | Reload that hand's gun |
-| A / X | Native Start, confirm or pause, depending on the current game screen |
-| B / Y | Native Reload/Cancel; reload during play and skip eligible cutscenes |
-| Thumbstick up/down | Navigate the game-mode selection menu |
+| A / X | Native Reload/Cancel; reload during play and skip eligible cutscenes |
+| B / Y | Native pause/resume, separate from Start |
+| Thumbstick four-way | Navigate native menus and adjust options |
 | Grip | Recenter the VR view |
 
-Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Holding B/Y does not block a later trigger pull. Thumbstick navigation is restricted to the native mode-selection screen; VR thumbstick zoom and click-to-toggle-screen bindings are removed.
+Trigger supplies Start and Fire together; the native game consumes them in its own interfaces. A pause-only input hook separates VR Start from pause/resume, retaining the game's pause eligibility, player ownership and automatic device-disconnect pause. If one player pauses, that player's B/Y resumes. Physical keyboard Enter/Tab keep their native Start/pause behavior. There is no menu classifier. Matching protocol-14 bridge/viewer builds are required.
+
+This mapping passed offline and native desktop input checks for both players. Headset button routing, complete menu coverage and eligible cutscene skip still need acceptance.
+
+Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms firing until release. Holding A/X does not block a later trigger pull. Thumbsticks supply native arrow keys; VR thumbstick zoom and click-to-toggle-screen bindings are removed.
 
 ### Pausing
 
-A/X uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press Start again to resume. The native desktop window retains its original pause display.
+B/Y uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press the same player's B/Y again to resume. The native desktop window retains its original pause display.
 
-The bridge and viewer must both be rebuilt for protocol 13; older builds cannot exchange the pause state. Details and verification: [docs/pause.md](docs/pause.md).
+The bridge and viewer must both be rebuilt for protocol 14; older builds cannot exchange the new pause input. Details and verification: [docs/pause.md](docs/pause.md).
 
 ### Two hands and akimbo
 

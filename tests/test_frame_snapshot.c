@@ -10,7 +10,7 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes);
 #undef main
 
 static int interrupt_copy;
-static unsigned controller_starts,controller_fires,controller_lost;
+static unsigned controller_pauses,controller_backs,controller_fires,controller_lost;
 static float controller_sticks[2][2];
 static int controller_sticks_active;
 static XrResult XRAPI_CALL controller_sync(XrSession session,const XrActionsSyncInfo *info)
@@ -19,7 +19,7 @@ static XrResult XRAPI_CALL controller_boolean(XrSession session,const XrActionSt
 {
     unsigned hand=info->subactionPath==g_handPath[0]?0u:1u;
     (void)session;out->isActive=XR_TRUE;out->changedSinceLastSync=XR_TRUE;
-    out->currentState=((info->action==g_actStart?controller_starts:info->action==g_actFire?controller_fires:0)&(1u<<hand))!=0;
+    out->currentState=((info->action==g_actPause?controller_pauses:info->action==g_actBack?controller_backs:info->action==g_actFire?controller_fires:0)&(1u<<hand))!=0;
     return XR_SUCCESS;
 }
 static XrResult XRAPI_CALL controller_float(XrSession session,const XrActionStateGetInfo *info,XrActionStateFloat *out)
@@ -110,22 +110,23 @@ static void check_controller_modes(void)
     pxrGetActionStateFloat=controller_float;pxrLocateSpace=controller_pose;
     g_handPath[0]=1;g_handPath[1]=2;
     g_aimSpace[0]=(XrSpace)(uintptr_t)1;g_aimSpace[1]=(XrSpace)(uintptr_t)2;
-    g_actStart=(XrAction)(uintptr_t)3;g_actFire=(XrAction)(uintptr_t)4;
+    g_actPause=(XrAction)(uintptr_t)3;g_actFire=(XrAction)(uintptr_t)4;
     g_actBack=(XrAction)(uintptr_t)5;
     g_actMenu=(XrAction)(uintptr_t)6;g_actMenuX=(XrAction)(uintptr_t)7;
     g_cfgHaptic=0;g_localCount=0;g_unitsPerMetre=10;g_cfgAkimbo=0;g_resetControls=1;
     g_activePlayers=0;
     controller_tick();assert(!g_gunValid && !g_gun2Valid);
     controller_fires=1;controller_tick();assert(!g_gunValid && !(g_frame->aim_buttons&VC2_BTN_FIRE));
-    controller_starts=1;controller_tick();
+    assert(g_frame->aim2_buttons&VC2_BTN_START); /* Trigger can join before its gun is visible. */
+    controller_tick();
     assert(!g_gunValid && !g_gun2Valid); /* Start alone does not confirm a join. */
     assert((g_frame->aim2_buttons&VC2_BTN_START) && !(g_frame->aim_buttons&VC2_BTN_START));
-    controller_starts=0;g_activePlayers=2;controller_tick(); /* Native P2 accepted. */
+    g_activePlayers=2;controller_tick(); /* Native P2 accepted. */
     assert(!g_gunValid && g_gun2Valid && g_gun2Pose.position.x<0 && !(g_frame->aim2_buttons&VC2_BTN_FIRE));
     controller_fires=0;controller_tick();
     controller_fires=1;controller_tick();assert(g_frame->aim2_buttons&VC2_BTN_FIRE);
     controller_fires=2;controller_tick();assert(!g_gunValid && g_gun2Valid && !(g_frame->aim_buttons&VC2_BTN_FIRE));
-    controller_starts=2;controller_tick();assert(!g_gunValid && g_gun2Valid);
+    controller_tick();assert(!g_gunValid && g_gun2Valid);
     assert((g_frame->aim_buttons&VC2_BTN_START) && !(g_frame->aim2_buttons&VC2_BTN_START));
     g_activePlayers=3;controller_tick();
     assert(g_gunValid && g_gun2Valid && g_gunPose.position.x>0 && !(g_frame->aim_buttons&VC2_BTN_FIRE));
@@ -134,21 +135,30 @@ static void check_controller_modes(void)
     g_activePlayers=2;controller_tick();assert(!g_gunValid && g_gun2Valid); /* P1 out. */
     g_activePlayers=0;controller_tick();assert(!g_gunValid && !g_gun2Valid); /* Menu/game over. */
     g_activePlayers=1;controller_tick();assert(g_gunValid && !g_gun2Valid); /* Keyboard/native join works too. */
-    controller_starts=controller_fires=0;g_cfgAkimbo=1;g_resetControls=1;g_activePlayers=0;controller_tick();
+    controller_fires=0;g_cfgAkimbo=1;g_resetControls=1;g_activePlayers=0;controller_tick();
     assert(g_gunValid && g_gun2Valid && g_frame->akimbo && g_gunPose.position.x>0 && g_gun2Pose.position.x<0);
     assert(g_frame->aim_buttons&VC2_BTN_PAIR_START);
-    controller_starts=1;controller_tick();assert(g_frame->aim2_buttons&VC2_BTN_START);
-    controller_starts=2;controller_tick();assert(g_frame->aim_buttons&VC2_BTN_START);
-    g_cfgAkimbo=0;g_resetControls=1;controller_starts=controller_fires=0;controller_tick();
-    controller_starts=2;controller_tick();assert(!g_gunValid && !g_gun2Valid);
+    controller_fires=1;controller_tick();assert(g_frame->aim2_buttons&VC2_BTN_START);
+    controller_fires=2;controller_tick();assert(g_frame->aim_buttons&VC2_BTN_START);
+    g_cfgAkimbo=0;g_resetControls=1;controller_fires=0;controller_tick();
+    controller_fires=2;controller_tick();assert(!g_gunValid && !g_gun2Valid);
     g_activePlayers=1;controller_tick();assert(g_gunValid && !g_gun2Valid);
-    controller_starts=0;controller_tick();controller_starts=1;controller_tick();
+    controller_fires=0;controller_tick();controller_fires=1;controller_tick();
     assert(g_gunValid && !g_gun2Valid);
     g_activePlayers=3;controller_tick();
     assert(g_gunValid && g_gun2Valid && g_gunPose.position.x>0 && g_gun2Pose.position.x<0);
     assert(!(g_frame->aim_buttons&VC2_BTN_PAIR_START));
+    /* Face actions remain separate, even before joining. */
+    controller_fires=0;g_activePlayers=0;
+    controller_backs=2;controller_pauses=1;controller_tick();
+    assert((g_frame->aim_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_BACK);
+    assert((g_frame->aim2_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_PAUSE);
+    controller_backs=1;controller_pauses=2;controller_tick();
+    assert((g_frame->aim_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_PAUSE);
+    assert((g_frame->aim2_buttons&(VC2_BTN_START|VC2_BTN_FIRE|VC2_BTN_BACK|VC2_BTN_PAUSE))==VC2_BTN_BACK);
+    controller_backs=controller_pauses=0;
     /* Both sticks navigate independently of gun visibility or player joining. */
-    controller_starts=controller_fires=0;g_activePlayers=0;controller_sticks_active=1;
+    controller_fires=0;g_activePlayers=0;controller_sticks_active=1;
     const unsigned directions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_RIGHT,VC2_BTN_LEFT};
     const unsigned nav_mask=VC2_BTN_UP|VC2_BTN_DOWN|VC2_BTN_LEFT|VC2_BTN_RIGHT;
     for(unsigned hand=0;hand<2;hand++)for(unsigned dir=0;dir<4;dir++) {
