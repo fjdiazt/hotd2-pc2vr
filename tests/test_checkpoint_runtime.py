@@ -43,8 +43,8 @@ def session(from_menu=False):
     assert process
     memory = None
     try:
-        memory = mmap.mmap(-1, 87385060, tagname=name, access=mmap.ACCESS_WRITE)
-        assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 21)
+        memory = mmap.mmap(-1, 87385260, tagname=name, access=mmap.ACCESS_WRITE)
+        assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 22)
 
         def read(address, fmt="<I"):
             data = c.create_string_buffer(struct.calcsize(fmt))
@@ -67,8 +67,9 @@ def session(from_menu=False):
                 tick()
                 time.sleep(.02)
 
-        def command(action):
+        def command(action, stage=0, scene=0):
             request = struct.unpack_from("<I", memory, 87385016)[0] + 1
+            struct.pack_into("<2I", memory, 87385060, stage, scene)
             struct.pack_into("<I", memory, 87385036, action)
             struct.pack_into("<I", memory, 87385016, request)
             wait(lambda: struct.unpack_from("<I", memory, 87385020)[0] == request)
@@ -80,6 +81,10 @@ def session(from_menu=False):
             save.write_text(f"[checkpoint]\nversion=1\nstage={stage}\nscene={scene}\n")
 
         wait(lambda: read(0x9C8E98) in (3, 4, 5))
+        for stage in range(1, 7):
+            catalog = struct.unpack_from("<8I", memory, 87385068 + (stage - 1) * 32)
+            entrance = 7 if stage == 3 else 0
+            assert catalog[entrance // 32] & (1 << (entrance % 32))
         if from_menu:
             before = save.read_bytes()
             assert command(0)[0] == 2 and save.read_bytes() == before
@@ -110,6 +115,11 @@ def session(from_menu=False):
             write(2, 0)
             assert command(1) == (1, 2, 0)  # Cross-chapter unload/reinitialization.
             before = save.read_bytes()
+            assert command(3, 1, 4) == (1, 1, 4) and save.read_bytes() == before
+            assert command(3, 20, 0)[0] == 4
+            assert command(3, 1, 255)[0] == 4
+            assert command(3, 2, 0) == (1, 2, 0) and save.read_bytes() == before
+            before = save.read_bytes()
             assert command(2) == (1, 1, 0) and save.read_bytes() == before
             write(2, 255)
             assert command(1)[0] == 4 and read(0x9A1A08, "<h") == 0
@@ -139,4 +149,4 @@ finally:
     else:
         save.write_bytes(original)
     assert (build / "HOTD2VR.ini").read_bytes() == ini
-print("Native save/load/new game, paused load, live autosave, invalid-scene rejection and title load passed")
+print("Native save/load/stage select/new game, paused load, live autosave, invalid targets and title load passed")

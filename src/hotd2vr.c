@@ -56,6 +56,7 @@
 #include "openxr/openxr_platform.h"
 
 #include "hotd_share.h"
+#include "checkpoint.h"
 #include "game_input.h"
 #include "player_hud.h"
 #include "audio_control.h"

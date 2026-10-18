@@ -7,7 +7,7 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 21
+#define VC2_SHARE_VERSION 22
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960
@@ -40,6 +40,7 @@
 #define HOTD_CHECKPOINT_SAVE 0u
 #define HOTD_CHECKPOINT_LOAD 1u
 #define HOTD_CHECKPOINT_NEW 2u
+#define HOTD_CHECKPOINT_SELECT 3u
 
 #pragma pack(push, 4)
 typedef struct {
@@ -86,9 +87,11 @@ typedef struct {
     volatile uint32_t checkpoint_autosave; /* 0 inherit launcher, 1 off, 2 on; heartbeat owned. */
     uint32_t checkpoint_current_stage,checkpoint_current_scene;
     uint32_t checkpoint_saved_stage,checkpoint_saved_scene; /* Read-only previews under seq; stage 0 unavailable. */
+    uint32_t checkpoint_target_stage,checkpoint_target_scene; /* Written before SELECT request. */
+    uint32_t checkpoint_stage_scenes[6][8]; /* Immutable native scene catalog; bit N means scene N exists. */
 } Vc2Frame;
 #pragma pack(pop)
 _Static_assert(sizeof(Vc2Vertex) == 64, "vertex layout changed");
 _Static_assert(offsetof(Vc2Frame, verts) == 156, "frame layout changed");
-_Static_assert(offsetof(Vc2Frame,cheat_flags)==87384220 && offsetof(Vc2Frame,shot_origins)==87384236 && offsetof(Vc2Frame,audio_levels)==87385004 && offsetof(Vc2Frame,shot_events)==87385008 && offsetof(Vc2Frame,checkpoint_request)==87385016 && offsetof(Vc2Frame,checkpoint_current_stage)==87385044 && sizeof(Vc2Frame)==87385060,"effect layout changed");
+_Static_assert(offsetof(Vc2Frame,cheat_flags)==87384220 && offsetof(Vc2Frame,shot_origins)==87384236 && offsetof(Vc2Frame,audio_levels)==87385004 && offsetof(Vc2Frame,shot_events)==87385008 && offsetof(Vc2Frame,checkpoint_request)==87385016 && offsetof(Vc2Frame,checkpoint_current_stage)==87385044 && offsetof(Vc2Frame,checkpoint_stage_scenes)==87385068 && sizeof(Vc2Frame)==87385260,"effect layout changed");
 #endif

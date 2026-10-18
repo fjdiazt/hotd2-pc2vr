@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <wchar.h>
 
@@ -42,14 +43,22 @@ static inline int hotd_checkpoint_read(const char *path,HotdCheckpoint *point)
     }
     *point=(HotdCheckpoint){numbers[1],numbers[2]};return 1;
 }
-/* Validate destination scripts on disk before unloading the running scene. */
-static inline int hotd_checkpoint_file_scene(const char *directory,HotdCheckpoint point)
+static inline int hotd_checkpoint_table_word(const BYTE *tables,const unsigned lengths[2],uint32_t address,uint32_t *word)
+{
+    unsigned offset=address-0x977200u;
+    if((address&3) || offset>0x2A800-4 ||
+       !(offset+4<=lengths[0] || (offset>=0x200 && offset+4<=0x200+lengths[1])))return 0;
+    memcpy(word,tables+offset,4);return 1;
+}
+/* Enumerate native Arcade scripts once per stage; every disk-derived pointer is bounded. */
+static inline int hotd_checkpoint_file_scenes(const char *directory,int stage,uint32_t scenes[8])
 {
     const unsigned capacity=0x2A800;unsigned lengths[2]={0};int ok=0;
     BYTE *tables=calloc(1,capacity);char path[MAX_PATH];FILE *file;
-    if(!tables || !hotd_checkpoint_valid(point))goto done;
+    memset(scenes,0,8*sizeof(*scenes));
+    if(!tables || stage<1 || stage>6)goto done;
     for(unsigned i=0;i<2;i++) {
-        int n=i?snprintf(path,sizeof(path),"%s\\evt\\st%devtbl.bin",directory,point.stage):
+        int n=i?snprintf(path,sizeof(path),"%s\\evt\\st%devtbl.bin",directory,stage):
             snprintf(path,sizeof(path),"%s\\evt\\comevtbl.bin",directory);
         if(n<0 || n>=(int)sizeof(path))goto done;
         file=fopen(path,"rb");if(!file)goto done;
@@ -62,21 +71,24 @@ static inline int hotd_checkpoint_file_scene(const char *directory,HotdCheckpoin
         DWORD word;memcpy(&word,tables+offset,4);
         if((word&0xFFF80000u)==0x0CE80000u){word+=0xF3AC1A00u;memcpy(tables+offset,&word,4);}
     }
-    DWORD address;memcpy(&address,tables+(point.stage-1)*4,4);
-    /* Follow scene, variant 1, then its first opcode. Bound every disk-derived pointer. */
-    for(int step=0;step<point.scene+3;step++) {
-        unsigned offset=address-0x977200u;
-        if((address&3) || offset>capacity-4 ||
-           !(offset+4<=lengths[0] || (offset>=0x200 && offset+4<=0x200+lengths[1])))goto done;
-        DWORD word;memcpy(&word,tables+offset,4);
-        if(step<=point.scene) {
-            if(!word || word==0xFFFFFFFFu)goto done;
-            if(step<point.scene)address+=4;else address=word+4;
-        } else if(step==point.scene+1)address=word;
-        else ok=word>0 && word<0x60 && word!=0x2A && word!=0x34 && word!=0x3C && word!=0x4C;
+    uint32_t list,variants,script,opcode;
+    if(!hotd_checkpoint_table_word(tables,lengths,0x977200+(stage-1)*4,&list))goto done;
+    for(unsigned scene=0;scene<=HOTD_CHECKPOINT_MAX_SCENE;scene++) {
+        if(!hotd_checkpoint_table_word(tables,lengths,list+scene*4,&variants) || !variants || variants==0xFFFFFFFFu)break;
+        if(hotd_checkpoint_table_word(tables,lengths,variants+4,&script) &&
+           hotd_checkpoint_table_word(tables,lengths,script,&opcode) && opcode>0 && opcode<0x60 &&
+           opcode!=0x2A && opcode!=0x34 && opcode!=0x3C && opcode!=0x4C) {
+            scenes[scene/32]|=1u<<(scene%32);ok=1;
+        }
     }
 done:
     free(tables);return ok;
+}
+static inline int hotd_checkpoint_file_scene(const char *directory,HotdCheckpoint point)
+{
+    uint32_t scenes[8];
+    return hotd_checkpoint_valid(point) && hotd_checkpoint_file_scenes(directory,point.stage,scenes) &&
+        (scenes[point.scene/32]&(1u<<(point.scene%32)))!=0;
 }
 static inline int hotd_checkpoint_write(const char *path,HotdCheckpoint point)
 {

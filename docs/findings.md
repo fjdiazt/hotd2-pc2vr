@@ -476,3 +476,38 @@ Viewer build, snapshot/controllers, world scale, aim indicators, WARP rendering,
 menu and output-ownership checks pass. No game/VR launch; headset size acceptance
 remains pending. The initial 50-percent setting was subsequently reduced to
 35 percent at the user's request; the running 50-percent VR session was retained.
+
+
+## Runtime stage and scene selection
+
+Stage select follows Load game in the existing VR Settings root. It opens six
+named chapters, then a paginated list of native scene IDs. Selecting a chapter
+only browses; confirming a scene requests its restart. Back returns to chapters,
+then the root. Chapter 3 defaults to its native entrance, scene 7. Other chapters
+default to their entrance when available. Missing catalog data reports no scenes.
+Companion previews can browse but cannot start a selected scene.
+
+Protocol 22 appends request stage/scene at 87,385,060/64 and six immutable
+256-bit native scene catalogs at 87,385,068; frame size is 87,385,260. Old offsets
+remain unchanged. The bridge enumerates scripts once at injection using the
+same bounded event-file reader as destination validation. The installed game's
+catalogs contain 15, 36, 12, 24, 8 and 13 Arcade script scenes respectively;
+these counts are observations, not hardcoded limits. Missing/invalid script
+pointers are omitted. Tests include sparse IDs and the scene-255 boundary.
+
+SELECT action 3 carries an explicit destination. It validates stage/scene ranges
+and re-reads the actual destination scripts before queuing the existing native
+mode/task/resource restart. It overrides startup selection and shares Load's
+bootstrap, player joining, pause handling, progress, acknowledgment and timeout.
+No INI selection key or additional save slot is introduced. Browsing never saves;
+with Autosave off, a jump preserves the save. Normal Autosave can record the new
+scene when enabled. Existing scene/route prerequisites remain experimental.
+
+Full build/offline checks and WARP rendering pass. Menu/controller tests cover
+root ordering, stage-to-scene navigation, held Trigger, native entrance defaults,
+sparse IDs, pagination, Back, missing catalogs, read-only previews and serialized
+requests. Native desktop smoke tests passed SELECT to chapter 1 scene 4 and
+chapter 2 scene 0, rejected stage 20 and unavailable scene 255, and preserved the
+save with Autosave off. Save/Load/New, pause and live Autosave regression checks
+also passed. Both native runtime sessions were closed; no VR launch occurred.
+Headset menu acceptance and full scene prerequisite coverage remain unverified.

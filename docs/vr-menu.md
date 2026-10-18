@@ -130,7 +130,7 @@ Swap player HUD is available live in Display and included in Reset Defaults.
 
 ## Save and Load integration
 
-Root entries start with Save game, Load game and New game, followed by existing
+Root entries start with Save game, Load game, Stage select and New game, followed by existing
 settings groups, Reset Defaults and Quit Game. Root pages eight entries; settings
 groups page six. Advanced adds live Autosave (`continue_game`), persisted on close
 with existing atomic INI backups. Opening settings reflects the effective startup
@@ -181,3 +181,25 @@ Current-location previews are suppressed during a pending native transition.
 User confirmed both pre-selection destination captions in-headset at stage 3,
 scene 11. The combined protocol-21 bridge also passed native desktop Save/Load,
 Autosave, destination-metadata and scene-restart regression tests.
+
+
+## Stage select
+
+Stage select immediately follows Load game. Select one of six named stages,
+then a native scene/checkpoint ID, then Trigger/Enter to start that scene.
+Stage 3 initially highlights scene 7; other stages highlight their entrance
+when present. Lists retain native zero-based scene IDs and page six rows.
+B/Backspace returns from scenes to stages, then to the root without changing
+the game. Browsing also works in read-only previews; starting does not.
+
+The bridge enumerates available Arcade scripts from bounded, relocated event
+files once at injection. No scene counts are hardcoded. Invalid script entries
+are omitted, missing stage data shows No available scenes. Confirmation uses
+the existing task/resource restart with a fresh disk validation; changed or
+invalid targets are rejected before unloading the current scene. Acknowledgment
+and progress/error captions follow Load game. Autosave off preserves the current
+save slot; Autosave on records the destination during normal gameplay.
+
+Protocol 22 appends destination stage/scene and six 256-bit scene catalogs.
+The scene list describes script availability, not proof of earlier script/route
+prerequisites. Native desktop selection and invalid-target tests pass; headset selection still needs confirmation.

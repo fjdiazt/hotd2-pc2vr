@@ -362,7 +362,8 @@ static void checkpoint_manual(unsigned active)
     }
     if(request==frame->checkpoint_response)return;
     MemoryBarrier();
-    if(frame->checkpoint_action==HOTD_CHECKPOINT_LOAD || frame->checkpoint_action==HOTD_CHECKPOINT_NEW) {
+    if(frame->checkpoint_action==HOTD_CHECKPOINT_LOAD || frame->checkpoint_action==HOTD_CHECKPOINT_NEW ||
+       frame->checkpoint_action==HOTD_CHECKPOINT_SELECT) {
         unsigned phase=*(DWORD *)(game_base+0x5C8E98);
         if(!checkpoint_ready || phase<3 || phase>12 ||
            (phase==6 && *(DWORD *)(game_base+0x5C90A4)!=2) ||
@@ -371,6 +372,12 @@ static void checkpoint_manual(unsigned active)
             result=HOTD_SAVE_INVALID;
         else {
             if(frame->checkpoint_action==HOTD_CHECKPOINT_NEW)point=(HotdCheckpoint){1,0};
+            else if(frame->checkpoint_action==HOTD_CHECKPOINT_SELECT) {
+                if(frame->checkpoint_target_stage<1 || frame->checkpoint_target_stage>6 || frame->checkpoint_target_scene>255) {
+                    checkpoint_reply(request,HOTD_SAVE_INVALID,(HotdCheckpoint){0});return;
+                }
+                point=(HotdCheckpoint){(int)frame->checkpoint_target_stage,(int)frame->checkpoint_target_scene};
+            }
             if(!hotd_checkpoint_file_scene(checkpoint_game_directory,point))result=HOTD_SAVE_INVALID;
             else {
                 checkpoint_target=point;checkpoint_pending=request;
@@ -452,6 +459,8 @@ static int install_checkpoints(void)
     jump=(DWORD)((BYTE *)checkpoint_event-(game_base+0x60710+5));memcpy(patch+1,&jump,4);
     if(!write_code(game_base+0x60710,patch,sizeof(patch)))return 0;
     checkpoint_ready=1;
+    if(frame)for(unsigned stage=1;stage<=6;stage++)
+        hotd_checkpoint_file_scenes(checkpoint_game_directory,stage,frame->checkpoint_stage_scenes[stage-1]);
     logline("checkpoint controls: ready; autosave=%d explicit_stage=%d scene=%d file=%s",checkpoint_continue,checkpoint_stage,checkpoint_scene,checkpoint_path);
     return 1;
 }
