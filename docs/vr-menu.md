@@ -177,3 +177,7 @@ writes saves. No active Arcade game and missing/invalid-format save files get
 explicit unavailable captions. Saved-file metadata refreshes at most once per
 second and immediately after bridge saves, with disk reads outside the seqlock.
 Current-location previews are suppressed during a pending native transition.
+
+User confirmed both pre-selection destination captions in-headset at stage 3,
+scene 11. The combined protocol-21 bridge also passed native desktop Save/Load,
+Autosave, destination-metadata and scene-restart regression tests.

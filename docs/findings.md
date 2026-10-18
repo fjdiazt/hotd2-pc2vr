@@ -457,4 +457,4 @@ The bridge publishes these fields under the existing frame seqlock. Saved-file
 reads occur outside publication, once per second or after a successful write;
 current location comes from the same Arcade guard as Save. The viewer displays
 the selected Save/Load destination before confirmation, without issuing RPCs,
-changing the game, or reading native game addresses. Headset confirmation pending.
+changing the game, or reading native game addresses. User confirmed the pre-selection Save/Load captions in VR at stage 3, scene 11. Full scene prerequisite coverage remains unverified.
