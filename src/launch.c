@@ -10,7 +10,10 @@
 #include <wchar.h>
 #include "checkpoint.h"
 
-typedef struct { int wait,native_window,skip_splash,start_stage,start_scene,continue_game; } LaunchOptions;
+typedef struct {
+    int wait,native_window,skip_splash,start_stage,start_scene,continue_game;
+    const wchar_t *invalid_kind,*invalid_value;
+} LaunchOptions;
 
 static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOptions *options)
 {
@@ -26,10 +29,16 @@ static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOp
         else if(!wcscmp(argv[i],L"--continue-game"))options->continue_game=1;
         else if(!wcscmp(argv[i],L"--no-continue-game"))options->continue_game=0;
         else if(!wcscmp(argv[i],L"--start-stage")) {
-            if(++i>=argc || !hotd_checkpoint_number(argv[i],1,6,&options->start_stage))return 0;
+            const wchar_t *value=++i<argc?argv[i]:NULL;
+            if(!hotd_checkpoint_number(value,1,6,&options->start_stage)) {
+                options->invalid_kind=L"stage";options->invalid_value=value;return 0;
+            }
         }
         else if(!wcscmp(argv[i],L"--start-scene")) {
-            if(++i>=argc || !hotd_checkpoint_number(argv[i],0,HOTD_CHECKPOINT_MAX_SCENE,&options->start_scene))return 0;
+            const wchar_t *value=++i<argc?argv[i]:NULL;
+            if(!hotd_checkpoint_number(value,0,HOTD_CHECKPOINT_MAX_SCENE,&options->start_scene)) {
+                options->invalid_kind=L"scene";options->invalid_value=value;return 0;
+            }
         }
         else return 0;
     }
@@ -80,6 +89,10 @@ int wmain(int argc,wchar_t **argv)
     slash=wcsrchr(ini,L'\\');if(!slash || slash-ini>MAX_PATH-14)return 2;
     wcscpy(slash+1,L"HOTD2VR.ini");
     if(!readLaunchOptions(argc,argv,ini,&options)) {
+        if(options.invalid_kind) {
+            fwprintf(stderr,L"Invalid %ls%ls%ls\n",options.invalid_kind,
+                options.invalid_value?L" ":L"",options.invalid_value?options.invalid_value:L"");return 2;
+        }
         fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--wait] [--native-window] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
     }
     native_window=options.native_window;

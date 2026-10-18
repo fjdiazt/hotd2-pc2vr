@@ -31,8 +31,8 @@ param(
     [switch]$NoCrosshair,
     [switch]$SwapPlayerHud,
     [switch]$NoSwapPlayerHud,
-    [ValidateRange(1,6)][int]$StartStage,
-    [ValidateRange(0,255)][int]$StartScene,
+    [int]$StartStage,
+    [int]$StartScene,
     [switch]$ContinueGame,
     [switch]$NoContinueGame
 )
@@ -47,6 +47,8 @@ if ($Laser -and $NoLaser) { throw 'Choose either -Laser or -NoLaser.' }
 if ($Crosshair -and $NoCrosshair) { throw 'Choose either -Crosshair or -NoCrosshair.' }
 if ($SwapPlayerHud -and $NoSwapPlayerHud) { throw 'Choose either -SwapPlayerHud or -NoSwapPlayerHud.' }
 if ($ContinueGame -and $NoContinueGame) { throw 'Choose either -ContinueGame or -NoContinueGame.' }
+if ($PSBoundParameters.ContainsKey('StartStage') -and ($StartStage -lt 1 -or $StartStage -gt 6)) { throw "Invalid stage $StartStage" }
+if ($PSBoundParameters.ContainsKey('StartScene') -and ($StartScene -lt 0 -or $StartScene -gt 255)) { throw "Invalid scene $StartScene" }
 if ($PSBoundParameters.ContainsKey('StartScene') -and !$PSBoundParameters.ContainsKey('StartStage')) { throw '-StartScene requires -StartStage.' }
 $out = Join-Path $PSScriptRoot 'build'
 if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }

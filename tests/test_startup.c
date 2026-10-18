@@ -43,6 +43,11 @@ int main(void)
         {L"launcher",L"game.exe",L"--native-window",L"--continue-game"}};
     for(unsigned i=0;i<sizeof(invalid)/sizeof(*invalid);i++)assert(!readLaunchOptions(4,invalid[i],ini,&options));
     assert(!readLaunchOptions(3,stage,ini,&options));
+    assert(!wcscmp(options.invalid_kind,L"stage") && !options.invalid_value);
+    wchar_t *stage20[]={L"launcher",L"game.exe",L"--start-stage",L"20"};
+    assert(!readLaunchOptions(4,stage20,ini,&options) && !wcscmp(options.invalid_kind,L"stage") && !wcscmp(options.invalid_value,L"20"));
+    wchar_t *scene_bad[]={L"launcher",L"game.exe",L"--start-stage",L"1",L"--start-scene",L"256"};
+    assert(!readLaunchOptions(6,scene_bad,ini,&options) && !wcscmp(options.invalid_kind,L"scene") && !wcscmp(options.invalid_value,L"256"));
     wchar_t *resume[]={L"launcher",L"game.exe",L"--continue-game",L"--no-continue-game"};
     assert(readLaunchOptions(4,resume,ini,&options) && options.continue_game==0);
     assert(DeleteFileW(ini));

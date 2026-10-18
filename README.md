@@ -111,6 +111,8 @@ The bridge stores `[checkpoint] version=1`, `stage=1..6` and `scene=0..255` in `
 
 Direct launcher equivalents are `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. These startup options belong to `HOTD2Launch.exe`, not the viewer; `--native-window` cannot be combined with an explicit checkpoint request because it skips bridge injection. Stage/scene selection is CLI-only; only the recording/resume toggle is in the INI. A settings-menu control is not implemented here.
 
+Invalid numeric arguments report `Invalid stage 20` or `Invalid scene 256` before starting a process. A missing direct-launcher value reports `Invalid stage` or `Invalid scene`.
+
 This is a debugging checkpoint facility, **not a full save state**. Scene IDs are script boundaries, not labeled or validated checkpoints. Existing Arcade-script entries are checked before use; unavailable entries fall back to a normal chapter-1 start and log rejection. Mid-scene starts run the scene's native variant-0 setup script before its variant-1 gameplay script when available, loading its section/resources through the normal event system. Chapter entrances retain the native variant choice. Valid scripts can still depend on earlier flags, actors or route choices, or lack complete setup. Those prerequisites and full chapter/scene coverage need runtime qualification. Failed writes retain the previous file and retry after five seconds; startup and save results appear in `HOTD2Bridge.log`.
 
 ### Pausing
