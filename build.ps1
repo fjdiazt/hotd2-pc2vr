@@ -36,6 +36,8 @@ $batch = @"
 @if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_world_scale.c" /Fo"$out\test_world_scale.obj" /Fe"$out\test_world_scale.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_aim_indicators.c" /Fo"$out\test_aim_indicators.obj" /Fe"$out\test_aim_indicators.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+@if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_effect_render.c" /Fo"$out\test_effect_render.obj" /Fe"$out\test_effect_render.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 "@
 [IO.File]::WriteAllText("$out\compile-viewer.cmd", $batch)
@@ -45,6 +47,8 @@ if ($LASTEXITCODE) { throw 'Viewer build failed.' }
 if ($LASTEXITCODE) { throw 'Frame snapshot test failed.' }
 & "$out\test_world_scale.exe"
 if ($LASTEXITCODE) { throw 'World scale test failed.' }
+& "$out\test_aim_indicators.exe"
+if ($LASTEXITCODE) { throw 'Aim indicator test failed.' }
 & "$out\test_effect_render.exe"
 if ($LASTEXITCODE) { throw 'Effect shader test failed.' }
 Copy-Item "$root\assets\gun\*" -Destination $out -Force

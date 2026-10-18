@@ -176,6 +176,8 @@ static int g_cfgHaptic = 1;             /* [vr] haptic: buzz on every shot */
 static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
 static int g_cfgSuper = 140;      /* eye buffer scale in percent */
 static float g_cfgWorldScale = 1.4f; /* world size multiplier; 1 preserves the native unit conversion */
+static int g_cfgLaser = 1;
+static int g_cfgCrosshair = 1;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
 /* The eye swapchain is sRGB, so the GPU encodes whatever the shader writes.
  * The game's texels and shades are already gamma-encoded (a 1997 renderer
@@ -206,6 +208,11 @@ static int  g_cfgGunScale = 100;  /* percent */
 static int  g_cfgReloadMs = 180;  /* reload flick, ms */
 static unsigned g_cheatFlags;
 static unsigned g_cfgRapidRate=4;
+static void readAimIndicators(const char *path)
+{
+    g_cfgLaser=GetPrivateProfileIntA("vr","laser",1,path)!=0;
+    g_cfgCrosshair=GetPrivateProfileIntA("vr","crosshair",1,path)!=0;
+}
 static int parseWorldScale(const char *text,float *scale)
 {
     char *end;float value;
@@ -246,6 +253,7 @@ static void loadCfg(void)
     DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
     while (n > 0 && path[n - 1] != '\\') n--;
     lstrcpyA(path + n, "HOTD2VR.ini");
+    readAimIndicators(path);
     g_cheatFlags=readCheats(path);
     if(!readRapidRate(path,&g_cfgRapidRate)) {
         note("Invalid rapid_fire_rate; using 4 shots/sec (allowed 1..30).\n");g_cfgRapidRate=4;
@@ -1152,28 +1160,32 @@ static void ovSight(const float *aim, const float *hit, DWORD beamCol,
 
     /* the beam: bright and fat where it leaves the muzzle, thin and faint by
      * the time it gets there, so a long shot is not a long solid stripe */
-    for (i = 0; i < OV_SEGS; i++) {
-        float t0 = (float)i / OV_SEGS, t1 = (float)(i + 1) / OV_SEGS;
-        float a[3], b[3];
-        float w0 = 0.0030f - 0.0022f * t0, w1 = 0.0030f - 0.0022f * t1;
-        float k0 = 1.0f - 0.72f * t0,      k1 = 1.0f - 0.72f * t1;
-        int k;
-        for (k = 0; k < 3; k++) {
-            a[k] = o[k] + d[k] * t0;
-            b[k] = o[k] + d[k] * t1;
+    if (g_cfgLaser) {
+        for (i = 0; i < OV_SEGS; i++) {
+            float t0 = (float)i / OV_SEGS, t1 = (float)(i + 1) / OV_SEGS;
+            float a[3], b[3];
+            float w0 = 0.0030f - 0.0022f * t0, w1 = 0.0030f - 0.0022f * t1;
+            float k0 = 1.0f - 0.72f * t0,      k1 = 1.0f - 0.72f * t1;
+            int k;
+            for (k = 0; k < 3; k++) {
+                a[k] = o[k] + d[k] * t0;
+                b[k] = o[k] + d[k] * t1;
+            }
+            ovRibbon(a, b, w0, w1, ovDim(beamCol, k0), ovDim(beamCol, k1));
         }
-        ovRibbon(a, b, w0, w1, ovDim(beamCol, k0), ovDim(beamCol, k1));
+
+        ovDisc(o, u, 0.011f, ovDim(beamCol, 0.55f), 10);   /* flare at the muzzle */
     }
 
-    ovDisc(o, u, 0.011f, ovDim(beamCol, 0.55f), 10);   /* flare at the muzzle */
-
     /* the dot, sized by angle: 0.8 degrees wherever it lands */
-    rad = dist * 0.01396f;                        /* tan(0.8 deg) */
-    if (rad < 0.006f) rad = 0.006f;
-    if (rad > 0.400f) rad = 0.400f;
-    ovRing (hit, u, rad * 0.70f, rad, ringCol, 28);
-    ovDisc (hit, u, rad * 0.26f, coreCol, 14);
-    ovTicks(hit, u, rad * 1.35f, rad * 1.95f, rad * 0.10f, ovDim(ringCol, 0.6f));
+    if (g_cfgCrosshair) {
+        rad = dist * 0.01396f;                        /* tan(0.8 deg) */
+        if (rad < 0.006f) rad = 0.006f;
+        if (rad > 0.400f) rad = 0.400f;
+        ovRing (hit, u, rad * 0.70f, rad, ringCol, 28);
+        ovDisc (hit, u, rad * 0.26f, coreCol, 14);
+        ovTicks(hit, u, rad * 1.35f, rad * 1.95f, rad * 0.10f, ovDim(ringCol, 0.6f));
+    }
 }
 
 static void uploadVerts(void)
@@ -3609,6 +3621,10 @@ int main(int argc, char **argv)
         unsigned cheat=cheatArg(argv[i]);
         if (!strcmp(argv[i], "--window")) window = 1;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
+        else if (!strcmp(argv[i], "--laser")) g_cfgLaser = 1;
+        else if (!strcmp(argv[i], "--no-laser")) g_cfgLaser = 0;
+        else if (!strcmp(argv[i], "--crosshair")) g_cfgCrosshair = 1;
+        else if (!strcmp(argv[i], "--no-crosshair")) g_cfgCrosshair = 0;
         else if (!strcmp(argv[i], "--seconds") && i+1 < argc) seconds = atoi(argv[++i]);
         else if(!strcmp(argv[i],"--rapid-fire-rate")) {
             if(i+1>=argc || !hotd_parse_rapid_rate(argv[++i],&g_cfgRapidRate)) {
@@ -3621,8 +3637,9 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--infinite-ammo] [--infinite-lives] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--window | --stereo] [--seconds N] [--world-scale N] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
+    note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
     note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
     for (i = 0; i < 100 && !openShare(); i++) Sleep(100);

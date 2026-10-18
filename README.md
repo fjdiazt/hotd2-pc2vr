@@ -48,6 +48,10 @@ World geometry and controller ray conversion use the same scale. The HUD, floati
 
 ## Controls
 
+Gun laser and VR crosshair default **on**. Each setting applies to both hands. Set `[vr] laser=0` to hide the beam and muzzle flare, or `crosshair=0` to hide the aiming ring, core and ticks in `build\HOTD2VR.ini`. Use `1` to enable either; missing keys default to `1`. These settings affect the viewer's aim guides; gun models, aiming and firing keep their normal behavior.
+
+For one launch, use `Start-HOTD2.ps1 -NoLaser -NoCrosshair`, or `build\HOTD2VR.exe --no-laser --no-crosshair` when reconnecting a viewer. `-Laser` / `-Crosshair` and `--laser` / `--crosshair` override disabled INI settings. Each option works separately; direct CLI flags use the last value supplied. Restart the viewer after changing the INI.
+
 VR startup centers only after OpenXR reports a focused session and valid, actively tracked stereo head poses. Earlier bootstrap poses are ignored. Later focus changes preserve the center; grip requests a new center. User confirmed startup centering works in the headset.
 
 VR: trigger fires. Aim the gun at least 50 degrees above or 45 degrees below horizontal and pull the trigger to reload that gun. Direction comes from the tracked gun, independent of head direction. Each pull stays a shot or reload until release; tracking loss cancels it until release. Both hands work independently in akimbo.
