@@ -104,6 +104,28 @@ int main(void)
     assert(!checkpoint_scene_available((HotdCheckpoint){0,0}));
     *(DWORD *)(game_base+0x577200)=0xFFFFFFFCu;assert(!checkpoint_scene_available((HotdCheckpoint){1,2}));
     assert(starts==8 && events==starts);
+    /* Manual saves work with autosave/hooks off, including a paused gameplay scene. */
+    frame=calloc(1,sizeof(*frame));assert(frame);
+    checkpoint_continue=checkpoint_ready=0;
+    *(short *)(game_base+0x5A1A00)=1;*(short *)(game_base+0x5A2BC0)=6;
+    frame->checkpoint_request=1;checkpoint_manual(1);
+    assert(frame->checkpoint_response==1 && frame->checkpoint_result==HOTD_SAVE_OK);
+    assert(frame->checkpoint_stage==2 && frame->checkpoint_scene==6);
+    assert(hotd_checkpoint_read(path,&point) && point.scene==6);
+    assert(DeleteFileA(path));checkpoint_manual(1);assert(GetFileAttributesA(path)==INVALID_FILE_ATTRIBUTES);
+    assert(hotd_checkpoint_write(path,point));
+    frame->checkpoint_request=2;checkpoint_manual(0);
+    assert(frame->checkpoint_response==2 && frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE);
+    assert(hotd_checkpoint_read(path,&point) && point.scene==6);
+    locked=CreateFileA(path,GENERIC_READ,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
+    assert(locked!=INVALID_HANDLE_VALUE);
+    *(short *)(game_base+0x5A2BC0)=7;frame->checkpoint_request=3;checkpoint_manual(1);
+    assert(frame->checkpoint_response==3 && frame->checkpoint_result==HOTD_SAVE_IO_ERROR);
+    CloseHandle(locked);assert(hotd_checkpoint_read(path,&point) && point.scene==6);
+    *(DWORD *)(game_base+0x5C8E98)=4;frame->checkpoint_request=4;checkpoint_manual(1);
+    assert(frame->checkpoint_response==4 && frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE);
+    assert(hotd_checkpoint_read(path,&point) && point.scene==6);
+    free(frame);frame=NULL;
     /* Startup configuration is opt-in; every call site validates before either changes. */
     strcpy(ini_path,path);checkpoint_ready=checkpoint_continue=checkpoint_stage=0;checkpoint_scene=-1;
     assert(install_checkpoints() && !checkpoint_ready);

@@ -7,7 +7,7 @@
 #include "draw_style.h"
 #define VC2_SHARE_NAME "Local\\HOTD2_PC2VR_Frame"
 #define VC2_SHARE_MAGIC 0x32544F48u
-#define VC2_SHARE_VERSION 18
+#define VC2_SHARE_VERSION 19
 #define VC2_MAX_VERTS (40000 * 6)
 #define VC2_SCREEN_MAX_W 1280
 #define VC2_SCREEN_MAX_H 960
@@ -32,6 +32,9 @@
 #define HOTD_CHEAT_INVINCIBILITY 8192u
 #define HOTD_CHEAT_CONTINUES 16384u
 #define HOTD_CHEAT_MASK (HOTD_CHEAT_AMMO|HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID|HOTD_CHEAT_INVINCIBILITY|HOTD_CHEAT_CONTINUES)
+#define HOTD_SAVE_OK 1u
+#define HOTD_SAVE_UNAVAILABLE 2u
+#define HOTD_SAVE_IO_ERROR 3u
 
 #pragma pack(push, 4)
 typedef struct {
@@ -72,9 +75,11 @@ typedef struct {
     float shot_origins[64][3]; /* Exact camera-space anchors for grouped native flashes. */
     volatile uint32_t audio_levels; /* Viewer -> game: master, music, effects percent in low three bytes. */
     uint32_t shot_events[2]; /* Game -> viewer: confirmed shots per player, published under seq. */
+    volatile uint32_t checkpoint_request,checkpoint_response;
+    uint32_t checkpoint_result,checkpoint_stage,checkpoint_scene; /* Published before response. */
 } Vc2Frame;
 #pragma pack(pop)
 _Static_assert(sizeof(Vc2Vertex) == 64, "vertex layout changed");
 _Static_assert(offsetof(Vc2Frame, verts) == 156, "frame layout changed");
-_Static_assert(offsetof(Vc2Frame,cheat_flags)==87384220 && offsetof(Vc2Frame,shot_origins)==87384236 && offsetof(Vc2Frame,audio_levels)==87385004 && offsetof(Vc2Frame,shot_events)==87385008 && sizeof(Vc2Frame)==87385016,"effect layout changed");
+_Static_assert(offsetof(Vc2Frame,cheat_flags)==87384220 && offsetof(Vc2Frame,shot_origins)==87384236 && offsetof(Vc2Frame,audio_levels)==87385004 && offsetof(Vc2Frame,shot_events)==87385008 && offsetof(Vc2Frame,checkpoint_request)==87385016 && sizeof(Vc2Frame)==87385036,"effect layout changed");
 #endif

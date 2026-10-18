@@ -302,15 +302,36 @@ static void __cdecl checkpoint_start(void **out,int mode)
     checkpoint_armed=0;
     checkpoint_start_original(out,mode);
 }
+static int checkpoint_current(unsigned active,HotdCheckpoint *point)
+{
+    if(!active ||
+       *(DWORD *)(game_base+0x5C8E98)!=6 || *(DWORD *)(game_base+0x5CA08C)!=0 ||
+       *(DWORD *)(game_base+0x5C90A4)!=2)return 0;
+    *point=(HotdCheckpoint){*(short *)(game_base+0x5A1A08)+1,*(short *)(game_base+0x5A2BC0)};
+    return hotd_checkpoint_valid(*point);
+}
+static void checkpoint_manual(unsigned active)
+{
+    HotdCheckpoint point;unsigned request=frame->checkpoint_request,result;
+    if(request==frame->checkpoint_response)return;
+    frame->checkpoint_stage=frame->checkpoint_scene=0;
+    if(!checkpoint_current(active,&point) || !checkpoint_scene_available(point))result=HOTD_SAVE_UNAVAILABLE;
+    else if(!hotd_checkpoint_write(checkpoint_path,point)) {
+        result=HOTD_SAVE_IO_ERROR;
+        logline("manual checkpoint save failed: error=%lu",(unsigned long)GetLastError());
+    } else {
+        result=HOTD_SAVE_OK;checkpoint_saved=point;checkpoint_retry=0;
+        frame->checkpoint_stage=point.stage;frame->checkpoint_scene=point.scene;
+        logline("manual checkpoint saved: stage=%d scene=%d",point.stage,point.scene);
+    }
+    frame->checkpoint_result=result;MemoryBarrier();
+    InterlockedExchange((volatile LONG *)&frame->checkpoint_response,request);
+}
 static void checkpoint_record(unsigned active)
 {
-    HotdCheckpoint point;
-    DWORD now;
-    if(!checkpoint_ready || !checkpoint_continue || !active ||
-       *(DWORD *)(game_base+0x5C8E98)!=6 || *(DWORD *)(game_base+0x5CA08C)!=0 ||
-       *(DWORD *)(game_base+0x5C90A4)!=2)return;
-    point=(HotdCheckpoint){*(short *)(game_base+0x5A1A08)+1,*(short *)(game_base+0x5A2BC0)};
-    if((point.stage==checkpoint_saved.stage && point.scene==checkpoint_saved.scene) || !hotd_checkpoint_valid(point))return;
+    HotdCheckpoint point;DWORD now;
+    if(!checkpoint_ready || !checkpoint_continue || !checkpoint_current(active,&point))return;
+    if(point.stage==checkpoint_saved.stage && point.scene==checkpoint_saved.scene)return;
     now=GetTickCount();
     if(checkpoint_retry && (LONG)(now-checkpoint_retry)<0)return;
     if(!checkpoint_scene_available(point))return;
@@ -338,10 +359,10 @@ static int install_checkpoints(void)
        !checkpoint_environment(L"HOTD2VR_START_SCENE",0,HOTD_CHECKPOINT_MAX_SCENE,&checkpoint_scene) ||
        !checkpoint_environment(L"HOTD2VR_CONTINUE_GAME",0,1,&checkpoint_continue) ||
        (checkpoint_scene>=0 && !checkpoint_stage))return 0;
-    if(!checkpoint_stage && !checkpoint_continue)return 1;
     strcpy(checkpoint_path,ini_path);slash=strrchr(checkpoint_path,'\\');
     if(!slash || slash-checkpoint_path+sizeof("HOTD2VR.checkpoint.ini")>=MAX_PATH)return 0;
     strcpy(slash+1,"HOTD2VR.checkpoint.ini");
+    if(!checkpoint_stage && !checkpoint_continue)return 1;
     if(memcmp(game_base+0x5FF0A,load,sizeof(load)) || memcmp(game_base+0x5FFD4,start,sizeof(start)) ||
        memcmp(game_base+0x60710,event,sizeof(event)))return 0;
     checkpoint_load_original=(void *)((uintptr_t)game_base+0x13160);
@@ -1423,6 +1444,7 @@ static void publish_frame(void)
     frame->heartbeat=GetTickCount();frame->game_hwnd=(DWORD)(ULONG_PTR)game_window;
     if(atlas_dirty){frame->atlas_frame++;MemoryBarrier();frame->atlas_seq++;atlas_dirty=0;}
     MemoryBarrier();frame->seq++;
+    checkpoint_manual(frame->active_players);
     checkpoint_record(frame->active_players);
     unsigned pressure=stage_records.overflow || visibility_queue_drops;
     int report=frame_no==1 || frame_no%300==0 || texture_failures ||

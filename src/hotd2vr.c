@@ -383,6 +383,39 @@ static int openShare(void)
     return 1;
 }
 
+static int requestCheckpointSave(Vc2Frame *shared,DWORD timeout)
+{
+    unsigned request=(unsigned)InterlockedIncrement((volatile LONG *)&shared->checkpoint_request);
+    DWORD started=GetTickCount();
+    while(shared->checkpoint_response!=request && (DWORD)(GetTickCount()-started)<timeout)Sleep(10);
+    if(shared->checkpoint_response!=request) {
+        note("Checkpoint request timed out; check HOTD2Bridge.log.\n");return 1;
+    }
+    MemoryBarrier();
+    if(shared->checkpoint_result==HOTD_SAVE_OK) {
+        note("Checkpoint saved: stage %u, scene %u.\n",shared->checkpoint_stage,shared->checkpoint_scene);return 0;
+    }
+    if(shared->checkpoint_result==HOTD_SAVE_UNAVAILABLE)note("No active Arcade scene to save.\n");
+    else note("Checkpoint save failed; check HOTD2Bridge.log.\n");
+    return 1;
+}
+static int saveCheckpointCommand(void)
+{
+    HANDLE mutex=CreateMutexA(NULL,FALSE,"Local\\HOTD2_PC2VR_SaveCheckpoint");
+    int result=1;DWORD wait;
+    if(!mutex){note("Cannot open checkpoint command lock.\n");return 1;}
+    wait=WaitForSingleObject(mutex,0);
+    if(wait!=WAIT_OBJECT_0 && wait!=WAIT_ABANDONED) {
+        note("Another checkpoint save request is active.\n");CloseHandle(mutex);return 1;
+    }
+    if(!openShare())note("No compatible game bridge running; no checkpoint saved.\n");
+    else {
+        result=requestCheckpointSave(g_frame,3000);
+        UnmapViewOfFile(g_frame);CloseHandle(g_map);g_frame=NULL;g_map=NULL;
+    }
+    ReleaseMutex(mutex);CloseHandle(mutex);return result;
+}
+
 static void pushCheats(void)
 {
     if(!g_frame || g_previewOnly)return;
@@ -3722,6 +3755,10 @@ static int openDesktopPreview(DesktopPreview *preview,const char *command)
 
 int main(int argc, char **argv)
 {
+    if(argc>=2 && !strcmp(argv[1],"--save-checkpoint")) {
+        if(argc!=2){note("usage: HOTD2VR --save-checkpoint\n");return 2;}
+        return saveCheckpointCommand();
+    }
     int stereo = 0, seconds = 0, i;
     DesktopPreview preview={0};
     g_previewOnly=0;
