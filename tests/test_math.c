@@ -75,25 +75,40 @@ int main(void)
     const float angles[]={49.9f,50.1f,-44.9f,-45.1f,45.1f};
     const unsigned actions[]={VC2_BTN_FIRE,VC2_BTN_RELOAD,VC2_BTN_FIRE,VC2_BTN_RELOAD,VC2_BTN_FIRE};
     for(unsigned i=0;i<sizeof(angles)/sizeof(*angles);i++) {
-        hotd_trigger_action(&trigger,0,1,0);
-        assert(hotd_trigger_action(&trigger,1,1,sinf(angles[i]*0.01745329252f))==actions[i]);
+        hotd_trigger_action(&trigger,0,1,0,0);
+        assert(hotd_trigger_action(&trigger,1,1,sinf(angles[i]*0.01745329252f),0)==actions[i]);
     }
-    hotd_trigger_action(&trigger,0,1,0);
-    assert(hotd_trigger_action(&trigger,1,1,.5f)==VC2_BTN_FIRE);
-    assert(hotd_trigger_action(&trigger,1,1,-1)==VC2_BTN_FIRE); /* Same pull stays a shot. */
-    assert(!hotd_trigger_action(&trigger,0,1,0));
-    assert(hotd_trigger_action(&trigger,1,1,-.866026f)==VC2_BTN_RELOAD);
-    assert(hotd_trigger_action(&trigger,1,1,0)==VC2_BTN_RELOAD); /* No shot when raised while held. */
-    assert(hotd_trigger_action(&other,1,1,0)==VC2_BTN_FIRE); /* Independent hands. */
-    hotd_trigger_action(&trigger,0,1,0);
-    assert(hotd_trigger_action(&trigger,1,1,.866026f)==VC2_BTN_RELOAD);
-    hotd_trigger_action(&trigger,0,1,0);
-    assert(hotd_trigger_action(&trigger,1,1,.76f)==VC2_BTN_FIRE);
-    assert(!hotd_trigger_action(&trigger,1,0,0)); /* Tracking loss disarms this pull. */
-    assert(!hotd_trigger_action(&trigger,1,1,0));
-    hotd_trigger_action(&trigger,0,1,0);
-    assert(!hotd_trigger_action(&trigger,1,1,NAN));
-    assert(!hotd_trigger_action(&trigger,1,1,0));
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(hotd_trigger_action(&trigger,1,1,.5f,0)==VC2_BTN_FIRE);
+    assert(hotd_trigger_action(&trigger,1,1,-1,0)==VC2_BTN_FIRE); /* Same pull stays a shot. */
+    assert(!hotd_trigger_action(&trigger,0,1,0,0));
+    assert(hotd_trigger_action(&trigger,1,1,-.866026f,0)==VC2_BTN_RELOAD);
+    assert(hotd_trigger_action(&trigger,1,1,0,0)==VC2_BTN_RELOAD); /* No shot when raised while held. */
+    assert(hotd_trigger_action(&other,1,1,0,0)==VC2_BTN_FIRE); /* Independent hands. */
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(hotd_trigger_action(&trigger,1,1,.866026f,0)==VC2_BTN_RELOAD);
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(hotd_trigger_action(&trigger,1,1,.76f,0)==VC2_BTN_FIRE);
+    assert(!hotd_trigger_action(&trigger,1,0,0,0)); /* Tracking loss disarms this pull. */
+    assert(!hotd_trigger_action(&trigger,1,1,0,0));
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(!hotd_trigger_action(&trigger,1,1,NAN,0));
+    assert(!hotd_trigger_action(&trigger,1,1,0,0));
+    const float side_angles[]={59.9f,60.1f,-59.9f,-60.1f,180};
+    for(unsigned i=0;i<5;i++) {
+        hotd_trigger_action(&trigger,0,1,0,0);
+        unsigned expected=(i==1||i==3||i==4)?VC2_BTN_RELOAD:VC2_BTN_FIRE;
+        assert(hotd_trigger_action(&trigger,1,1,0,side_angles[i]*.01745329252f)==expected);
+    }
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(!hotd_trigger_action(&trigger,1,1,0,NAN));
+    assert(!hotd_trigger_action(&trigger,1,1,0,0));
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(hotd_trigger_action(&trigger,1,1,0,0)==VC2_BTN_FIRE);
+    assert(hotd_trigger_action(&trigger,1,1,0,2)==VC2_BTN_FIRE);
+    hotd_trigger_action(&trigger,0,1,0,0);
+    assert(hotd_trigger_action(&trigger,1,1,0,2)==VC2_BTN_RELOAD);
+    assert(hotd_trigger_action(&trigger,1,1,0,0)==VC2_BTN_RELOAD);
     assert(hotd_rgba(0,0,0,.5f)==0x80000000u); /* Native black shadow, half opacity. */
     assert(hotd_rgba(1,1,1,.25f)==0x40FFFFFFu);
     assert(hotd_rgba(NAN,-1,2,1)==0xFFFF0000u);

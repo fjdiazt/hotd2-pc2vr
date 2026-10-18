@@ -10,6 +10,7 @@ static HRESULT lock_result=DD_OK;
 static unsigned prompt_fallbacks;
 static DWORD native_cull=1;
 static DWORD native_z_enable=1;
+static DWORD native_zfunc=D3DCMP_LESSEQUAL,native_filter=D3DTFG_LINEAR;
 static int lighting_fixture;
 static DWORD fixture_lighting=1;
 static unsigned light_queries;
@@ -53,6 +54,7 @@ static HRESULT WINAPI get_render_state(IDirect3DDevice7 *self,D3DRENDERSTATETYPE
     (void)self;*out=0;
     switch(state) {
     case D3DRENDERSTATE_ZENABLE:*out=native_z_enable;break;
+    case D3DRENDERSTATE_ZFUNC:*out=native_zfunc;break;
     case D3DRENDERSTATE_ALPHABLENDENABLE:case D3DRENDERSTATE_ZWRITEENABLE:
     case D3DRENDERSTATE_ALPHATESTENABLE:case D3DRENDERSTATE_LIGHTING:*out=1;break;
     case D3DRENDERSTATE_SRCBLEND:case D3DRENDERSTATE_ALPHAFUNC:*out=5;break;
@@ -84,6 +86,7 @@ static HRESULT WINAPI get_light(IDirect3DDevice7 *self,DWORD index,D3DLIGHT7 *ou
 static HRESULT WINAPI get_stage_state(IDirect3DDevice7 *self,DWORD stage,D3DTEXTURESTAGESTATETYPE state,DWORD *out)
 {
     (void)self;(void)stage;
+    if(state==D3DTSS_MAGFILTER || state==D3DTSS_MINFILTER || state==D3DTSS_MIPFILTER){*out=native_filter;return DD_OK;}
     *out=state==D3DTSS_ADDRESSU?native_address_u:state==D3DTSS_ADDRESSV?native_address_v:
         state==D3DTSS_ALPHAOP?D3DTOP_MODULATE:D3DTA_TEXTURE;
     return DD_OK;
@@ -296,21 +299,27 @@ int main(void)
     input_ready=1;*(DWORD *)(game_base+0x5C8E98)=6;
     *(short *)(game_base+0x5A5C62)=5;*(short *)(game_base+0x5A5D92)=9;
     capture_kind=HOTD_WORLD;native_z_enable=1;
+    native_zfunc=D3DCMP_GREATER;native_filter=D3DTFG_POINT;
     capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);publish_frame();
+    HotdPauseRaster paused_raster=pause_raster[0];
+    assert(paused_raster.zfunc==D3DCMP_GREATER && paused_raster.mag_filter==D3DTFG_POINT);
     Vc2Vertex paused_scene[3];memcpy(paused_scene,frame->verts,sizeof(paused_scene));
     unsigned old_frame=frame->frame,old_atlas=frame->atlas_seq;
     HotdLens paused_lens=frame->lens;
     *(short *)(game_base+0x5A1A00)=1;
+    native_zfunc=D3DCMP_LESS;native_filter=D3DTFG_LINEAR;
     capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);assert(!count && !hud_count);
     shot_origins[0][0]=999;lens.fx=999;publish_frame();
     assert(frame->reserved[1]==1 && frame->frame>old_frame && frame->active_players==1);
     assert(frame->vertex_count==3 && frame->reserved[2]==4 && !memcmp(frame->verts,paused_scene,sizeof(paused_scene)));
     assert(frame->atlas_seq==old_atlas && !memcmp(&frame->lens,&paused_lens,sizeof(paused_lens)));
     assert(frame->shot_origins[0][0]!=999);
+    assert(!memcmp(pause_raster,&paused_raster,sizeof(paused_raster)));
     for(unsigned repeat=0;repeat<3;repeat++){publish_frame();assert(frame->vertex_count==3 && frame->reserved[1]==1);}
     *(short *)(game_base+0x5A1A00)=0;
     capture_draw(&device,D3DPT_TRIANGLELIST,0x1C4,hud,3,NULL,0);publish_frame();
     assert(!frame->reserved[1] && frame->vertex_count==3);
+    assert(pause_raster[0].zfunc==D3DCMP_LESS && pause_raster[0].mag_filter==D3DTFG_LINEAR);
     /* Never substitute a previous menu for gameplay on a cold pause. */
     *(DWORD *)(game_base+0x5C8E98)=3;publish_frame();
     *(short *)(game_base+0x5A1A00)=1;publish_frame();

@@ -1,8 +1,12 @@
-# Unobstructed VR pause
+# Unobstructed pause
 
 The supported game stores native pause state at `0x9A1A00`. Its pause routine at `0x40E500` draws black model `0x93E` and pause sprites. An owned desktop probe (PID 69540) filtered the backdrop and found **zero world vertices** in successive paused frames, with six UI vertices remaining. Removing the overlay alone therefore cannot preserve the 3D view.
 
-The bridge now retains the last complete gameplay capture while native pause is active: geometry, HUD, projection and shot anchors remain available in shared memory. Paused native draws still execute, but are not captured or uploaded into the texture atlas. The last screen capture is also retained. Frame publication, native input and viewer cheat heartbeats continue, allowing normal unpause. Fresh scene capture resumes immediately when native pause clears.
+The bridge retains the last complete gameplay capture while native pause is active: geometry, HUD, projection and shot anchors remain available in shared memory. Paused native draws still execute, but are not captured or uploaded into the texture atlas. The last screen capture is also retained. Frame publication, native input and viewer cheat heartbeats continue, allowing normal unpause. Fresh scene capture resumes immediately when native pause clears.
+
+The native `EndScene` hook also redraws this same retained geometry into the game's desktop render target after the pause UI. `desktop_pause.h` uses Direct3D 7 triangle batches with the saved native projection, the retained lit colours/specular/fog, original texture surfaces held by the capture cache, addressing, alpha tests, blending and depth state. HUD vertices use the inverse of the capture's panel mapping. No screenshot, backbuffer copy, second scene capture or additional game-code detour is used. Device state is saved/restored around the replay, including explicit transform and viewport restoration. Without a prior complete gameplay capture, the native pause display remains.
+
+Normal play saves the projection, viewport and six bytes of native raster state per triangle alongside the existing retained geometry. The local raster metadata preserves each draw's depth comparison, Z/W-buffer mode, colour-key enable and magnification/minification/mipmap filters. It follows world/HUD publication order and freezes during pause without changing the shared-memory protocol. Paused desktop rendering costs CPU draw submission and GPU scene rendering each frame. The desktop uses native scale and colour output, independently of the D3D11 viewer's brightness/gamma/world-scale settings. Device-loss errors are logged once; recovery and broader stage/menu coverage are not yet qualified.
 
 Protocol 13 publishes pause state in `reserved[1]`, formerly unused background-layer metadata. The layout and size do not change. The viewer reads it under the existing frame seqlock and suppresses the captured-screen panel during pause, including manually forced panels. Head and controller poses continue through the normal render loop. A viewer attaching during an existing paused session can read the bridge's retained scene. No menu image is substituted when gameplay has not produced a valid scene yet.
 
@@ -15,9 +19,16 @@ Verification:
 
 Evidence is retained under ignored `build/clean-pause-evidence/` in the main checkout: `pause-empty-scene.json`, `pause-probe.json`, `clean-pause-build.log`, `pause-viewer-checks.log`, `paused-retained.bin`, `paused-retained-atlas.bin` and `paused-viewpoints.png`. No VR session was launched for these checks; headset comfort and broader stage/menu coverage remain pending.
 
+Desktop replay verification:
+
+- `test_desktop_pause.c` renders through a real offscreen Direct3D 7 device. It checks retained geometry, occlusion, HUD placement, blending/alpha testing, native wrap/clamp textures, fog/specular and restoration of transforms, viewport, render state and texture bindings. The real bridge `EndScene` hook is exercised for cold pause, valid pause and resume.
+- Owned native test PID **93916** retained **29,517 world vertices** and 54 HUD vertices. Consecutive paused publications had identical scene hashes while frame numbers advanced. The original game window visibly rendered the scene without the pause overlay. Translating the retained world vertices by 1.2 native units changed the desktop view while the native pause flag stayed set; restoring those vertices restored the exact image. Resume produced fresh scene data. The owned game closed normally.
+- Evidence is retained in the main checkout's ignored `build/desktop-pause-evidence/`: `desktop-pause-probe.json`, `desktop-pause-probe.log`, `HOTD2Bridge.log`, `paused-desktop.png`, `shifted-desktop.png` and `restored-desktop.png`. Headset testing and precise performance measurements were not performed for this change.
+- Follow-up: user reported broken faces/texture appearance in the paused car intro. The initial replay forced less/equal depth testing, enabled colour keys and linear filtering without retaining native per-draw values. Replay now uses the captured raster metadata. Real D3D7 tests cover different material depth comparisons; capture tests protect metadata retention/resume. Owned native intro test PID **100448** passed pause/retention/resume and showed native point/linear filter changes with colour keys disabled. User subsequently reported it working. Evidence: `car-pause-probe.json` and `car-*-desktop.png` in the same evidence directory.
+
 ## Separate Start and Pause input
 
-Protocol 14 introduced `VC2_BTN_PAUSE=128`; protocol 15 separates Reload from Skip/Cancel without changing the frame layout. Current bindings:
+Integrated protocol 16 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside main's audio and briefing-book metadata. Current bindings:
 
 - Trigger: Fire and Start/confirm; existing tilted-gun reload gesture remains.
 - A/X: Start/confirm and Pause/resume.
@@ -32,7 +43,7 @@ The native pause-input predicate at `0x40E9C0` has one direct caller, the unchan
 
 Normal and Original weapon reload reads at `0x414A9A` and `0x414DD0` now read a separate input word. Both original instruction signatures are checked before changing either operand. Each native input poll copies physical/native input into that word, excludes synthetic Cancel and adds keyboard-profile Reload presses there. Gun profiles retain their native offscreen-trigger reload path. Skip readers at `0x414AF7` and `0x414E0E`, menu consumers, reload routines and native eligibility checks remain unchanged. Physical Ctrl is preserved, including simultaneous Ctrl and VR Cancel. No menu classifier or direct ammo/event-state writes are used.
 
-Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases overrides. Original game files remain unchanged; restart without this bridge to remove the in-memory input changes. Protocol 15 prevents older viewers from sending the former combined Reload/Cancel mapping.
+Paired Start still mirrors in akimbo; Pause remains per-player. Stale VR input releases overrides. Original game files remain unchanged; restart without this bridge to remove the in-memory input changes. Protocol 16 prevents older viewers from sending the former combined Reload/Cancel mapping.
 
 Verification in the `feat/input-mapping` worktree:
 
@@ -45,3 +56,5 @@ Verification in the `feat/input-mapping` worktree:
 - No cheats requested; both players' native lives/ammo flags were verified off. The owned game closed normally; original `Hod2.exe` and `Hod2.ini` hashes stayed unchanged. Evidence: ignored `build/reload-split-live.json`, `build/reload-split-live.log`, `build/reload-split-bridge.log` and `build/check_reload_split_live.py`.
 
 Latest physical controller mapping, complete menu coverage and Original-mode item weapons still need runtime acceptance. Offline/native desktop results do not establish headset acceptance.
+
+Merge preparation: main's head-relative reload gestures, audio, native cheat-off override and desktop pause replay are retained. The combined mapping uses protocol 16. Pre-merge desktop/headset evidence above does not establish runtime acceptance of this combined build.

@@ -1,6 +1,10 @@
 param(
     [string]$GameExe = 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe',
     [ValidateSet('VR','Window','Stereo')][string]$Mode = 'VR',
+    [switch]$Window,
+    [switch]$NoWindow,
+    [switch]$VrWindow,
+    [switch]$NoVrWindow,
     [int]$Seconds = 0,
     [switch]$InfiniteAmmo,
     [switch]$InfiniteLives,
@@ -12,6 +16,9 @@ param(
     [switch]$ShowSplash,
     [ValidateRange(0.1,10.0)][double]$WorldScale = 1.25,
     [ValidateRange(25,400)][int]$Brightness = 90,
+    [ValidateRange(0,100)][int]$MasterVolume = 100,
+    [ValidateRange(0,100)][int]$MusicVolume = 100,
+    [ValidateRange(0,100)][int]$EffectsVolume = 100,
     [switch]$ExpandMeshes,
     [switch]$NoExpandMeshes,
     [switch]$ExpandWorld,
@@ -24,6 +31,8 @@ param(
     [switch]$NoCrosshair
 )
 $ErrorActionPreference = 'Stop'
+if ($Window -and $NoWindow) { throw 'Choose either -Window or -NoWindow.' }
+if ($VrWindow -and $NoVrWindow) { throw 'Choose either -VrWindow or -NoVrWindow.' }
 if ($SkipSplash -and $ShowSplash) { throw 'Choose either -SkipSplash or -ShowSplash.' }
 if ($ExpandMeshes -and $NoExpandMeshes) { throw 'Choose either -ExpandMeshes or -NoExpandMeshes.' }
 if ($ExpandWorld -and $NoExpandWorld) { throw 'Choose either -ExpandWorld or -NoExpandWorld.' }
@@ -40,8 +49,13 @@ if ($ShowSplash) { $launchArgs += '--show-splash' }
 & "$out\HOTD2Launch.exe" @launchArgs
 if ($LASTEXITCODE) { throw 'Game injection failed.' }
 $viewerArgs = @()
-if ($Mode -eq 'Window') { $viewerArgs += '--window' }
+if ($PSBoundParameters.ContainsKey('Mode') -and $Mode -eq 'VR') { $viewerArgs += '--vrwindow' }
+if ($Mode -eq 'Window') { $viewerArgs += '--window', '--no-vrwindow' }
 if ($Mode -eq 'Stereo') { $viewerArgs += '--stereo' }
+if ($Window) { $viewerArgs += '--window' }
+if ($NoWindow) { $viewerArgs += '--no-window' }
+if ($VrWindow) { $viewerArgs += '--vrwindow' }
+if ($NoVrWindow) { $viewerArgs += '--no-vrwindow' }
 if ($Seconds -gt 0) { $viewerArgs += '--seconds', "$Seconds" }
 if ($InfiniteAmmo) { $viewerArgs += '--infinite-ammo' }
 if ($InfiniteLives) { $viewerArgs += '--infinite-lives' }
@@ -51,6 +65,9 @@ if ($RapidFire) { $viewerArgs += '--rapid-fire' }
 if ($PSBoundParameters.ContainsKey('RapidFireRate')) { $viewerArgs += '--rapid-fire-rate', "$RapidFireRate" }
 if ($PSBoundParameters.ContainsKey('WorldScale')) { $viewerArgs += '--world-scale', $WorldScale.ToString('G', [Globalization.CultureInfo]::InvariantCulture) }
 if ($PSBoundParameters.ContainsKey('Brightness')) { $viewerArgs += '--brightness', "$Brightness" }
+if ($PSBoundParameters.ContainsKey('MasterVolume')) { $viewerArgs += '--master-volume', "$MasterVolume" }
+if ($PSBoundParameters.ContainsKey('MusicVolume')) { $viewerArgs += '--music-volume', "$MusicVolume" }
+if ($PSBoundParameters.ContainsKey('EffectsVolume')) { $viewerArgs += '--effects-volume', "$EffectsVolume" }
 if ($ExpandMeshes) { $viewerArgs += '--expand-meshes' }
 if ($NoExpandMeshes) { $viewerArgs += '--no-expand-meshes' }
 if ($ExpandWorld) { $viewerArgs += '--expand-world' }

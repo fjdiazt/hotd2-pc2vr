@@ -5,6 +5,8 @@
 #include <windows.h>
 #include <d3d.h>
 #include <dinput.h>
+#include <mmsystem.h>
+#include <dsound.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -15,6 +17,9 @@
 #include "texture_atlas.h"
 #include "lighting.h"
 #include "capture_visibility.h"
+#include "crosshair_capture.h"
+#include "audio_control.h"
+#include "desktop_pause.h"
 
 static FILE *logfile;
 static Vc2Frame *frame;
@@ -26,6 +31,9 @@ static Vc2Vertex vertices[VC2_MAX_VERTS];
 static Vc2Vertex hud_vertices[HOTD_MAX_HUD_VERTS];
 static unsigned hud_count;
 static int pause_scene_ready;
+static D3DMATRIX pause_projection;
+static D3DVIEWPORT7 pause_viewport;
+static HotdPauseRaster desktop_raster[VC2_MAX_VERTS/3],hud_raster[HOTD_MAX_HUD_VERTS/3],pause_raster[VC2_MAX_VERTS/3];
 static HotdLens lens;
 static unsigned lens_valid;
 static unsigned capture_kind,shot_group;
@@ -33,6 +41,13 @@ static unsigned capture_skip;
 static unsigned capture_model;
 static DWORD capture_visibility_planes;
 static HotdStageRecords stage_records;
+static HotdStageRecords gfile_records;
+static const BYTE *gfile_immediate;
+static int gfile_ready,capture_gfile;
+static HotdCrosshairRecords crosshair_records;
+static int crosshair_ready;
+static const BYTE *crosshair_definition,*crosshair_immediate;
+static unsigned crosshair_draw_depth,crosshair_draw_base_skip;
 static int visibility_hooks_ready,visibility_ready;
 static const BYTE *visibility_submit_record;
 static int visibility_submit_stage;
@@ -53,7 +68,7 @@ static unsigned physical_start_keys;
 static unsigned physical_back_keys;
 static DWORD reload_input;
 static int cheats_supported;
-static unsigned cheat_owned;
+static unsigned cheat_owned,cheat_applied;
 static BYTE saved_cheats[2][2];
 static int continues_supported,invincibility_ready;
 static DWORD saved_freeplay;
@@ -62,6 +77,7 @@ static char ini_path[MAX_PATH];
 static IDirect3DDevice7 *active_device;
 static void publish_frame(void);
 static int (WINAPI *original_message_box)(HWND,LPCSTR,LPCSTR,UINT);
+static int audio_ready;
 
 static void logline(const char *fmt, ...)
 {
@@ -94,6 +110,99 @@ static int replace_pointer(void **slot, void *hook, void **original)
     InterlockedExchangePointer(slot, hook);
     VirtualProtect(slot, sizeof(*slot), old, &unused);
     return 1;
+}
+
+typedef HRESULT (WINAPI *AudioPlay)(IDirectSoundBuffer *,DWORD,DWORD,DWORD);
+typedef struct { const IDirectSoundBufferVtbl *vtable;AudioPlay original; } AudioPlayHook;
+static AudioPlayHook audio_play_hooks[HOTD_AUDIO_CHANNELS];
+static struct { IDirectSoundBuffer *buffer;uint32_t levels;int attempted; } audio_applied[HOTD_AUDIO_CHANNELS];
+static DWORD audio_failures;
+static int (__cdecl *native_audio_play_original)(int,int);
+
+static BYTE *native_audio_channels(void)
+{
+    if(!audio_ready || !(*(DWORD *)(game_base+0x3DE5B8)&0x80000000u) ||
+       *(DWORD *)(game_base+0x3DE5BC)!=HOTD_AUDIO_CHANNELS)return NULL;
+    return *(BYTE **)(game_base+0x3DE5A8);
+}
+static IDirectSoundBuffer *native_audio_buffer(BYTE *channels,unsigned channel)
+{
+    BYTE *record=channels+channel*0x44;
+    return (*(DWORD *)(record+0x40)&0x80000000u)?*(IDirectSoundBuffer **)record:NULL;
+}
+static HRESULT apply_audio_volume(IDirectSoundBuffer *buffer,unsigned channel,uint32_t levels)
+{
+    if(audio_applied[channel].buffer!=buffer || audio_applied[channel].levels!=levels)
+        audio_failures&=~(1u<<channel);
+    HRESULT hr=IDirectSoundBuffer_SetVolume(buffer,hotd_audio_attenuation(levels,channel));
+    if(SUCCEEDED(hr))audio_failures&=~(1u<<channel);
+    if(FAILED(hr) && !(audio_failures&(1u<<channel))) {
+        audio_failures|=1u<<channel;logline("native audio volume failed: channel=%u hr=%08lx",channel,(unsigned long)hr);
+    }
+    audio_applied[channel].buffer=buffer;audio_applied[channel].levels=levels;audio_applied[channel].attempted=SUCCEEDED(hr);
+    return hr;
+}
+static HRESULT WINAPI audio_buffer_play(IDirectSoundBuffer *self,DWORD reserved,DWORD priority,DWORD flags)
+{
+    AudioPlay original=NULL;
+    for(unsigned i=0;i<HOTD_AUDIO_CHANNELS;i++)if(audio_play_hooks[i].vtable==self->lpVtbl) {
+        original=audio_play_hooks[i].original;break;
+    }
+    if(!original)return DSERR_GENERIC;
+    BYTE *channels=native_audio_channels();
+    if(channels && frame)for(unsigned i=0;i<HOTD_AUDIO_CHANNELS;i++)
+        if(native_audio_buffer(channels,i)==self) {
+            /* A lost-buffer failure reaches the game's existing Restore/retry before any Play. */
+            uint32_t levels=hotd_audio_sanitize(frame->audio_levels);
+            HRESULT hr=apply_audio_volume(self,i,levels);
+            if(FAILED(hr) && (hr==DSERR_BUFFERLOST || hotd_audio_attenuation(levels,i)<0))return hr;
+            break;
+        }
+    return original(self,reserved,priority,flags);
+}
+static int hook_audio_buffer(IDirectSoundBuffer *buffer)
+{
+    AudioPlayHook *free_slot=NULL;
+    for(unsigned i=0;i<HOTD_AUDIO_CHANNELS;i++) {
+        AudioPlayHook *hook=audio_play_hooks+i;
+        if(hook->vtable==buffer->lpVtbl)return hook->original!=NULL;
+        if(!hook->vtable && !free_slot)free_slot=hook;
+    }
+    if(!free_slot)return 0;
+    free_slot->vtable=buffer->lpVtbl;
+    if(!replace_pointer((void **)&buffer->lpVtbl->Play,audio_buffer_play,(void **)&free_slot->original)) {
+        memset(free_slot,0,sizeof(*free_slot));return 0;
+    }
+    return 1;
+}
+static int __cdecl native_audio_play(int channel,int loop)
+{
+    BYTE *channels=native_audio_channels();
+    if(channels && channel>=0 && channel<HOTD_AUDIO_CHANNELS) {
+        IDirectSoundBuffer *buffer=native_audio_buffer(channels,(unsigned)channel);
+        if(buffer && !hook_audio_buffer(buffer) && frame &&
+           hotd_audio_attenuation(frame->audio_levels,(unsigned)channel)!=0)return 0;
+    }
+    return native_audio_play_original(channel,loop);
+}
+static void update_audio_levels(void)
+{
+    BYTE *channels=native_audio_channels();
+    if(!channels || !frame)return;
+    uint32_t levels=hotd_audio_sanitize(frame->audio_levels);
+    for(unsigned i=0;i<HOTD_AUDIO_CHANNELS;i++) {
+        IDirectSoundBuffer *buffer=native_audio_buffer(channels,i);
+        if(buffer && (!audio_applied[i].attempted || audio_applied[i].buffer!=buffer || audio_applied[i].levels!=levels)) {
+            apply_audio_volume(buffer,i,levels);
+        }
+        if(!buffer){audio_applied[i].buffer=NULL;audio_applied[i].attempted=0;}
+    }
+}
+static unsigned audio_ini_volume(const char *key)
+{
+    char text[32];unsigned value;
+    DWORD n=GetPrivateProfileStringA("vr",key,"100",text,sizeof(text),ini_path);
+    return n<sizeof(text)-1 && hotd_parse_volume(text,&value)?value:100;
 }
 
 static int write_code(BYTE *at, const BYTE *bytes, unsigned n)
@@ -131,9 +240,13 @@ static int native_continues_profile(const BYTE *base)
     return !memcmp(base+0x6E1F,shared,sizeof(shared)) &&
         !memcmp(base+0x6E74,separate,sizeof(separate)) && !memcmp(base+0x6ED0,available,sizeof(available));
 }
+static int cheat_request_active(void)
+{
+    return frame && frame->cheat_tick && (DWORD)(GetTickCount()-frame->cheat_tick)<500;
+}
 static unsigned requested_cheats(void)
 {
-    return frame && (DWORD)(GetTickCount()-frame->cheat_tick)<500 ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
+    return cheat_request_active() ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
 }
 static void (__cdecl *native_damage_original)(int,int,int);
 static void (__cdecl *native_damage_forced_original)(int,int,int,int,int);
@@ -151,23 +264,25 @@ static void __cdecl native_damage_forced(int player,int hit,int kind,int force,i
 static void native_cheats(unsigned requested)
 {
     const unsigned bits[]={HOTD_CHEAT_LIVES,HOTD_CHEAT_AMMO};
-    requested&=(cheats_supported ? HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO:0) |
-        (continues_supported ? HOTD_CHEAT_CONTINUES:0);
+    unsigned owned=cheat_request_active() ?
+        (cheats_supported ? HOTD_CHEAT_LIVES|HOTD_CHEAT_AMMO:0) |
+        (continues_supported ? HOTD_CHEAT_CONTINUES:0):0;
+    requested&=owned;
     for(unsigned kind=0;kind<2;kind++)for(unsigned p=0;p<2;p++) {
         BYTE *flag=game_base+0x5C9FD8+p*0x7C+kind;
-        if(requested&bits[kind]) {
+        if(owned&bits[kind]) {
             if(!(cheat_owned&bits[kind]))saved_cheats[p][kind]=*flag;
-            *flag=1; /* Use native cheats, including item weapons and civilian penalties. */
+            *flag=!!(requested&bits[kind]); /* Explicit off overrides native saved cheats too. */
         } else if(cheat_owned&bits[kind])*flag=saved_cheats[p][kind];
     }
     DWORD *freeplay=(DWORD *)(game_base+0x5C8E70);
-    if(requested&HOTD_CHEAT_CONTINUES) {
+    if(owned&HOTD_CHEAT_CONTINUES) {
         if(!(cheat_owned&HOTD_CHEAT_CONTINUES))saved_freeplay=*freeplay;
-        *freeplay=1; /* Native free play admits starts/continues without spending either credit pool. */
+        *freeplay=!!(requested&HOTD_CHEAT_CONTINUES);
     } else if(cheat_owned&HOTD_CHEAT_CONTINUES)*freeplay=saved_freeplay;
-    if(requested!=cheat_owned)logline("native cheats: ammo=%u lives=%u continues=%u",
-        !!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES),!!(requested&HOTD_CHEAT_CONTINUES));
-    cheat_owned=requested;
+    if(requested!=cheat_applied || owned!=cheat_owned)logline("native cheats: ammo=%u lives=%u continues=%u override=%u",
+        !!(requested&HOTD_CHEAT_AMMO),!!(requested&HOTD_CHEAT_LIVES),!!(requested&HOTD_CHEAT_CONTINUES),!!owned);
+    cheat_owned=owned;cheat_applied=requested;
 }
 
 static void update_input(void)
@@ -340,6 +455,14 @@ typedef struct { IDirectDrawSurface7 *surface; unsigned x,y,w,h,last_used; } Tex
 static Texture textures[2048];
 static HotdAtlas atlas_space;
 static unsigned texture_count, texture_evictions, texture_failures;
+static IDirectDrawSurface7 *pause_texture(const Vc2Vertex *v)
+{
+    for(unsigned i=0;i<texture_count;i++)if(
+        v->atlas_x==(textures[i].x+.5f)/VC2_ATLAS_W &&
+        v->atlas_y==(textures[i].y+.5f)/VC2_ATLAS_H)
+        return textures[i].surface;
+    return NULL;
+}
 _Static_assert(VC2_ATLAS_W==HOTD_ATLAS_SIDE*HOTD_ATLAS_CELL && VC2_ATLAS_H==VC2_ATLAS_W,
     "Atlas allocator dimensions");
 
@@ -587,7 +710,7 @@ static int convert_vertex(const BYTE *v,DWORD fvf,Texture *tex,DrawStyle style,V
         out->specular=out->fog_colour=0;out->fog=1;
     }
     out->style=style.style|capture_kind;
-    out->address=style.address;
+    out->address=style.address|(capture_gfile?HOTD_GFILE:0);
     out->u=out->v=-1;out->depth=0;
     out->atlas_x=out->atlas_y=out->atlas_w=out->atlas_h=0;
     if(tex && (fvf&D3DFVF_TEXCOUNT_MASK)) {
@@ -637,6 +760,8 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     Texture *texture;
     DrawStyle style;
     DWORD z_enable=0;
+    HotdPauseRaster raster={.zfunc=D3DCMP_LESSEQUAL,.z_enable=D3DZB_TRUE,
+        .mag_filter=D3DTFG_LINEAR,.min_filter=D3DTFN_LINEAR,.mip_filter=D3DTFP_NONE};
     Vc2Vertex recent_vertices[3];
     unsigned recent_indices[3]={~0u,~0u,~0u},recent_age[3]={0},vertex_clock=0;
     int hud=0,reuse=indices || type!=D3DPT_TRIANGLELIST;
@@ -658,6 +783,13 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     hud=(fvf&D3DFVF_POSITION_MASK)==D3DFVF_XYZRHW && !capture_kind && !capture_model;
     IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_ZENABLE,&z_enable);
     if(!z_enable && !hud)return;
+    raster.z_enable=(BYTE)z_enable;
+    raster.zfunc=(BYTE)read_state(device,D3DRENDERSTATE_ZFUNC,D3DCMP_LESSEQUAL);
+    raster.color_key=(BYTE)read_state(device,D3DRENDERSTATE_COLORKEYENABLE,FALSE);
+    DWORD filter;
+#define FILTER(name,field) if(SUCCEEDED(IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_##name,&filter)))raster.field=(BYTE)filter
+    FILTER(MAGFILTER,mag_filter);FILTER(MINFILTER,min_filter);FILTER(MIPFILTER,mip_filter);
+#undef FILTER
     texture=capture_texture(device);
     trace_draw_state(device,fvf,texture,data);
     style=read_draw_style(device,fvf);
@@ -700,8 +832,8 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
             }
         }
         if(k!=3){dropped++;continue;}
-        if(hud){memcpy(hud_vertices+hud_count,tri,sizeof(tri));hud_count+=3;}
-        else {memcpy(vertices+count,tri,sizeof(tri));count+=3;}
+        if(hud){hud_raster[hud_count/3]=raster;memcpy(hud_vertices+hud_count,tri,sizeof(tri));hud_count+=3;}
+        else {desktop_raster[count/3]=raster;memcpy(vertices+count,tri,sizeof(tri));count+=3;}
     }
 }
 
@@ -736,6 +868,7 @@ typedef void (__cdecl *NativeSubmit)(const BYTE *);
 typedef void (__cdecl *NativeSubmitAlt)(const BYTE *,float);
 static NativeSubmit native_submit_original;
 static NativeSubmit native_sprite_submit_original;
+static NativeSubmit native_bitmap_original,native_sprite_draw_original;
 static NativeSubmitAlt native_submit_alt_original;
 static int (__cdecl *native_visibility_original)(float,float,float,float);
 static HRESULT (WINAPI *original_sphere_visibility)(IDirect3DDevice7 *,D3DVECTOR *,D3DVALUE *,DWORD,DWORD,DWORD *);
@@ -758,6 +891,19 @@ static int native_stage_task(void)
     const DWORD *task=*(const DWORD **)(game_base+0x3DF8B0);
     return task && task[0]==(DWORD)(ULONG_PTR)(game_base+0x1260);
 }
+static int native_gfile_profile(void)
+{
+    static const BYTE story[]={0x8B,0x44,0x24,0x04,0x83,0xEC,0x4C,0x53,0x8B,0x98,0x0C,0x13,0,0,0x55,0x8B};
+    static const BYTE boss[]={0x83,0xEC,0x44,0x53,0x55,0x8B,0x6C,0x24,0x50,0x33,0xDB,0x56,0x57,0x66,0x8B,0x8D};
+    return !memcmp(game_base+0x37AC0,story,sizeof(story)) && !memcmp(game_base+0x24900,boss,sizeof(boss));
+}
+static int native_gfile_task(void)
+{
+    if(!gfile_ready)return 0;
+    const DWORD *task=*(const DWORD **)(game_base+0x3DF8B0);
+    return task && (task[0]==(DWORD)(ULONG_PTR)(game_base+0x37AC0) ||
+        task[0]==(DWORD)(ULONG_PTR)(game_base+0x24900));
+}
 static int native_stage_submission(const BYTE *record)
 {
     DWORD model,black;
@@ -770,8 +916,11 @@ static int native_stage_submission(const BYTE *record)
 static void native_submit_model(const BYTE *record,float alpha,int alternate)
 {
     const BYTE *previous=visibility_submit_record;
+    const BYTE *previous_gfile=gfile_immediate;
     int previous_stage=visibility_submit_stage,stage=0,expanded=capture_world_enabled();
+    int gfile=native_gfile_task();
     HotdNativeQueue before={0};
+    if(gfile)before=native_capture_queue();
     if(expanded) {
         before=native_capture_queue();
         if((*(const DWORD *)record&0x80000000u) &&
@@ -781,13 +930,17 @@ static void native_submit_model(const BYTE *record,float alpha,int alternate)
         stage=native_stage_submission(record);
     }
     visibility_submit_record=record;visibility_submit_stage=stage;
+    gfile_immediate=gfile?record:NULL;
     if(alternate)native_submit_alt_original(record,alpha);else native_submit_original(record);
     visibility_submit_record=previous;visibility_submit_stage=previous_stage;
-    if(stage) {
+    gfile_immediate=previous_gfile;
+    if(stage || gfile) {
         HotdNativeQueue after=native_capture_queue();
         if(hotd_native_queue_appended(before,after,(uintptr_t)game_base+0x3E814C) &&
-           *(const DWORD *)(after.list+before.count*4)==before.cursor)
-            hotd_remember_stage(&stage_records,(const BYTE *)before.cursor);
+           *(const DWORD *)(after.list+before.count*4)==before.cursor) {
+            if(stage)hotd_remember_stage(&stage_records,(const BYTE *)before.cursor);
+            if(gfile)hotd_remember_stage(&gfile_records,(const BYTE *)before.cursor);
+        }
     }
 }
 static void __cdecl native_submit(const BYTE *record)
@@ -796,10 +949,55 @@ static void __cdecl native_submit_alt(const BYTE *record,float alpha)
 {native_submit_model(record,alpha,1);}
 static void __cdecl native_sprite_submit(const BYTE *record)
 {
+    const BYTE *previous=crosshair_immediate;
+    int owned=crosshair_ready && crosshair_definition!=NULL;
+    int deferred=(*(const DWORD *)record&0x80000000u)!=0,tracked=0;
+    HotdNativeQueue before={0};
     if(capture_world_enabled() && (*(const DWORD *)record&0x80000000u) && !native_queue_room()) {
         visibility_queue_drops++;return;
     }
+    if(owned && deferred) {
+        before=native_capture_queue();
+        tracked=hotd_native_queue_room(before,(uintptr_t)game_base+0x3E814C);
+    }
+    crosshair_immediate=owned && !deferred?record:NULL;
     native_sprite_submit_original(record);
+    crosshair_immediate=previous;
+    if(tracked) {
+        HotdNativeQueue after=native_capture_queue();
+        if(hotd_native_queue_valid(after,(uintptr_t)game_base+0x3E814C) &&
+           after.list==before.list && after.capacity==before.capacity && after.count==before.count+1 &&
+           after.cursor==before.cursor+HOTD_SPRITE_RECORD_SIZE &&
+           *(const DWORD *)(after.list+before.count*4)==before.cursor)
+            hotd_remember_crosshair(&crosshair_records,(const BYTE *)before.cursor);
+    }
+}
+
+static void native_bitmap_draw(const BYTE *definition,uintptr_t caller)
+{
+    const BYTE *previous=crosshair_definition;
+    crosshair_definition=crosshair_ready && hotd_crosshair_definition(game_base,definition,caller)?definition:NULL;
+    native_bitmap_original(definition);
+    crosshair_definition=previous;
+}
+static void __cdecl native_bitmap(const BYTE *definition)
+{native_bitmap_draw(definition,(uintptr_t)__builtin_return_address(0)-(uintptr_t)game_base);}
+static void __cdecl native_sprite_draw(const BYTE *record)
+{
+    unsigned previous_skip=capture_skip,previous_depth=crosshair_draw_depth,previous_base=crosshair_draw_base_skip;
+    unsigned base=crosshair_draw_depth?crosshair_draw_base_skip:capture_skip;
+    int owned=0;
+    if(crosshair_ready) {
+        owned=hotd_take_crosshair(&crosshair_records,record);
+        owned|=crosshair_immediate==record;
+    }
+    if(owned) {
+        static int logged;
+        if(!logged){logline("native gameplay crosshair omitted from VR capture; desktop draw retained");logged=1;}
+    }
+    crosshair_draw_depth++;crosshair_draw_base_skip=base;capture_skip=base|owned;
+    native_sprite_draw_original(record);
+    capture_skip=previous_skip;crosshair_draw_depth=previous_depth;crosshair_draw_base_skip=previous_base;
 }
 
 static int native_stage_visibility(int visible,float radius,uintptr_t caller)
@@ -853,6 +1051,7 @@ static int native_letterbox(const BYTE *record)
 static int native_model_draw(const BYTE *record,int pass,NativeModel original)
 {
     unsigned previous=capture_kind,previous_skip=capture_skip,previous_model=capture_model;
+    int previous_gfile=capture_gfile;
     DWORD previous_planes=capture_visibility_planes;
     int result,queued_stage=0,expanded=capture_world_enabled();
     capture_model=1;
@@ -861,7 +1060,8 @@ static int native_model_draw(const BYTE *record,int pass,NativeModel original)
         static unsigned logged;
         if(!logged++){logline("native letterbox bars omitted from VR capture");}
     }
-    capture_kind=native_model_kind(record);
+    capture_gfile=(gfile_immediate==record) || (pass==1 && hotd_take_stage(&gfile_records,record));
+    capture_kind=capture_gfile?0:native_model_kind(record);
     if(expanded && pass==1)queued_stage=hotd_take_stage(&stage_records,record);
     capture_visibility_planes=visibility_ready?hotd_visibility_expand(capture_render_flags(),
         capture_kind==HOTD_WORLD && !capture_skip &&
@@ -873,6 +1073,7 @@ static int native_model_draw(const BYTE *record,int pass,NativeModel original)
         visibility_queue_drops++;result=0;
     }
     capture_kind=previous;capture_skip=previous_skip;capture_model=previous_model;
+    capture_gfile=previous_gfile;
     capture_visibility_planes=previous_planes;
     return result;
 }
@@ -944,6 +1145,15 @@ static int install_capture_visibility(void)
         detour(0x6310,sphere,sizeof(sphere),native_visibility,(void **)&native_visibility_original);
     return visibility_hooks_ready;
 }
+static int install_crosshair_capture(int profile_valid)
+{
+    static const BYTE bitmap[]={0x8B,0x44,0x24,0x04,0x83,0xEC,0x38,0x8B,0x08};
+    static const BYTE sprite[]={0x81,0xEC,0xB0,0,0,0,0x53,0x55,0x56};
+    if(!profile_valid || !native_sprite_submit_original)return 0;
+    crosshair_ready=detour(0x1C630,bitmap,sizeof(bitmap),native_bitmap,(void **)&native_bitmap_original) &&
+        detour(0xA7AB0,sprite,sizeof(sprite),native_sprite_draw,(void **)&native_sprite_draw_original);
+    return crosshair_ready;
+}
 
 static HRESULT (WINAPI *original_present)(void *,DWORD);
 static HRESULT WINAPI native_present(void *self,DWORD flags)
@@ -959,10 +1169,15 @@ static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
     if(!visibility_flags_latched) {
         visibility_frame_flags=frame?frame->render_flags:0;visibility_flags_latched=1;
     }
-    active_device=self;update_input();return original_begin(self);
+    active_device=self;update_input();update_audio_levels();return original_begin(self);
 }
 static HRESULT WINAPI end_scene(IDirect3DDevice7 *self)
 {
+    if(pause_scene_ready && input_ready && *(short *)(game_base+0x5A1A00)) {
+        HRESULT hr=hotd_pause_render(self,frame,&pause_projection,&pause_viewport,pause_raster,pause_texture);
+        static int reported;
+        if(FAILED(hr) && !reported){reported=1;logline("desktop pause replay failed: %08lx",(unsigned long)hr);}
+    }
     return original_end(self);
 }
 static BOOL CALLBACK find_game_window(HWND hwnd,LPARAM unused)
@@ -1003,11 +1218,14 @@ static void publish_frame(void)
         unsigned hud_n=hud_count<VC2_MAX_VERTS-count?hud_count:VC2_MAX_VERTS-count;
         dropped+=(hud_count-hud_n)/3;
         memcpy(frame->verts+count,hud_vertices,hud_n*sizeof(hud_vertices[0]));
+        memcpy(pause_raster,desktop_raster,count/3*sizeof(*pause_raster));
+        memcpy(pause_raster+count/3,hud_raster,hud_n/3*sizeof(*pause_raster));
         frame->vertex_count=count+hud_n;
         frame->reserved[0]=count;frame->reserved[2]=count+1;
         frame->lens=lens;frame->lens_valid=lens_valid;
         memcpy(frame->shot_origins,shot_origins,sizeof(shot_origins));
         pause_scene_ready=input_ready && !paused && *(DWORD *)(game_base+0x5C8E98)==6 && count>0;
+        if(pause_scene_ready){pause_projection=projection;pause_viewport=viewport;}
     }
     frame->reserved[1]=paused;frame->frame=frame_no;
     frame->draw_calls=calls;frame->dropped_triangles=dropped;frame->texture_count=texture_count;
@@ -1025,7 +1243,9 @@ static void publish_frame(void)
     visibility_pressure=pressure;
     texture_failures=0;
     count=hud_count=calls=dropped=shot_group=0;
-    memset(&stage_records,0,sizeof(stage_records));visibility_queue_drops=0;visibility_flags_latched=0;
+    memset(&stage_records,0,sizeof(stage_records));memset(&crosshair_records,0,sizeof(crosshair_records));
+    memset(&gfile_records,0,sizeof(gfile_records));
+    visibility_queue_drops=0;visibility_flags_latched=0;
 }
 static HRESULT (WINAPI *original_create_device)(IDirect3D7 *,REFCLSID,IDirectDrawSurface7 *,IDirect3DDevice7 **);
 static HRESULT WINAPI create_device(IDirect3D7 *self,REFCLSID cls,IDirectDrawSurface7 *target,IDirect3DDevice7 **out)
@@ -1131,6 +1351,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     if(!frame)return FALSE;
     memset(frame,0,sizeof(*frame));frame->magic=VC2_SHARE_MAGIC;frame->version=VC2_SHARE_VERSION;
     frame->game_pid=GetCurrentProcessId();
+    frame->audio_levels=hotd_pack_audio(audio_ini_volume("master_volume"),
+        audio_ini_volume("music_volume"),audio_ini_volume("effects_volume"));
     frame->render_flags=GetPrivateProfileIntA("vr","native_lighting",1,ini_path)?0:HOTD_RENDER_UNLIT;
     if(!GetPrivateProfileIntA("vr","expand_meshes",1,ini_path))frame->render_flags|=HOTD_RENDER_NATIVE_MESH_CULLING;
     if(GetPrivateProfileIntA("vr","expand_world",0,ini_path))frame->render_flags|=HOTD_RENDER_EXPAND_WORLD;
@@ -1147,13 +1369,23 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     frame->input_supported=input_ready;
     logline("HOTD2 bridge pid=%lu input_profile=%d",(unsigned long)GetCurrentProcessId(),input_ready);
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
+    {
+        static const BYTE signature[]={0xA1,0xB8,0xE5,0x7D,0};
+        audio_ready=hotd_audio_profile(game_base) &&
+            detour(0xA34B0,signature,sizeof(signature),native_audio_play,(void **)&native_audio_play_original);
+        logline("native audio volume controls: %s",audio_ready?"ready":"unavailable; native audio unchanged");
+    }
     cheats_supported=native_cheat_profile(game_base);
     logline("native cheat profile: %s",cheats_supported?"verified":"unsupported; native flags unchanged");
     continues_supported=native_continues_profile(game_base);
     logline("native continues profile: %s",continues_supported?"verified":"unsupported; free play unchanged");
     invincibility_ready=install_invincibility();
     logline("native invincibility hooks: %s",invincibility_ready?"ready":"unavailable; damage unchanged");
+    int crosshair_profile_valid=hotd_crosshair_profile(game_base);
     logline("native capture visibility hooks: %s",install_capture_visibility()?"ready":"unavailable; native culling retained");
+    gfile_ready=visibility_hooks_ready && native_gfile_profile();
+    logline("G's File presentation capture: %s",gfile_ready?"ready":"unavailable; native depth retained");
+    logline("native crosshair capture hooks: %s",install_crosshair_capture(crosshair_profile_valid)?"ready":"unavailable; native crosshairs retained");
     if(input_ready) {
         static const BYTE draw_signature[]={0x8B,0x54,0x24,0x04,0xA1,0x74,0xEB,0x7D,0x00};
         static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};

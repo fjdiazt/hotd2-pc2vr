@@ -17,6 +17,10 @@ if ($LASTEXITCODE) { throw 'Startup test failed.' }
 if ($LASTEXITCODE) { throw 'Lighting test build failed.' }
 & "$out\test_lighting.exe"
 if ($LASTEXITCODE) { throw 'Lighting test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_audio.exe" "$root\tests\test_audio.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Audio test build failed.' }
+& "$out\test_audio.exe"
+if ($LASTEXITCODE) { throw 'Audio test failed.' }
 & $gcc -std=c11 -Wall -Wextra -o "$out\test_math.exe" "$root\tests\test_math.c"
 if ($LASTEXITCODE) { throw 'Math test build failed.' }
 & "$out\test_math.exe"
@@ -25,6 +29,10 @@ if ($LASTEXITCODE) { throw 'Math test failed.' }
 if ($LASTEXITCODE) { throw 'Capture visibility test build failed.' }
 & "$out\test_capture_visibility.exe"
 if ($LASTEXITCODE) { throw 'Capture visibility test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_crosshair_capture.exe" "$root\tests\test_crosshair_capture.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Crosshair capture test build failed.' }
+& "$out\test_crosshair_capture.exe"
+if ($LASTEXITCODE) { throw 'Crosshair capture test failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_vertex_reuse.exe" "$root\tests\test_vertex_reuse.c" -ldxguid -luser32 -lkernel32
 if ($LASTEXITCODE) { throw 'Vertex reuse test build failed.' }
 & "$out\test_vertex_reuse.exe"
@@ -33,6 +41,10 @@ if ($LASTEXITCODE) { throw 'Vertex reuse test failed.' }
 if ($LASTEXITCODE) { throw 'Texture cache test build failed.' }
 & "$out\test_texture_cache.exe"
 if ($LASTEXITCODE) { throw 'Texture cache test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_desktop_pause.exe" "$root\tests\test_desktop_pause.c" -lddraw -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Desktop pause test build failed.' }
+& "$out\test_desktop_pause.exe"
+if ($LASTEXITCODE) { throw 'Desktop pause test failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_reload.exe" "$root\tests\test_reload.c" -ldxguid -luser32 -lkernel32
 if ($LASTEXITCODE) { throw 'Reload test build failed.' }
 & "$out\test_reload.exe"
@@ -55,6 +67,8 @@ $batch = @"
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_aim_indicators.c" /Fo"$out\test_aim_indicators.obj" /Fe"$out\test_aim_indicators.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_effect_render.c" /Fo"$out\test_effect_render.obj" /Fe"$out\test_effect_render.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+@if errorlevel 1 exit /b 1
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_output_modes.c" /Fo"$out\test_output_modes.obj" /Fe"$out\test_output_modes.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 "@
 [IO.File]::WriteAllText("$out\compile-viewer.cmd", $batch)
 & $env:ComSpec /d /c "$out\compile-viewer.cmd"
@@ -67,6 +81,8 @@ if ($LASTEXITCODE) { throw 'World scale test failed.' }
 if ($LASTEXITCODE) { throw 'Aim indicator test failed.' }
 & "$out\test_effect_render.exe"
 if ($LASTEXITCODE) { throw 'Effect shader test failed.' }
+& "$out\test_output_modes.exe"
+if ($LASTEXITCODE) { throw 'Output mode test failed.' }
 Copy-Item "$root\assets\gun\*" -Destination $out -Force
 if (!(Test-Path "$out\HOTD2VR.ini")) { Copy-Item "$root\HOTD2VR.ini" $out }
 $loader = 'N:\games\systems\pcvr\bin\VirtuaCop2VR\VR\openxr_loader.dll'

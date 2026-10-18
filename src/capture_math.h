@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stdint.h>
 #define HOTD_PANEL_DISTANCE_M 2.0f
+#define HOTD_GFILE_DISTANCE_M 1.0f
 #define HOTD_PANEL_HALF_WIDTH_M 1.0f
 #define HOTD_PANEL_HALF_HEIGHT_M .75f
 

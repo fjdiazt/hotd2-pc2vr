@@ -41,12 +41,14 @@ static inline unsigned hotd_menu_stick(unsigned previous,int active,float y)
     if(y<=-.65f || (previous==VC2_BTN_DOWN && y<-.30f))return VC2_BTN_DOWN;
     return 0;
 }
-static inline unsigned hotd_trigger_action(HotdTrigger *trigger,int held,int pose_valid,float vertical)
+/* Head-local forward-vector Y and horizontal yaw in radians. */
+static inline unsigned hotd_trigger_action(HotdTrigger *trigger,int held,int pose_valid,float vertical,float yaw_radians)
 {
     if(!held){trigger->held=trigger->action=0;return 0;}
-    pose_valid=pose_valid && isfinite(vertical) && fabsf(vertical)<=1.0001f;
+    pose_valid=pose_valid && isfinite(vertical) && fabsf(vertical)<=1.0001f &&
+        isfinite(yaw_radians) && fabsf(yaw_radians)<=3.141593f;
     if(!trigger->held)
-        trigger->action=pose_valid ? ((vertical>=0.76604444f || vertical<=-0.70710678f) ? VC2_BTN_RELOAD:VC2_BTN_FIRE):0; /* Up 50deg, down 45deg. */
+        trigger->action=pose_valid ? ((vertical>=0.76604444f || vertical<=-0.70710678f || fabsf(yaw_radians)>=1.04719755f) ? VC2_BTN_RELOAD:VC2_BTN_FIRE):0; /* Headset-relative: up 50deg, down 45deg, sides 60deg. */
     trigger->held=1;
     if(!pose_valid)trigger->action=0; /* Tracking loss disarms until release. */
     return trigger->action;

@@ -11,9 +11,9 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("--input", action="store_true", help="briefly own both gun axes, without firing")
 args = parser.parse_args()
-SIZE = 87385004
+SIZE = 87385008
 memory = mmap.mmap(-1, SIZE, tagname=r"Local\HOTD2_PC2VR_Frame", access=mmap.ACCESS_WRITE if args.input else mmap.ACCESS_READ)
-assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 15), "HOTD2 bridge not running or protocol mismatch"
+assert struct.unpack_from("<2I", memory, 4) == (0x32544F48, 16), "HOTD2 bridge not running or protocol mismatch"
 
 def snapshot():
     deadline = time.monotonic() + 3
@@ -44,7 +44,8 @@ for i in range(n):
     assert all(math.isfinite(x) for x in v[:3] + v[4:11]), f"Nonfinite vertex {i}"
     assert 0 <= v[9] <= 1 and 0 <= v[10] <= 1, "Atlas tile outside bounds"
     assert math.isfinite(v[15]) and (v[14] >> 24) <= 3, "Invalid native fog"
-    assert v[12] <= 10 and (v[12] & 3) <= 2 and ((v[12] >> 2) & 3) <= 2, "Invalid texture address modes"
+    address = v[12] & ~0x100  # HOTD_GFILE presentation provenance is separate from native U/V modes.
+    assert address <= 10 and (address & 3) <= 2 and ((address >> 2) & 3) <= 2, "Invalid texture address modes"
 report = {"frame": struct.unpack_from("<I", data, 12)[0], "vertices": n,
           "lens": [fx, fy, cx, cy], "draw_calls": struct.unpack_from("<I", data, 140)[0],
           "dropped_triangles": struct.unpack_from("<I", data, 144)[0],

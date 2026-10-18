@@ -9,13 +9,29 @@ int main(void)
     char temp[MAX_PATH],ini[MAX_PATH];
     assert(g_cfgLaser && g_cfgCrosshair);
     assert(GetTempPathA(MAX_PATH,temp) && GetTempFileNameA(temp,"hai",0,ini));
+    assert(g_cfgMasterVolume==100 && g_cfgMusicVolume==100 && g_cfgEffectsVolume==100);
+    assert(readAudioVolume(ini,"master_volume")==100);
+    assert(readAudioVolume(ini,"music_volume")==100);
+    assert(WritePrivateProfileStringA("vr","music_volume","0",ini));
+    assert(readAudioVolume(ini,"music_volume")==0 && readAudioVolume(ini,"effects_volume")==100);
+    assert(WritePrivateProfileStringA("vr","music_volume","75",ini));
+    assert(readAudioVolume(ini,"music_volume")==75);
+    const char *bad_volumes[]={"", "101", "-1", "50.5", "+25", "25x", "999999999999999999999", "00000000000000000000000000000000000000001x"};
+    for(unsigned v=0;v<sizeof(bad_volumes)/sizeof(*bad_volumes);v++) {
+        assert(WritePrivateProfileStringA("vr","music_volume",bad_volumes[v],ini));
+        assert(readAudioVolume(ini,"music_volume")==100);
+    }
     int brightness=0;
     assert(readBrightness(ini,&brightness) && brightness==90);
     assert(WritePrivateProfileStringA("vr","brightness","80",ini));
     assert(readBrightness(ini,&brightness) && brightness==80);
     assert(WritePrivateProfileStringA("vr","brightness","bad",ini));
     assert(!readBrightness(ini,&brightness));
-    readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting && g_cfgExpandMeshes && !g_cfgExpandWorld);
+    readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting && g_cfgExpandMeshes && !g_cfgExpandWorld && !g_cfgWindow && g_cfgVrWindow);
+    assert(WritePrivateProfileStringA("vr","vrwindow","1",ini));
+    readGraphicsFlags(ini);assert(g_cfgVrWindow);
+    assert(WritePrivateProfileStringA("vr","vrwindow","0",ini));
+    readGraphicsFlags(ini);assert(!g_cfgVrWindow);
     assert(WritePrivateProfileStringA("vr","laser","0",ini));
     readGraphicsFlags(ini);assert(!g_cfgLaser && g_cfgCrosshair);
     assert(WritePrivateProfileStringA("vr","laser","1",ini));
@@ -33,6 +49,17 @@ int main(void)
     assert(DeleteFileA(ini));
 
     char *light_off[]={"viewer","--native-lighting","--no-native-lighting","--stop-before-bridge"};
+    char *volumes[]={"viewer","--master-volume","80","--music-volume","0","--effects-volume","35","--master-volume","60","--stop-before-bridge"};
+    assert(viewer_application_main(10,volumes)==2 && g_cfgMasterVolume==60 && !g_cfgMusicVolume && g_cfgEffectsVolume==35);
+    for(unsigned v=0;v<sizeof(bad_volumes)/sizeof(*bad_volumes);v++) {
+        char *invalid[]={"viewer","--music-volume",(char *)bad_volumes[v],"--stop-before-bridge"};
+        assert(viewer_application_main(4,invalid)==2 && g_cfgMusicVolume==readAudioVolume(g_vrIniPath,"music_volume"));
+    }
+    char *missing_volume[]={"viewer","--effects-volume"};
+    assert(viewer_application_main(2,missing_volume)==2);
+    g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
+    g_cfgMasterVolume=80;g_cfgMusicVolume=25;g_cfgEffectsVolume=40;pushCheats();
+    assert(g_frame->audio_levels==hotd_pack_audio(80,25,40));free(g_frame);g_frame=NULL;
     char *light_on[]={"viewer","--no-native-lighting","--native-lighting","--stop-before-bridge"};
     assert(viewer_application_main(4,light_off)==2 && !g_cfgNativeLighting);
     assert(viewer_application_main(4,light_on)==2 && g_cfgNativeLighting);

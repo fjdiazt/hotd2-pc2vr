@@ -8,6 +8,7 @@ The viewer is adapted from [NeuralF's Virtua Cop 2 VR (VC2VR)](https://github.co
 - Right controller as P1, left controller as P2; paired akimbo or independent joining.
 - Physical reload gesture, recoil and haptics.
 - Floating menus and HUD, with separate laser and crosshair switches.
+- G's File boss briefings at approximately one metre, preserving their animated 3D pages and native depth testing.
 - Configurable world size, picture settings and optional cheats.
 - Startup-logo bypass and native windowed startup through memory-only changes.
 
@@ -58,16 +59,29 @@ Keep the bridge and viewer from the same build together: their shared-memory for
 
 `Window` shows the reconstructed scene on the desktop; `Stereo` shows both eyes side by side. These help distinguish capture/rendering problems from OpenXR problems.
 
-To attach a new viewer to an already injected game, run `build\HOTD2VR.exe` directly, optionally with `--window` or `--stereo`. Closing the viewer leaves the game running; closing the connected game ends the viewer. `-Seconds 20` limits the viewer session without closing the game.
+To attach a new viewer to an already injected game, run `build\HOTD2VR.exe` directly, optionally with `--window --no-vrwindow` or `--stereo`. Closing the viewer leaves the game running; closing the connected game ends the viewer. `-Seconds 20` limits the viewer session without closing the game.
 
 Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the floating panel through auto/on/off, and Escape closes the viewer.
+
+Under `[vr]`, `window` controls the existing reconstructed desktop preview and `vrwindow` controls headset rendering independently. The native game window stays available in every combination; `[bridge] windowed` only selects its windowed/fullscreen mode.
+
+| `window` | `vrwindow` | Outputs besides native game window |
+| --- | --- | --- |
+| `0` | `0` | None; game controls/cheats remain active |
+| `1` | `0` | Desktop preview |
+| `0` | `1` | Headset (default) |
+| `1` | `1` | Desktop preview and headset |
+
+CLI overrides: `--window` / `--no-window`, `--vrwindow` / `--no-vrwindow`. For both outputs, use `HOTD2VR.exe --window --vrwindow` or `Start-HOTD2.ps1 -Window -VrWindow`. `-Mode Window` selects preview only; `-Mode VR` enables the headset while preserving the INI preview setting. With no explicit mode/switches, the INI selects both outputs. `--stereo` remains a separate desktop diagnostic mode.
+
+With both outputs enabled, the preview uses the existing independent desktop camera and runs read-only; only the VR viewer sends controller input, cheats and audio controls. Closing the preview leaves the headset and native game running. Closing the VR viewer closes its preview; closing the native game ends both. This is not a left-eye mirror. Running both renderers costs additional CPU/GPU work.
 
 ## Controls
 
 | Input | Action |
 | --- | --- |
 | Trigger | Native Start/confirm and fire, or reload while the gun is tilted beyond the reload threshold |
-| Gun up at least 50° or down at least 45°, then trigger | Reload that hand's gun |
+| Gun relative to headset: up 50°, down 45°, or sides 60°, then trigger | Reload that hand's gun |
 | A / X | Native Start/confirm and pause/resume |
 | B / Y | Native Skip/Cancel, without reload |
 | Grip | Reload that hand's gun, without skip/cancel |
@@ -75,15 +89,17 @@ Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the
 | Right thumbstick click | Recenter the VR view |
 | Left thumbstick click | Unmapped; reserved |
 
-Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-15 bridge/viewer builds are required.
+Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-16 bridge/viewer builds are required.
 
-Reload direction comes from the tracked gun, independently of head direction. A trigger pull remains a shot or reload until release; lost tracking disarms firing until release. Grip supplies the existing Reload command. Two signature-checked weapon input reads separate Reload from Skip/Cancel, preserving native reload eligibility, ammo limits and weapon effects. Physical Ctrl retains its native behavior. Thumbstick tilt retains menu arrows; right click recenters once per press, including menus and pause. Left click is unbound and ignored. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload and right trackpad click for recenter.
+Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Grip supplies Reload only; B/Y supplies Skip/Cancel only. Two signature-checked weapon input reads preserve native reload rules while separating those commands. Physical Ctrl retains native behavior. Both sticks navigate native menus; right click recenters once per press. Left click is unbound and reserved. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload and right trackpad click for recenter.
 
 ### Pausing
 
-A/X uses the game's normal pause. The VR view retains the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue, so you can look around the frozen scene. Press the same player's A/X again to resume. The native desktop window retains its original pause display.
+A/X uses the game's normal pause. Both the VR view and the injected game's desktop window retain the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue in VR, so you can look around the frozen scene. Press the same player's A/X again to resume.
 
-Rebuild and restart both bridge and viewer for protocol 15. Details and verification: [docs/pause.md](docs/pause.md).
+The desktop window redraws the retained geometry and native textures through Direct3D 7; it does not display a saved screenshot. This requires the injected bridge and a prior gameplay scene. Rendering continues while paused, but gameplay stays frozen. The native desktop view does not apply the viewer's brightness, gamma or world-scale settings.
+
+The bridge and viewer must both be rebuilt for the current protocol 16; pause state was introduced in protocol 13, audio controls in 14 and briefing-book provenance in 15. Protocol 16 combines those changes with separate VR Pause and Reload/Cancel inputs. Details and verification: [docs/pause.md](docs/pause.md).
 
 ### Two hands and akimbo
 
@@ -99,6 +115,26 @@ Firing and tracking loss do not swap player identities. A hidden hand's held tri
 Edit **`build\HOTD2VR.ini`**, beside the executables. The root `HOTD2VR.ini` supplies defaults for a new build directory; later builds preserve the active file. Command-line switches override the INI for that launch without saving changes.
 
 Restart the viewer for `[vr]` changes. Restart the injected game for `[bridge]` changes.
+
+### Audio volume
+
+```ini
+[vr]
+master_volume=100
+music_volume=100
+effects_volume=100
+```
+
+All three default to 100. Values are integer percentages from 0 to 100: 0 mutes and 100 keeps the original level. `music_volume` controls background music; `effects_volume` includes gunshots, voices and other effects. Master and category gains multiply: master 50 with music 40 gives music 20% of its original level. These controls affect the game's DirectSound audio; Windows and other applications stay unchanged.
+
+For music and effects muted, without changing the INI:
+
+```powershell
+.\Start-HOTD2.ps1 -MusicVolume 0 -EffectsVolume 0
+.\build\HOTD2VR.exe --music-volume 0 --effects-volume 0
+```
+
+Use `-MasterVolume N` or `--master-volume N` for the overall game volume. The PowerShell launcher forwards volume overrides only when explicitly supplied, preserving INI settings otherwise. Restart the viewer after changing the INI; matching audio-capable bridge/viewer builds are required. Missing or invalid INI values use 100; invalid CLI values are rejected, and the last valid CLI override wins. Overrides reach the game when the viewer connects and remain for that game process. Build/offline checks pass; audible game/headset verification remains pending.
 
 ### World scale
 
@@ -129,6 +165,8 @@ Session overrides:
 ```
 
 Use `-Laser` / `-Crosshair` or `--laser` / `--crosshair` to enable either over a disabled INI setting. Direct CLI flags use the last supplied value. The PowerShell script rejects contradictory switches.
+
+Native gameplay crosshairs are omitted automatically from converted geometry for both players and all four native styles. Options previews and native desktop rendering stay intact. These switches control only the generated VR aiming graphics. The legacy positional `hidecross` setting is no longer used; existing copies are ignored. A native framebuffer panel still mirrors the desktop pixels, including its crosshair.
 
 ### Advanced graphics
 
@@ -161,19 +199,19 @@ For 80% scene brightness, without changing the INI:
 
 Restart the viewer to apply it. The last direct CLI value wins; invalid CLI values are rejected.
 
-These controls already cover VC2VR's main picture settings. Its extra scene-reconstruction passes and backdrop fixes are game-specific. Precise native-crosshair suppression and configurable HUD size/distance remain possible follow-ups; a settings menu is not implemented yet.
+These controls already cover VC2VR's main picture settings. Its extra scene-reconstruction passes and backdrop fixes are game-specific. Configurable HUD size/distance remains a possible follow-up; a settings menu is not implemented yet.
 
 ### Visibility expansion
 
 ```ini
 [vr]
 expand_meshes=1
-expand_world=0
+expand_world=1
 ```
 
 `expand_meshes=1` preserves the existing normal-model screen-edge expansion, helping retain offscreen body parts. Set it to `0` to restore native normal-model mesh rejection. Alternative-model draws retain their native visibility checks by default.
 
-`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. Headset testing captured rear scenery but showed jerkiness and artifacts; world expansion stays experimental and off by default. Full rear coverage and forward-wall parity remain unverified.
+`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. The shipped INI enables world expansion for new players; existing INIs stay unchanged, and a missing key still falls back to off. Earlier headset testing captured rear scenery but showed jerkiness and artifacts. Full rear coverage and forward-wall parity remain unverified.
 
 Session overrides, without changing the INI:
 
@@ -193,11 +231,12 @@ These are the values in the shipped INI; an existing active file can differ.
 | `[vr] akimbo` | `1` | Paired joining; `0` uses independent player joining |
 | `[vr] gunmodel` / `gunscale` | `gun.obj` / `100` | Gun asset and its size in percent |
 | `[vr] depth` / `depthbias` | `2` / `0` | Reconstructed depth buffer and optional sort bias |
-| `[vr] expand_meshes` / `expand_world` | `1` / `0` | Normal-model side expansion; experimental loaded-stage rear capture |
+| `[vr] expand_meshes` / `expand_world` | `1` / `1` | Normal-model side expansion; experimental loaded-stage rear capture |
 | `[vr] msaa` | `4` | Antialiasing samples: 1, 2, 4 or 8 |
 | `[vr] supersample` | `100` | Eye-buffer resolution in percent; separate from world size |
 | `[vr] gamma` | `220` | sRGB eye-buffer compensation in percent; `100` disables it |
 | `[vr] brightness` | `90` | Converted-scene brightness in percent, 25–400; HUD and guns unchanged |
+| `[vr] master_volume` / `music_volume` / `effects_volume` | `100` / `100` / `100` | Game audio percentages, 0–100; effects include voices |
 | `[vr] hudsharp` | `1` (if absent) | Sharp HUD texture filtering |
 | `[vr] haptic` / `focusgame` | `1` / `1` | Shot feedback and initial native-window focus |
 | `[vr] autozoom` | `0` | Automatic cinematic zoom disabled in the shipped configuration |
@@ -240,7 +279,7 @@ Use whichever flags you want. For a viewer reconnect, use `--infinite-lives`, `-
 
 Rapid fire defaults to **4 shots/sec**; whole-number rates 1–30 are accepted. Native timing and weapon handling can lower the actual rate. Reload gestures take priority; menus, pause, cutscenes, inactive players and stale input receive no repeated shots. The rate override does not enable rapid fire by itself. Recoil/haptics retain their trigger-press behavior.
 
-Cheat requests expire after 500 ms without a viewer heartbeat. Native lives/ammo flags and the free-play value return to their previous settings on disable, viewer exit or expiry; invincibility then lets native damage run normally. Credit counts and game files are not rewritten. Unsupported instruction signatures leave the affected feature unavailable and produce a log entry. Rebuild and restart both game and viewer together when updating cheat support. Full-game attack and continue coverage still needs runtime qualification.
+While the viewer heartbeat is fresh, lives/ammo and free-play settings override the native settings: `0` forces off, `1` forces on, for both players. Changing an option to `0` does not restore a pre-enabled native cheat. The bridge saves prior native values when the viewer takes ownership, restores them on viewer exit or heartbeat expiry (500 ms), and captures them again on reconnect. Invincibility off lets native damage run normally. Credit counts are not rewritten, and the bridge does not edit save files. Unsupported instruction signatures leave the affected feature unavailable and produce a log entry. Rebuild and restart both game and viewer together when updating cheat support. Full-game attack and continue coverage still needs runtime qualification.
 
 Implementation and test evidence: [docs/cheats.md](docs/cheats.md).
 

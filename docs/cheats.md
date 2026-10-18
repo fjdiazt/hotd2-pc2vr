@@ -12,7 +12,7 @@ Invincibility detours both entries before that work. Their first five bytes are 
 
 The native free-play DWORD at `0x9C8E70` controls credit admission. With value `1`, shared-pool admission at `0x406E10`, per-player admission at `0x406E70`, and availability at `0x406ED0` accept play without deducting credits. The bridge validates the corresponding reads/comparisons before owning this value.
 
-The first enable saves the original DWORD. Active requests refresh free play to `1`; disable, viewer exit and heartbeat expiry restore the saved value. The mod does not refill credit pools, change lives, synthesize Start presses or alter the continue countdown.
+The first fresh viewer request saves the original DWORD, including when infinite continues is off. Fresh requests force free play to `1` when enabled or `0` when disabled; viewer exit and heartbeat expiry restore the saved value. Lives/ammo use the same explicit override semantics for both players. Toggling settings during one connection does not replace the saved baseline. The mod does not refill credit pools, change lives, synthesize Start presses or alter the continue countdown.
 
 ## Verification
 
