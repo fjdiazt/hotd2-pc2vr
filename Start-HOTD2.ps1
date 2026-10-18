@@ -34,8 +34,7 @@ param(
     [int]$StartStage,
     [int]$StartScene,
     [switch]$ContinueGame,
-    [switch]$NoContinueGame,
-    [switch]$SaveCheckpoint
+    [switch]$NoContinueGame
 )
 $ErrorActionPreference = 'Stop'
 if ($Window -and $NoWindow) { throw 'Choose either -Window or -NoWindow.' }
@@ -52,12 +51,6 @@ if ($PSBoundParameters.ContainsKey('StartStage') -and ($StartStage -lt 1 -or $St
 if ($PSBoundParameters.ContainsKey('StartScene') -and ($StartScene -lt 0 -or $StartScene -gt 255)) { throw "Invalid scene $StartScene" }
 if ($PSBoundParameters.ContainsKey('StartScene') -and !$PSBoundParameters.ContainsKey('StartStage')) { throw '-StartScene requires -StartStage.' }
 $out = Join-Path $PSScriptRoot 'build'
-if ($SaveCheckpoint) {
-    if ($PSBoundParameters.Count -ne 1) { throw '-SaveCheckpoint must be used alone.' }
-    if (!(Test-Path "$out\HOTD2VR.exe")) { throw 'Run build.ps1 first.' }
-    & "$out\HOTD2VR.exe" --save-checkpoint
-    exit $LASTEXITCODE
-}
 if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
 if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) { throw 'Unsupported HOTD2 executable; no process started.' }
