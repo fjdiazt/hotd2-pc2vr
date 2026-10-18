@@ -5,6 +5,7 @@
 
 typedef IDirectDrawSurface7 *(*HotdPauseTexture)(const Vc2Vertex *);
 typedef struct { float x,y,z; DWORD colour,specular; float u,v; } HotdPauseVertex;
+typedef struct { BYTE zfunc,z_enable,color_key,mag_filter,min_filter,mip_filter; } HotdPauseRaster;
 
 static DWORD hotd_pause_argb(DWORD rgba)
 {return (rgba&0xFF00FF00u)|((rgba&255u)<<16)|((rgba>>16)&255u);}
@@ -18,7 +19,7 @@ static int hotd_pause_same_draw(const Vc2Vertex *a,const Vc2Vertex *b)
 
 /* Called inside the native scene, after its pause UI. No framebuffer copies. */
 static HRESULT hotd_pause_render(IDirect3DDevice7 *device,const Vc2Frame *scene,
-    const D3DMATRIX *projection,const D3DVIEWPORT7 *viewport,HotdPauseTexture texture)
+    const D3DMATRIX *projection,const D3DVIEWPORT7 *viewport,const HotdPauseRaster *raster,HotdPauseTexture texture)
 {
     HotdPauseVertex batch[1536];
     D3DMATRIX saved[3],identity={0},hud={0};
@@ -47,22 +48,21 @@ static HRESULT hotd_pause_render(IDirect3DDevice7 *device,const Vc2Frame *scene,
     PAUSE_RS(FOGTABLEMODE,D3DFOG_NONE);PAUSE_RS(FOGVERTEXMODE,D3DFOG_NONE);
     PAUSE_RS(CLIPPING,TRUE);PAUSE_RS(CLIPPLANEENABLE,0);PAUSE_RS(STENCILENABLE,FALSE);
     PAUSE_RS(FILLMODE,D3DFILL_SOLID);PAUSE_RS(SHADEMODE,D3DSHADE_GOURAUD);
-    PAUSE_RS(ZFUNC,D3DCMP_LESSEQUAL);PAUSE_RS(ZBIAS,0);PAUSE_RS(WRAP0,0);
-    PAUSE_RS(TEXTUREPERSPECTIVE,TRUE);PAUSE_RS(COLORKEYENABLE,TRUE);
+    PAUSE_RS(ZBIAS,0);PAUSE_RS(WRAP0,0);
+    PAUSE_RS(TEXTUREPERSPECTIVE,TRUE);
     PAUSE_TS(1,COLOROP,D3DTOP_DISABLE);
     PAUSE_TS(0,TEXCOORDINDEX,0);PAUSE_TS(0,TEXTURETRANSFORMFLAGS,D3DTTFF_DISABLE);
     PAUSE_TS(0,COLORARG1,D3DTA_TEXTURE);PAUSE_TS(0,COLORARG2,D3DTA_DIFFUSE);
     PAUSE_TS(0,ALPHAARG1,D3DTA_TEXTURE);PAUSE_TS(0,ALPHAARG2,D3DTA_DIFFUSE);
-    PAUSE_TS(0,MAGFILTER,D3DTFG_LINEAR);PAUSE_TS(0,MINFILTER,D3DTFN_LINEAR);
-    PAUSE_TS(0,MIPFILTER,D3DTFP_NONE);
     PAUSE_CALL(IDirect3DDevice7_Clear(device,0,NULL,D3DCLEAR_TARGET|D3DCLEAR_ZBUFFER,0,1,0));
     for(unsigned start=0;start<scene->vertex_count;) {
         const Vc2Vertex *v=scene->verts+start;
+        const HotdPauseRaster *r=raster+start/3;
         unsigned end=start+3,style=v->style,overlay=v->depth>=1;
         IDirectDrawSurface7 *surface=v->atlas_w>0?texture(v):NULL;
         if(v->atlas_w>0 && !surface){hr=E_FAIL;goto restore;}
         while(end<scene->vertex_count && end-start+3<=sizeof(batch)/sizeof(batch[0]) &&
-              hotd_pause_same_draw(v,scene->verts+end))end+=3;
+              hotd_pause_same_draw(v,scene->verts+end) && !memcmp(r,raster+end/3,sizeof(*r)))end+=3;
         PAUSE_CALL(IDirect3DDevice7_SetTransform(device,D3DTRANSFORMSTATE_PROJECTION,
             (D3DMATRIX *)(overlay?&hud:projection)));
         PAUSE_CALL(IDirect3DDevice7_SetTexture(device,0,surface));
@@ -70,7 +70,9 @@ static HRESULT hotd_pause_render(IDirect3DDevice7 *device,const Vc2Frame *scene,
         PAUSE_TS(0,ALPHAOP,!surface?D3DTOP_SELECTARG2:
             style&HOTD_DIFFUSE_ALPHA?D3DTOP_MODULATE:D3DTOP_SELECTARG1);
         PAUSE_TS(0,ADDRESSU,1+(v->address&3u));PAUSE_TS(0,ADDRESSV,1+((v->address>>2)&3u));
-        PAUSE_RS(ZENABLE,!overlay);PAUSE_RS(ZWRITEENABLE,!overlay && !(style&HOTD_NO_ZWRITE));
+        PAUSE_TS(0,MAGFILTER,r->mag_filter);PAUSE_TS(0,MINFILTER,r->min_filter);PAUSE_TS(0,MIPFILTER,r->mip_filter);
+        PAUSE_RS(COLORKEYENABLE,r->color_key);PAUSE_RS(ZFUNC,r->zfunc);
+        PAUSE_RS(ZENABLE,overlay?D3DZB_FALSE:r->z_enable);PAUSE_RS(ZWRITEENABLE,!overlay && !(style&HOTD_NO_ZWRITE));
         DWORD cull=(style&HOTD_CULL_MASK)>>HOTD_CULL_SHIFT;
         PAUSE_RS(CULLMODE,overlay || !cull?D3DCULL_NONE:cull);
         PAUSE_RS(ALPHABLENDENABLE,(style&255u)!=0);

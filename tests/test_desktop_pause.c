@@ -48,7 +48,7 @@ static void render(void)
     assert(SUCCEEDED(IDirect3DDevice7_SetTextureStageState(device,0,D3DTSS_ADDRESSU,D3DTADDRESS_MIRROR)));
     assert(SUCCEEDED(IDirect3DDevice7_SetTexture(device,0,test_texture)));
     assert(SUCCEEDED(IDirect3DDevice7_BeginScene(device)));
-    HRESULT hr=hotd_pause_render(device,frame,&pause_projection,&pause_viewport,lookup);
+    HRESULT hr=hotd_pause_render(device,frame,&pause_projection,&pause_viewport,pause_raster,lookup);
     assert(missing_texture?FAILED(hr):SUCCEEDED(hr));
     assert(SUCCEEDED(IDirect3DDevice7_EndScene(device)));
     assert(SUCCEEDED(IDirect3DDevice7_GetTransform(device,D3DTRANSFORMSTATE_WORLD,&after)));
@@ -86,6 +86,8 @@ int main(void)
         *(DWORD *)((BYTE *)locked.lpSurface+y*locked.lPitch+x*4)=x?0xFF00FF00:0xFFFF0000;
     assert(SUCCEEDED(IDirectDrawSurface7_Unlock(test_texture,NULL)));
     frame=calloc(1,sizeof(*frame));assert(frame);frame->units_per_metre=10;
+    for(unsigned i=0;i<VC2_MAX_VERTS/3;i++)pause_raster[i]=(HotdPauseRaster){
+        .zfunc=D3DCMP_LESSEQUAL,.z_enable=D3DZB_TRUE,.mag_filter=D3DTFG_LINEAR,.min_filter=D3DTFN_LINEAR,.mip_filter=D3DTFP_NONE};
     identity._11=identity._22=identity._33=identity._44=1;
     pause_projection=identity;pause_viewport=(D3DVIEWPORT7){.dwWidth=64,.dwHeight=64,.dvMaxZ=1};
     triangle(0,0xFF0000FF,.5f);render();assert(sample(32,32)==0xFF0000);
@@ -98,6 +100,10 @@ int main(void)
     render();assert(sample(32,32)==0xFF0000);
     /* Depth testing retains the nearer red triangle. */
     triangle(3,0xFF00FF00,.8f);render();assert(sample(32,32)==0xFF0000);
+    /* Materials can deliberately compare greater/equal instead of less/equal. */
+    pause_raster[1].zfunc=D3DCMP_GREATER;render();assert(sample(32,32)==0x00FF00);
+    pause_raster[1].zfunc=D3DCMP_EQUAL;render();assert(sample(32,32)==0xFF0000);
+    pause_raster[1].zfunc=D3DCMP_LESSEQUAL;
     /* A retained HUD triangle uses its original panel coordinates over the world. */
     triangle(3,0xFFFF0000,20);
     for(unsigned i=3;i<6;i++){frame->verts[i].x*=10;frame->verts[i].y*=7.5f;frame->verts[i].depth=1;}

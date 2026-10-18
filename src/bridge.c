@@ -33,6 +33,7 @@ static unsigned hud_count;
 static int pause_scene_ready;
 static D3DMATRIX pause_projection;
 static D3DVIEWPORT7 pause_viewport;
+static HotdPauseRaster desktop_raster[VC2_MAX_VERTS/3],hud_raster[HOTD_MAX_HUD_VERTS/3],pause_raster[VC2_MAX_VERTS/3];
 static HotdLens lens;
 static unsigned lens_valid;
 static unsigned capture_kind,shot_group;
@@ -724,6 +725,8 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     Texture *texture;
     DrawStyle style;
     DWORD z_enable=0;
+    HotdPauseRaster raster={.zfunc=D3DCMP_LESSEQUAL,.z_enable=D3DZB_TRUE,
+        .mag_filter=D3DTFG_LINEAR,.min_filter=D3DTFN_LINEAR,.mip_filter=D3DTFP_NONE};
     Vc2Vertex recent_vertices[3];
     unsigned recent_indices[3]={~0u,~0u,~0u},recent_age[3]={0},vertex_clock=0;
     int hud=0,reuse=indices || type!=D3DPT_TRIANGLELIST;
@@ -745,6 +748,13 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
     hud=(fvf&D3DFVF_POSITION_MASK)==D3DFVF_XYZRHW && !capture_kind && !capture_model;
     IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_ZENABLE,&z_enable);
     if(!z_enable && !hud)return;
+    raster.z_enable=(BYTE)z_enable;
+    raster.zfunc=(BYTE)read_state(device,D3DRENDERSTATE_ZFUNC,D3DCMP_LESSEQUAL);
+    raster.color_key=(BYTE)read_state(device,D3DRENDERSTATE_COLORKEYENABLE,FALSE);
+    DWORD filter;
+#define FILTER(name,field) if(SUCCEEDED(IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_##name,&filter)))raster.field=(BYTE)filter
+    FILTER(MAGFILTER,mag_filter);FILTER(MINFILTER,min_filter);FILTER(MIPFILTER,mip_filter);
+#undef FILTER
     texture=capture_texture(device);
     trace_draw_state(device,fvf,texture,data);
     style=read_draw_style(device,fvf);
@@ -787,8 +797,8 @@ static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fv
             }
         }
         if(k!=3){dropped++;continue;}
-        if(hud){memcpy(hud_vertices+hud_count,tri,sizeof(tri));hud_count+=3;}
-        else {memcpy(vertices+count,tri,sizeof(tri));count+=3;}
+        if(hud){hud_raster[hud_count/3]=raster;memcpy(hud_vertices+hud_count,tri,sizeof(tri));hud_count+=3;}
+        else {desktop_raster[count/3]=raster;memcpy(vertices+count,tri,sizeof(tri));count+=3;}
     }
 }
 
@@ -1116,7 +1126,7 @@ static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
 static HRESULT WINAPI end_scene(IDirect3DDevice7 *self)
 {
     if(pause_scene_ready && input_ready && *(short *)(game_base+0x5A1A00)) {
-        HRESULT hr=hotd_pause_render(self,frame,&pause_projection,&pause_viewport,pause_texture);
+        HRESULT hr=hotd_pause_render(self,frame,&pause_projection,&pause_viewport,pause_raster,pause_texture);
         static int reported;
         if(FAILED(hr) && !reported){reported=1;logline("desktop pause replay failed: %08lx",(unsigned long)hr);}
     }
@@ -1160,6 +1170,8 @@ static void publish_frame(void)
         unsigned hud_n=hud_count<VC2_MAX_VERTS-count?hud_count:VC2_MAX_VERTS-count;
         dropped+=(hud_count-hud_n)/3;
         memcpy(frame->verts+count,hud_vertices,hud_n*sizeof(hud_vertices[0]));
+        memcpy(pause_raster,desktop_raster,count/3*sizeof(*pause_raster));
+        memcpy(pause_raster+count/3,hud_raster,hud_n/3*sizeof(*pause_raster));
         frame->vertex_count=count+hud_n;
         frame->reserved[0]=count;frame->reserved[2]=count+1;
         frame->lens=lens;frame->lens_valid=lens_valid;
