@@ -1,25 +1,25 @@
 /* Viewer settings use extracted native glyphs without changing native resource ownership. */
-static int g_menuPocOpen,g_menuPocPage=-1,g_menuPocRow;
-static int g_menuPocDirty=1,g_menuPocArmed=1,g_menuPocBlock,g_menuPocResetPending;
-static unsigned g_menuPocPrevious;
-static BYTE g_menuPocFont[128][32][32][4];
-static DWORD g_menuPocPixels[480][640];
-static ID3D11Texture2D *g_menuPocTexture;
-static ID3D11ShaderResourceView *g_menuPocSRV;
-static ID3D11BlendState *g_menuPocBlend;
-static const char *const menuPocGroups[]={"DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","ADVANCED","RESET DEFAULTS","QUIT GAME"};
-static const unsigned menuPocRootCount=sizeof(menuPocGroups)/sizeof(menuPocGroups[0]);
+static int g_vrMenuOpen,g_vrMenuPage=-1,g_vrMenuRow;
+static int g_vrMenuDirty=1,g_vrMenuArmed=1,g_vrMenuBlock,g_vrMenuResetPending;
+static unsigned g_vrMenuPrevious;
+static BYTE g_vrMenuFont[128][32][32][4];
+static DWORD g_vrMenuPixels[480][640];
+static ID3D11Texture2D *g_vrMenuTexture;
+static ID3D11ShaderResourceView *g_vrMenuSRV;
+static ID3D11BlendState *g_vrMenuBlend;
+static const char *const vrMenuGroups[]={"DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","ADVANCED","RESET DEFAULTS","QUIT GAME"};
+static const unsigned vrMenuRootCount=sizeof(vrMenuGroups)/sizeof(vrMenuGroups[0]);
 enum { MENU_INT,MENU_UNSIGNED,MENU_SCALE,MENU_CHEAT,MENU_BRIDGE };
 enum { MENU_RESTART_VIEWER=1,MENU_RESTART_GAME=2,MENU_SHADER=4,MENU_POWER2=8,MENU_CAPTURE=16 };
 typedef struct {
     const char *label,*key;void *target;int min,max,step,kind,flags;
     unsigned mask;int value,initial,defaults;
-} MenuPocItem;
+} VrMenuItem;
 /* Shipped INI defaults; absent keys use loadCfg defaults. */
 #define MI(label,key,target,lo,hi,step,kind,flags,def) {label,key,target,lo,hi,step,kind,flags,0,0,0,def}
 #define MB(label,key,target,def) MI(label,key,target,0,1,1,MENU_INT,0,def)
 #define MC(label,key,mask) {label,key,NULL,0,1,1,MENU_CHEAT,0,mask,0,0,0}
-static MenuPocItem menuPocItems[6][16]={
+static VrMenuItem vrMenuItems[6][16]={
     {MI("World scale percent","worldscale",&g_cfgWorldScale,10,1000,5,MENU_SCALE,0,125),
      MI("Brightness percent","brightness",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
      MI("Gamma percent","gamma",&g_cfgGamma,0,300,5,MENU_INT,MENU_SHADER,220),
@@ -64,14 +64,14 @@ static MenuPocItem menuPocItems[6][16]={
 #undef MI
 #undef MB
 #undef MC
-static const unsigned menuPocCounts[]={8,7,3,16,6,6};
-static const char *g_menuPocError;
+static const unsigned vrMenuCounts[]={8,7,3,16,6,6};
+static const char *g_vrMenuError;
 #define MENU_TOGGLE 0x80000000u
 
-static void menuPocInit(void)
+static void vrMenuInit(void)
 {
-    for(unsigned group=0;group<6;group++)for(unsigned row=0;row<menuPocCounts[group];row++) {
-        MenuPocItem *item=&menuPocItems[group][row];int value;
+    for(unsigned group=0;group<6;group++)for(unsigned row=0;row<vrMenuCounts[group];row++) {
+        VrMenuItem *item=&vrMenuItems[group][row];int value;
         switch(item->kind) {
         case MENU_SCALE:value=(int)lroundf(*(float *)item->target*100);break;
         case MENU_UNSIGNED:value=(int)*(unsigned *)item->target;break;
@@ -81,11 +81,11 @@ static void menuPocInit(void)
         }
         item->value=item->initial=value;
     }
-    g_menuPocResetPending=0;g_menuPocError=NULL;g_menuPocDirty=1;
+    g_vrMenuResetPending=0;g_vrMenuError=NULL;g_vrMenuDirty=1;
 }
 
 /* Shader constants are baked in. Swap all affected shaders together or retain the old set. */
-static int menuPocShaders(void)
+static int vrMenuShaders(void)
 {
     if(!g_dev)return 1;
     const char *sources[]={SRC,SRC_OV,SRC_TEX};
@@ -107,9 +107,9 @@ static int menuPocShaders(void)
     return ok;
 }
 
-static int menuPocSet(MenuPocItem *item,int next)
+static int vrMenuSet(VrMenuItem *item,int next)
 {
-    if(g_previewOnly){g_menuPocError="READ ONLY PREVIEW";return 0;}
+    if(g_previewOnly){g_vrMenuError="READ ONLY PREVIEW";return 0;}
     int previous=item->value;
     if(next==previous)return 1;
     if(!(item->flags&(MENU_RESTART_VIEWER|MENU_RESTART_GAME))) {
@@ -121,16 +121,16 @@ static int menuPocSet(MenuPocItem *item,int next)
         }
         if(item->flags&MENU_SHADER) {
             float oldGamma=g_gammaOut;g_gammaOut=g_cfgGamma>0?g_cfgGamma/100.0f:1;
-            if(!menuPocShaders()) {
+            if(!vrMenuShaders()) {
                 *(int *)item->target=previous;g_gammaOut=oldGamma;
-                g_menuPocError="CHANGE FAILED   TRY AGAIN";return 0;
+                g_vrMenuError="CHANGE FAILED   TRY AGAIN";return 0;
             }
         }
         pushCheats();
     }
-    item->value=next;g_menuPocError=NULL;g_menuPocDirty=1;return 1;
+    item->value=next;g_vrMenuError=NULL;g_vrMenuDirty=1;return 1;
 }
-static void menuPocChange(MenuPocItem *item,int direction)
+static void vrMenuChange(VrMenuItem *item,int direction)
 {
     int previous=item->value;long long next;
     if(item->max==1)next=!previous;
@@ -138,26 +138,26 @@ static void menuPocChange(MenuPocItem *item,int direction)
     else next=(long long)previous+direction*item->step;
     if(next<item->min)next=item->min;
     if(next>item->max)next=item->max;
-    menuPocSet(item,(int)next);
+    vrMenuSet(item,(int)next);
 }
-static void menuPocResetDefaults(void)
+static void vrMenuResetDefaults(void)
 {
-    if(g_previewOnly){g_menuPocError="READ ONLY PREVIEW";return;}
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<menuPocCounts[g];r++) {
-        MenuPocItem *item=&menuPocItems[g][r];
-        if(!menuPocSet(item,item->defaults)) {
-            g_menuPocError="RESET INCOMPLETE   TRY AGAIN";return;
+    if(g_previewOnly){g_vrMenuError="READ ONLY PREVIEW";return;}
+    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
+        VrMenuItem *item=&vrMenuItems[g][r];
+        if(!vrMenuSet(item,item->defaults)) {
+            g_vrMenuError="RESET INCOMPLETE   TRY AGAIN";return;
         }
     }
-    g_menuPocResetPending=1;g_menuPocError=NULL;g_menuPocDirty=1;
+    g_vrMenuResetPending=1;g_vrMenuError=NULL;g_vrMenuDirty=1;
 }
 
-static int menuPocSave(void)
+static int vrMenuSave(void)
 {
-    int dirty=g_menuPocResetPending;
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<menuPocCounts[g];r++)
-        dirty|=menuPocItems[g][r].value!=menuPocItems[g][r].initial;
-    if(!dirty){g_menuPocError=NULL;return 1;}
+    int dirty=g_vrMenuResetPending;
+    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
+        dirty|=vrMenuItems[g][r].value!=vrMenuItems[g][r].initial;
+    if(!dirty){g_vrMenuError=NULL;return 1;}
     if(g_previewOnly)return 1;
     char directory[MAX_PATH],temporary[MAX_PATH]={0},backup[MAX_PATH];
     WIN32_FILE_ATTRIBUTE_DATA before,now;
@@ -169,9 +169,9 @@ static int menuPocSave(void)
     slash[1]=0;
     if(!GetTempFileNameA(directory,"h2m",0,temporary))goto failed;
     if(exists && !CopyFileA(g_vrIniPath,temporary,FALSE))goto failed;
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<menuPocCounts[g];r++) {
-        MenuPocItem *item=&menuPocItems[g][r];char value[32];
-        if(item->value==item->initial && !g_menuPocResetPending)continue;
+    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
+        VrMenuItem *item=&vrMenuItems[g][r];char value[32];
+        if(item->value==item->initial && !g_vrMenuResetPending)continue;
         if(item->kind==MENU_SCALE)snprintf(value,sizeof(value),"%.2f",item->value/100.0);
         else snprintf(value,sizeof(value),"%d",item->value);
         if(!WritePrivateProfileStringA(item->kind==MENU_BRIDGE?"bridge":"vr",item->key,value,temporary))goto failed;
@@ -199,87 +199,87 @@ static int menuPocSave(void)
         note("Menu saved: %s\n",g_vrIniPath);
     }
     WritePrivateProfileStringA(NULL,NULL,NULL,g_vrIniPath);
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<menuPocCounts[g];r++)
-        menuPocItems[g][r].initial=menuPocItems[g][r].value;
-    g_menuPocResetPending=0;g_menuPocError=NULL;return 1;
+    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
+        vrMenuItems[g][r].initial=vrMenuItems[g][r].value;
+    g_vrMenuResetPending=0;g_vrMenuError=NULL;return 1;
 failed:
     error=GetLastError();if(temporary[0])DeleteFileA(temporary);
     note("Menu save failed: %lu (%s)\n",(unsigned long)error,g_vrIniPath);
-    g_menuPocError="SAVE FAILED   CLOSE AGAIN TO RETRY";g_menuPocDirty=1;return 0;
+    g_vrMenuError="SAVE FAILED   CLOSE AGAIN TO RETRY";g_vrMenuDirty=1;return 0;
 }
-static int menuPocClose(void)
+static int vrMenuClose(void)
 {
-    if(!menuPocSave())return 0;
-    g_menuPocOpen=0;g_menuPocBlock=1;return 1;
+    if(!vrMenuSave())return 0;
+    g_vrMenuOpen=0;g_vrMenuBlock=1;return 1;
 }
 
-static void menuPocQuitGame(void)
+static void vrMenuQuitGame(void)
 {
-    if(g_previewOnly){g_menuPocError="READ ONLY PREVIEW";return;}
+    if(g_previewOnly){g_vrMenuError="READ ONLY PREVIEW";return;}
     HWND window=g_frame?(HWND)(ULONG_PTR)g_frame->game_hwnd:NULL;
     DWORD owner=0;
     if(!window || !GetWindowThreadProcessId(window,&owner) || !owner || owner!=g_frame->game_pid) {
-        g_menuPocError="GAME WINDOW UNAVAILABLE";return;
+        g_vrMenuError="GAME WINDOW UNAVAILABLE";return;
     }
-    if(!menuPocSave())return;
+    if(!vrMenuSave())return;
     if(!PostMessageA(window,WM_CLOSE,0,0)) {
         note("Menu quit failed: %lu\n",(unsigned long)GetLastError());
-        g_menuPocError="QUIT FAILED   TRY AGAIN";return;
+        g_vrMenuError="QUIT FAILED   TRY AGAIN";return;
     }
-    g_menuPocBlock=1;g_menuPocError="QUIT REQUESTED";
+    g_vrMenuBlock=1;g_vrMenuError="QUIT REQUESTED";
 }
 
-static int menuPocLoadFont(void)
+static int vrMenuLoadFont(void)
 {
     char path[MAX_PATH];DWORD n=GetModuleFileNameA(NULL,path,sizeof(path));
     if(!n || n>=sizeof(path))return 0;
     while(n && path[n-1]!='\\')n--;
-    lstrcpynA(path+n,"menu-poc-font.rgba",sizeof(path)-n);
+    lstrcpynA(path+n,"menu-font.rgba",sizeof(path)-n);
     FILE *file=fopen(path,"rb");if(!file)return 0;
     char magic[4];
     int ok=fread(magic,1,4,file)==4 && !memcmp(magic,"H2PF",4) &&
-        fread(g_menuPocFont,1,sizeof(g_menuPocFont),file)==sizeof(g_menuPocFont) && fgetc(file)==EOF;
+        fread(g_vrMenuFont,1,sizeof(g_vrMenuFont),file)==sizeof(g_vrMenuFont) && fgetc(file)==EOF;
     fclose(file);return ok;
 }
 
 /* Menu owns input only while open or waiting for the closing press to release. */
-static int menuPocControl(unsigned input)
+static int vrMenuControl(unsigned input)
 {
-    if(!g_menuPocEnabled)return 0;
-    unsigned pressed=input&~g_menuPocPrevious;g_menuPocPrevious=input;
-    if(g_menuPocBlock){if(!input)g_menuPocBlock=0;return 1;}
+    if(!g_vrMenuEnabled)return 0;
+    unsigned pressed=input&~g_vrMenuPrevious;g_vrMenuPrevious=input;
+    if(g_vrMenuBlock){if(!input)g_vrMenuBlock=0;return 1;}
     if(pressed&MENU_TOGGLE) {
-        if(g_menuPocOpen)menuPocClose();
-        else {g_menuPocOpen=1;g_menuPocPage=-1;g_menuPocRow=0;g_menuPocArmed=1;g_menuPocDirty=1;}
+        if(g_vrMenuOpen)vrMenuClose();
+        else {g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=0;g_vrMenuArmed=1;g_vrMenuDirty=1;}
         return 1;
     }
-    if(!g_menuPocOpen)return 0;
-    if(g_menuPocArmed){if(!input)g_menuPocArmed=0;return 1;}
+    if(!g_vrMenuOpen)return 0;
+    if(g_vrMenuArmed){if(!input)g_vrMenuArmed=0;return 1;}
     if(pressed&VC2_BTN_BACK) {
-        if(g_menuPocPage>=0){g_menuPocRow=g_menuPocPage;g_menuPocPage=-1;}
-        g_menuPocDirty=1;return 1;
+        if(g_vrMenuPage>=0){g_vrMenuRow=g_vrMenuPage;g_vrMenuPage=-1;}
+        g_vrMenuDirty=1;return 1;
     }
-    unsigned count=g_menuPocPage<0?menuPocRootCount:menuPocCounts[g_menuPocPage];
-    if(pressed&VC2_BTN_UP)g_menuPocRow=(g_menuPocRow+(int)count-1)%(int)count;
-    if(pressed&VC2_BTN_DOWN)g_menuPocRow=(g_menuPocRow+1)%(int)count;
-    if((pressed&VC2_BTN_START) && g_menuPocPage<0) {
-        if(g_menuPocRow==6)menuPocResetDefaults();
-        else if(g_menuPocRow==7)menuPocQuitGame();
-        else {g_menuPocPage=g_menuPocRow;g_menuPocRow=0;}
-    } else if(g_menuPocPage>=0 && (pressed&(VC2_BTN_START|VC2_BTN_LEFT|VC2_BTN_RIGHT))) {
-        MenuPocItem *item=&menuPocItems[g_menuPocPage][g_menuPocRow];
-        menuPocChange(item,(pressed&VC2_BTN_LEFT)?-1:1);
+    unsigned count=g_vrMenuPage<0?vrMenuRootCount:vrMenuCounts[g_vrMenuPage];
+    if(pressed&VC2_BTN_UP)g_vrMenuRow=(g_vrMenuRow+(int)count-1)%(int)count;
+    if(pressed&VC2_BTN_DOWN)g_vrMenuRow=(g_vrMenuRow+1)%(int)count;
+    if((pressed&VC2_BTN_START) && g_vrMenuPage<0) {
+        if(g_vrMenuRow==6)vrMenuResetDefaults();
+        else if(g_vrMenuRow==7)vrMenuQuitGame();
+        else {g_vrMenuPage=g_vrMenuRow;g_vrMenuRow=0;}
+    } else if(g_vrMenuPage>=0 && (pressed&(VC2_BTN_START|VC2_BTN_LEFT|VC2_BTN_RIGHT))) {
+        VrMenuItem *item=&vrMenuItems[g_vrMenuPage][g_vrMenuRow];
+        vrMenuChange(item,(pressed&VC2_BTN_LEFT)?-1:1);
     }
-    if(pressed)g_menuPocDirty=1;
+    if(pressed)g_vrMenuDirty=1;
     return 1;
 }
 
-static void menuPocRect(int x,int y,int width,int height,DWORD colour)
+static void vrMenuRect(int x,int y,int width,int height,DWORD colour)
 {
     for(int py=y;py<y+height && py<480;py++)for(int px=x;px<x+width && px<640;px++)
-        if(px>=0 && py>=0)g_menuPocPixels[py][px]=colour;
+        if(px>=0 && py>=0)g_vrMenuPixels[py][px]=colour;
 }
-static void menuPocText(int x,int y,const char *text,float scale,DWORD colour)
+static void vrMenuText(int x,int y,const char *text,float scale,DWORD colour)
 {
     const int width=(int)(32*scale),height=(int)(32*scale),advance=(int)(16*scale);
     for(;*text;text++,x+=advance) {
@@ -287,8 +287,8 @@ static void menuPocText(int x,int y,const char *text,float scale,DWORD colour)
         for(int py=0;py<height;py++)for(int px=0;px<width;px++) {
             int dx=x+px,dy=y+py+(*text>='a' && *text<='z'?(int)(7*scale):0);
             if(dx<0||dx>=640||dy<0||dy>=480)continue;
-            const BYTE *source=g_menuPocFont[character][(int)(py/scale)][(int)(px/scale)];
-            DWORD previous=g_menuPocPixels[dy][dx];
+            const BYTE *source=g_vrMenuFont[character][(int)(py/scale)][(int)(px/scale)];
+            DWORD previous=g_vrMenuPixels[dy][dx];
             unsigned backgroundAlpha=previous>>24;
             unsigned coverage=source[3]*255+backgroundAlpha*(255-source[3]);
             unsigned alpha=(coverage+127)/255;
@@ -297,62 +297,62 @@ static void menuPocText(int x,int y,const char *text,float scale,DWORD colour)
                 unsigned value=source[c]*((colour>>(c*8))&255)/255;
                 if(coverage)result|=((value*source[3]*255+((previous>>(c*8))&255)*backgroundAlpha*(255-source[3]))/coverage)<<(c*8);
             }
-            g_menuPocPixels[dy][dx]=result;
+            g_vrMenuPixels[dy][dx]=result;
         }
     }
 }
-static void menuPocCanvas(void)
+static void vrMenuCanvas(void)
 {
     const DWORD white=0xFFE8E8E8,red=0xFF4646ED,grey=0xFF989898;
-    menuPocRect(0,0,640,480,0x8017191D); /* 50% panel opacity; text keeps its own coverage. */
-    menuPocRect(18,16,4,448,0xFF2424A4);
-    menuPocText(42,24,"VR SETTINGS",1.4f,white);
-    menuPocText(44,67,g_menuPocPage<0?"THE HOUSE OF THE DEAD 2":menuPocGroups[g_menuPocPage],.7f,grey);
-    menuPocRect(42,99,552,2,0xFF303077);
-    unsigned count=g_menuPocPage<0?menuPocRootCount:menuPocCounts[g_menuPocPage];
-    unsigned first=g_menuPocPage<0?0:(unsigned)g_menuPocRow/6*6;
-    for(unsigned row=first;row<count && (g_menuPocPage<0 || row<first+6);row++) {
-        int y=112+(int)(row-first)*(g_menuPocPage<0?32:43),selected=(int)row==g_menuPocRow;
-        if(selected){menuPocRect(34,y+(g_menuPocPage<0?7:11),4,23,red);menuPocRect(44,y+(g_menuPocPage<0?3:6),552,g_menuPocPage<0?30:35,0x8020202B);}
-        menuPocText(52,y,g_menuPocPage<0?menuPocGroups[row]:menuPocItems[g_menuPocPage][row].label,
-            g_menuPocPage<0?.9f:.85f,selected?red:white);
-        if(g_menuPocPage>=0) {
-            MenuPocItem *item=&menuPocItems[g_menuPocPage][row];char value[24];
+    vrMenuRect(0,0,640,480,0x8017191D); /* 50% panel opacity; text keeps its own coverage. */
+    vrMenuRect(18,16,4,448,0xFF2424A4);
+    vrMenuText(42,24,"VR SETTINGS",1.4f,white);
+    vrMenuText(44,67,g_vrMenuPage<0?"THE HOUSE OF THE DEAD 2":vrMenuGroups[g_vrMenuPage],.7f,grey);
+    vrMenuRect(42,99,552,2,0xFF303077);
+    unsigned count=g_vrMenuPage<0?vrMenuRootCount:vrMenuCounts[g_vrMenuPage];
+    unsigned first=g_vrMenuPage<0?0:(unsigned)g_vrMenuRow/6*6;
+    for(unsigned row=first;row<count && (g_vrMenuPage<0 || row<first+6);row++) {
+        int y=112+(int)(row-first)*(g_vrMenuPage<0?32:43),selected=(int)row==g_vrMenuRow;
+        if(selected){vrMenuRect(34,y+(g_vrMenuPage<0?7:11),4,23,red);vrMenuRect(44,y+(g_vrMenuPage<0?3:6),552,g_vrMenuPage<0?30:35,0x8020202B);}
+        vrMenuText(52,y,g_vrMenuPage<0?vrMenuGroups[row]:vrMenuItems[g_vrMenuPage][row].label,
+            g_vrMenuPage<0?.9f:.85f,selected?red:white);
+        if(g_vrMenuPage>=0) {
+            VrMenuItem *item=&vrMenuItems[g_vrMenuPage][row];char value[24];
             if(item->max==1)lstrcpyA(value,item->value?"ON":"OFF");
             else snprintf(value,sizeof(value),"%d",item->value);
-            menuPocText(500,y,value,.85f,selected?red:white);
+            vrMenuText(500,y,value,.85f,selected?red:white);
         }
     }
     const char *hint="APPLIES LIVE   SAVES ON CLOSE";
-    if(g_menuPocPage<0 && g_menuPocRow==6)
-        hint=g_menuPocResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";
-    if(g_menuPocPage<0 && g_menuPocRow==7)hint="SAVE OPTIONS AND QUIT GAME";
-    if(g_menuPocPage>=0) {
-        int flags=menuPocItems[g_menuPocPage][g_menuPocRow].flags;
+    if(g_vrMenuPage<0 && g_vrMenuRow==6)
+        hint=g_vrMenuResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";
+    if(g_vrMenuPage<0 && g_vrMenuRow==7)hint="SAVE OPTIONS AND QUIT GAME";
+    if(g_vrMenuPage>=0) {
+        int flags=vrMenuItems[g_vrMenuPage][g_vrMenuRow].flags;
         if(flags&MENU_RESTART_VIEWER)hint="RESTART VIEWER TO APPLY";
         if(flags&MENU_RESTART_GAME)hint="RESTART GAME TO APPLY";
         if((flags&MENU_CAPTURE) && g_nativePaused)hint="APPLIES WHEN GAME RESUMES";
     }
-    menuPocText(48,380,g_menuPocError?g_menuPocError:g_previewOnly?"READ ONLY PREVIEW":hint,.65f,grey);
-    if(g_menuPocPage>=0 && count>6){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/6+1,(count+5)/6);
-        menuPocText(440,72,page,.6f,grey);}
-    menuPocRect(42,418,552,1,0xFF303077);
-    menuPocText(44,427,"STICK NAVIGATE   TRIGGER SELECT   B BACK",.65f,white);
-    menuPocText(44,451,"LEFT STICK CLICK OPEN CLOSE   A PAUSE RESUME",.6f,grey);
+    vrMenuText(48,380,g_vrMenuError?g_vrMenuError:g_previewOnly?"READ ONLY PREVIEW":hint,.65f,grey);
+    if(g_vrMenuPage>=0 && count>6){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/6+1,(count+5)/6);
+        vrMenuText(440,72,page,.6f,grey);}
+    vrMenuRect(42,418,552,1,0xFF303077);
+    vrMenuText(44,427,"STICK NAVIGATE   TRIGGER SELECT   B BACK",.65f,white);
+    vrMenuText(44,451,"LEFT STICK CLICK OPEN CLOSE   A PAUSE RESUME",.6f,grey);
 }
-static void menuPocDraw(void)
+static void vrMenuDraw(void)
 {
-    if(!g_menuPocEnabled || !g_menuPocOpen || g_inScope)return;
-    if(!g_menuPocTexture) {
+    if(!g_vrMenuEnabled || !g_vrMenuOpen || g_inScope)return;
+    if(!g_vrMenuTexture) {
         D3D11_TEXTURE2D_DESC desc={0};desc.Width=640;desc.Height=480;desc.MipLevels=desc.ArraySize=1;
         desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;desc.SampleDesc.Count=1;desc.Usage=D3D11_USAGE_DYNAMIC;
         desc.BindFlags=D3D11_BIND_SHADER_RESOURCE;desc.CPUAccessFlags=D3D11_CPU_ACCESS_WRITE;
-        if(FAILED(ID3D11Device_CreateTexture2D(g_dev,&desc,NULL,&g_menuPocTexture)) ||
-           FAILED(ID3D11Device_CreateShaderResourceView(g_dev,(ID3D11Resource *)g_menuPocTexture,NULL,&g_menuPocSRV)))
-            die("menu POC texture");
-        g_menuPocDirty=1;
+        if(FAILED(ID3D11Device_CreateTexture2D(g_dev,&desc,NULL,&g_vrMenuTexture)) ||
+           FAILED(ID3D11Device_CreateShaderResourceView(g_dev,(ID3D11Resource *)g_vrMenuTexture,NULL,&g_vrMenuSRV)))
+            die("menu texture");
+        g_vrMenuDirty=1;
     }
-    if(!g_menuPocBlend) {
+    if(!g_vrMenuBlend) {
         D3D11_BLEND_DESC blend={0};
         blend.RenderTarget[0].BlendEnable=TRUE;
         blend.RenderTarget[0].SrcBlend=D3D11_BLEND_SRC_ALPHA;
@@ -362,14 +362,14 @@ static void menuPocDraw(void)
         blend.RenderTarget[0].DestBlendAlpha=D3D11_BLEND_INV_SRC_ALPHA;
         blend.RenderTarget[0].BlendOpAlpha=D3D11_BLEND_OP_ADD;
         blend.RenderTarget[0].RenderTargetWriteMask=D3D11_COLOR_WRITE_ENABLE_ALL;
-        if(FAILED(ID3D11Device_CreateBlendState(g_dev,&blend,&g_menuPocBlend)))die("menu blend state");
+        if(FAILED(ID3D11Device_CreateBlendState(g_dev,&blend,&g_vrMenuBlend)))die("menu blend state");
     }
     D3D11_MAPPED_SUBRESOURCE mapped;
-    if(g_menuPocDirty) {
-        menuPocCanvas();
-        if(FAILED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_menuPocTexture,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)))return;
-        for(unsigned y=0;y<480;y++)memcpy((BYTE *)mapped.pData+y*mapped.RowPitch,g_menuPocPixels[y],640*4);
-        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_menuPocTexture,0);g_menuPocDirty=0;
+    if(g_vrMenuDirty) {
+        vrMenuCanvas();
+        if(FAILED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)))return;
+        for(unsigned y=0;y<480;y++)memcpy((BYTE *)mapped.pData+y*mapped.RowPitch,g_vrMenuPixels[y],640*4);
+        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0);g_vrMenuDirty=0;
     }
     if(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_cbRes,0,D3D11_MAP_WRITE_DISCARD,0,&mapped))) {
         const float res[4]={640,480,0,0};memcpy(mapped.pData,res,sizeof(res));
@@ -377,13 +377,13 @@ static void menuPocDraw(void)
     }
     UINT stride=sizeof(TexVtx),offset=0;
     ID3D11DeviceContext_OMSetDepthStencilState(g_ctx,g_dssUI,0);
-    ID3D11DeviceContext_OMSetBlendState(g_ctx,g_menuPocBlend,NULL,0xFFFFFFFF);
+    ID3D11DeviceContext_OMSetBlendState(g_ctx,g_vrMenuBlend,NULL,0xFFFFFFFF);
     ID3D11DeviceContext_IASetInputLayout(g_ctx,g_ilTex);
     ID3D11DeviceContext_IASetVertexBuffers(g_ctx,0,1,&g_scrVB,&stride,&offset);
     ID3D11DeviceContext_VSSetShader(g_ctx,g_vsTex,NULL,0);
     ID3D11DeviceContext_PSSetShader(g_ctx,g_psTex,NULL,0);
     ID3D11DeviceContext_PSSetConstantBuffers(g_ctx,1,1,&g_cbRes);
-    ID3D11DeviceContext_PSSetShaderResources(g_ctx,0,1,&g_menuPocSRV);
+    ID3D11DeviceContext_PSSetShaderResources(g_ctx,0,1,&g_vrMenuSRV);
     ID3D11DeviceContext_PSSetSamplers(g_ctx,0,1,&g_samp);
     ID3D11DeviceContext_Draw(g_ctx,6,0);
     ID3D11DeviceContext_OMSetBlendState(g_ctx,NULL,NULL,0xFFFFFFFF);

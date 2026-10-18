@@ -184,7 +184,7 @@ static int g_cfgExpandMeshes = 1;
 static int g_cfgExpandWorld;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
-static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_menuPocEnabled;
+static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_vrMenuEnabled;
 static int g_cfgSwapPlayerHud=1;
 static int g_cfgBrightness = 90;
 static int g_cfgGamma = 220;      /* [vr] gamma: linearise for the sRGB eye buffer, percent; 100 = off */
@@ -293,7 +293,7 @@ static void loadCfg(void)
     while (n > 0 && path[n - 1] != '\\') n--;
     lstrcpyA(path + n, "HOTD2VR.ini");
     readGraphicsFlags(path);
-    g_menuPocEnabled=GetPrivateProfileIntA("vr","menu",1,path)!=0;
+    g_vrMenuEnabled=GetPrivateProfileIntA("vr","menu",1,path)!=0;
     g_cheatFlags=readCheats(path);
     g_cfgMasterVolume=readAudioVolume(path,"master_volume");
     g_cfgMusicVolume=readAudioVolume(path,"music_volume");
@@ -1452,7 +1452,7 @@ static void uploadOverlay(void)
 }
 
 static void drawGun(const float *vp);
-#include "menu_poc.h"
+#include "vr_menu.h"
 
 /* laser, hit marker and the floating screen; call right after drawWith, with
  * view * proj only - all of it lives in local (metre) space, not game space */
@@ -1497,7 +1497,7 @@ static void drawUI(const float *vp)
         ID3D11DeviceContext_Draw(g_ctx, g_ovCount, 0);
         ID3D11DeviceContext_OMSetBlendState(g_ctx, NULL, NULL, 0xFFFFFFFF);
     }
-    menuPocDraw();
+    vrMenuDraw();
     drawGun(vp);
 }
 
@@ -2017,7 +2017,7 @@ static void releaseGraphics(void)
     RELEASE(g_scopeVB); RELEASE(g_cbScope); RELEASE(g_vsScope); RELEASE(g_psScope);
     RELEASE(g_gunVB); RELEASE(g_gunSRV); RELEASE(g_vsGun); RELEASE(g_psGun); RELEASE(g_dssGun);
     RELEASE(g_atlSRV); RELEASE(g_atlTex); RELEASE(g_scrSRV); RELEASE(g_scrTex);
-    RELEASE(g_menuPocSRV); RELEASE(g_menuPocTexture); RELEASE(g_menuPocBlend);
+    RELEASE(g_vrMenuSRV); RELEASE(g_vrMenuTexture); RELEASE(g_vrMenuBlend);
     RELEASE(g_scrVB); RELEASE(g_vsTex); RELEASE(g_psTex); RELEASE(g_ilTex);
     RELEASE(g_samp); RELEASE(g_cbRes); RELEASE(g_blendAdd);
     RELEASE(g_ovVB); RELEASE(g_vb); RELEASE(g_cb); RELEASE(g_vs); RELEASE(g_ps);
@@ -2716,7 +2716,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         if(menuHorizontal[h]==VC2_BTN_UP)buttons|=VC2_BTN_RIGHT;
         if(menuHorizontal[h]==VC2_BTN_DOWN)buttons|=VC2_BTN_LEFT;
     }
-    if(g_menuPocEnabled) {
+    if(g_vrMenuEnabled) {
         unsigned input=buttons;
         if(bsettings.isActive && bsettings.currentState)input|=MENU_TOGGLE;
         for(h=0;h<2;h++) {
@@ -2724,7 +2724,7 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
             if(bback[h].isActive && bback[h].currentState)input|=VC2_BTN_BACK;
             if(bpause[h].isActive && bpause[h].currentState)input|=VC2_BTN_PAUSE;
         }
-        int owned=menuPocControl(input);
+        int owned=vrMenuControl(input);
         if(owned) {
             g_gunPose=poses[1].pose;g_gun2Pose=poses[0].pose;
             g_gunValid=poseValid[1];g_gun2Valid=poseValid[0];g_ovCount=0;
@@ -3382,12 +3382,12 @@ static LRESULT CALLBACK wp(HWND h, UINT m, WPARAM w, LPARAM l)
         return 0;
     case WM_MOUSEWHEEL: w_speed *= ((short)HIWORD(w) > 0) ? 1.4f : 0.71f; return 0;
     case WM_KEYDOWN: {
-        if(g_menuPocEnabled && w==VK_F8) {
+        if(g_vrMenuEnabled && w==VK_F8) {
             if(l&(1L<<30))return 0;
-            if(g_menuPocOpen)menuPocClose();else {g_menuPocOpen=1;g_menuPocPage=-1;g_menuPocRow=0;}
-            g_menuPocDirty=1;g_menuPocArmed=1;return 0;
+            if(g_vrMenuOpen)vrMenuClose();else {g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=0;}
+            g_vrMenuDirty=1;g_vrMenuArmed=1;return 0;
         }
-        if(g_menuPocEnabled && g_menuPocOpen)return 0;
+        if(g_vrMenuEnabled && g_vrMenuOpen)return 0;
         float cy = cosf(w_yaw), sy = sinf(w_yaw), s = w_speed;
         if (w == 'W') { w_x -= sy * s; w_z -= cy * s; }
         if (w == 'S') { w_x += sy * s; w_z += cy * s; }
@@ -3404,16 +3404,16 @@ static LRESULT CALLBACK wp(HWND h, UINT m, WPARAM w, LPARAM l)
     return DefWindowProcA(h, m, w, l);
 }
 
-static void menuPocKeyboard(HWND hwnd)
+static void vrMenuKeyboard(HWND hwnd)
 {
-    if(!g_menuPocEnabled)return;
+    if(!g_vrMenuEnabled)return;
     unsigned input=0;
     if(GetForegroundWindow()==hwnd) {
         const int keys[]={VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,VK_RETURN,VK_BACK,VK_ESCAPE};
         const unsigned actions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_LEFT,VC2_BTN_RIGHT,VC2_BTN_START,VC2_BTN_BACK,VC2_BTN_PAUSE};
         for(unsigned k=0;k<7;k++)if(GetAsyncKeyState(keys[k])&0x8000)input|=actions[k];
     }
-    int owned=menuPocControl(input);
+    int owned=vrMenuControl(input);
     if(owned){pushAim(320,240,0);pushAim2(320,240,0);}
 }
 
@@ -3492,7 +3492,7 @@ static int runWindow(void)
             DispatchMessageA(&msg);
         }
         pullFrame();
-        menuPocKeyboard(hwnd);
+        vrMenuKeyboard(hwnd);
         pullScreen();
         g_scrVisible = screenVisible();
         scale = 1.0f / g_unitsPerMetre;
@@ -3664,7 +3664,7 @@ static int runStereo(void)
         pullScreen();
         g_scrVisible = screenVisible();
 
-        menuPocKeyboard(hwnd);
+        vrMenuKeyboard(hwnd);
         /* a head pose built the way a runtime would report one */
         cy2 = cosf(w_yaw * 0.5f); sy2 = sinf(w_yaw * 0.5f);
         cp2 = cosf(w_pitch * 0.5f); sp2 = sinf(w_pitch * 0.5f);
@@ -3785,8 +3785,8 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--vrwindow")) g_cfgVrWindow = 1;
         else if (!strcmp(argv[i], "--no-vrwindow")) g_cfgVrWindow = 0;
         else if (!strcmp(argv[i], "--preview-only")) g_previewOnly = 1;
-        else if (!strcmp(argv[i], "--menu") || !strcmp(argv[i], "--menu-poc")) g_menuPocEnabled = 1;
-        else if (!strcmp(argv[i], "--no-menu")) g_menuPocEnabled = 0;
+        else if (!strcmp(argv[i], "--menu")) g_vrMenuEnabled = 1;
+        else if (!strcmp(argv[i], "--no-menu")) g_vrMenuEnabled = 0;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
         else if (!strcmp(argv[i], "--swap-player-hud")) g_cfgSwapPlayerHud=1;
         else if (!strcmp(argv[i], "--no-swap-player-hud")) g_cfgSwapPlayerHud=0;
@@ -3828,11 +3828,11 @@ int main(int argc, char **argv)
         else { note("usage: HOTD2VR [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
-    if(g_menuPocEnabled && !menuPocLoadFont()) {
-        note("Settings menu disabled: menu-poc-font.rgba missing or invalid. Run Start-HOTD2.ps1 to generate it.\n");
-        g_menuPocEnabled=0;
+    if(g_vrMenuEnabled && !vrMenuLoadFont()) {
+        note("Settings menu disabled: menu-font.rgba missing or invalid. Run Start-HOTD2.ps1 to generate it.\n");
+        g_vrMenuEnabled=0;
     }
-    menuPocInit();
+    vrMenuInit();
     note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
     note("Player HUD: swap=%d (akimbo=%d)\n",g_cfgSwapPlayerHud,g_cfgAkimbo);
     note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
@@ -3858,7 +3858,7 @@ int main(int argc, char **argv)
     } else if(g_cfgWindow)runWindow();
     else while(!gameExited()) { pushCheats();Sleep(10); }
     closeDesktopPreview(&preview);
-    if(g_menuPocEnabled)menuPocSave();
+    if(g_vrMenuEnabled)vrMenuSave();
     g_cheatFlags=0;
     pushCheats();
     pushAim(320, 240, 0); pushAim2(320, 240, 0);

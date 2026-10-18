@@ -122,7 +122,7 @@ Display, Rendering, Audio, Controls, Cheats and Advanced expose 46 existing nume
 
 Closing the panel saves only edited keys to `HOTD2VR.ini` beside that viewer. Normal viewer exit also saves pending edits. Each save stages a copy and atomically replaces the INI, keeping a timestamped `.menu-*.bak` backup. Untouched keys, comments and launch overrides remain unchanged. A failed close/save keeps the menu open for retry; changes already applied live remain active. Viewer exit attempts a save and logs failures. Opening or closing without edits writes nothing. Cheats start from INI/explicit launch flags; the menu enables none automatically.
 
-`[vr] menu=0` or `--no-menu` disables the panel; `--menu` enables it (`--menu-poc` remains an alias). The launcher extracts `menu-poc-font.rgba` from your supported game once; no original artwork is distributed. A missing/invalid font disables the panel with a log message. Native Game Options remain unchanged; their existing entry does not open VR Settings yet.
+`[vr] menu=0` or `--no-menu` disables the panel; `--menu` enables it. The launcher extracts `menu-font.rgba` from your supported game once; no original artwork is distributed. A missing/invalid font disables the panel with a log message. Native Game Options remain unchanged; their existing entry does not open VR Settings yet.
 
 Desktop preview: arrows navigate, Enter selects, Backspace returns, F8 opens/closes. A simultaneous companion preview is read-only and cannot save or change gameplay settings. The native desktop game window does not render the VR Settings panel.
 

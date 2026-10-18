@@ -1,18 +1,15 @@
-# Native VR settings menu: feasibility
+# VR settings menu
 
-Investigation branch: `feat/vr-menu`, based on `main` at `9d0f23d`.
-Initial investigation changed no product code, launched no game and edited no
-installed configuration.
+The viewer exposes the mod settings in a grouped, controller-operated panel.
+Left stick click opens/closes it independently of native menus and pause.
+Native Game Options remain unchanged. The background is 50% opaque; text and
+selection accents retain their own coverage.
 
-Goal: expose the mod's existing options in a grouped, controller-operated menu,
-available from the native main menu and reused while native gameplay is paused.
-Preserve native game options, pause ownership and the retained 3D scene.
-
-**Feasible in principle. This requires a menu feature, not another button remap.**
-The supported executable's SHA256 is
+The supported executable SHA256 is
 `C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A`.
-The entry points below were checked in that executable's disassembly. Runtime
-font loading and live rendering while paused remain unproven.
+The native entry points below were checked during the initial investigation.
+The implemented menu extracts the game's glyphs into a private viewer texture;
+it does not depend on native Options font residency or initialization.
 
 ## Native reuse
 
@@ -24,7 +21,7 @@ font loading and live rendering while paused remain unproven.
 | Main-menu entry | Mode-select task `0x496960` uses bitmap entries; its existing Options branch at `0x496B0F` requests native mode 12. Adding a row is more involved than extending a text list. |
 | Existing Options | Mode 12 entry `0x4869E0`, cursor `0x486C10`, list `0x486DA0`, native row table `0x5696E0`. Initialization resets tasks/resources. Do not invoke the full Options mode while a stage is paused. |
 | Pause | Native pause routine `0x40E500` and existing predicate hook `native_pause()` retain eligibility and ownership. Reuse those; do not set the pause flag directly. |
-| Capture | `capture_draw()` rejects paused draws; `publish_frame()` retains the entire previous scene/HUD; `end_scene()` replays that scene on desktop. A changing menu needs a separately refreshed overlay above the retained scene, in both VR and desktop replay. |
+| Capture | `capture_draw()` rejects paused draws; `publish_frame()` retains the entire previous scene/HUD; `end_scene()` replays that scene on desktop. The viewer menu refreshes separately above the retained scene; native desktop replay does not render it. |
 
 The local HOTD2RE reconstruction confirms the text API and Options layout in
 `src/game/menu_text.*` and `src/game/world_modes_options.cpp`. Its port-only pause
@@ -35,71 +32,56 @@ Controls and Advanced. That implementation is a **console startup menu**;
 its grouping and INI backup conventions are reusable, its presentation is not
 an existing in-game VR menu.
 
-## Recommended design
+## Menu design
 
-Use the native main menu's existing Options entry as the integration point.
-Offer **Game Options** and **VR Settings**, keeping the original game settings
-reachable. Reuse one VR Settings page model from that entry and native pause.
-Keep paused gameplay frozen while the menu changes independently.
+Left stick click opens/closes VR Settings. The panel starts closed and preserves
+native pause state. A/X retains native Start/Pause while the panel stays open;
+Trigger selects, stick directions navigate/change values and B/Y returns to groups.
+Right click recenters. Desktop F8 toggles the panel; companion previews are read-only.
 
 | Group | Existing settings |
 | --- | --- |
-| Display | World scale, brightness, gamma, laser/crosshair, HUD sharpness and HUD zoom. |
+| Display | World scale, brightness, gamma, laser/crosshair, HUD sharpness, HUD zoom and player-HUD swap. |
 | Rendering | Native lighting, mesh/world expansion, depth settings, MSAA and supersampling. |
 | Audio | Master, music and effects volumes. |
 | Controls | Akimbo, haptics, focus, gun/reload presentation, aiming reach, automatic zoom and scope controls. |
 | Cheats | Infinite ammo/lives/continues, invincibility, rapid fire and its rate. |
 | Advanced / startup | Desktop/headset outputs and bridge startup/window/background/unit settings. |
 
-Inventory public launch flags and INI keys before implementing the option table.
-Keep existing parsing, ranges and defaults authoritative. Runtime-capable settings
-should update existing viewer variables and the established render/audio/cheat
+The option table follows existing parsing, ranges and shipped defaults.
+Runtime-capable settings update existing viewer variables and the established render/audio/cheat
 heartbeat. GPU/resource/output initialization and bridge-startup settings must
 show **restart required** and save for the next appropriate restart. Do not
 promise live application of settings whose resources are only created at startup.
 
-Use thumbstick navigation, Trigger to select, B/Y to go back and A/X to resume
-the native pause. Opening presses must be released before becoming menu actions.
+Use thumbstick navigation, Trigger to select, B/Y to go back and A/X for
+native Start/Pause. Opening presses must be released before becoming menu actions.
 Consume menu input before it can confirm native rows, join/fire, reload or skip
-behind the settings page. Keep left stick click reserved and right click recenter.
+behind the settings page. Left click toggles settings; right click recenters.
 
 Save only user-edited settings to the active mod INI, with a backup before its
 first change. Opening the menu must not save unrelated CLI overrides or enable
 cheats. Native game files and saved settings remain outside this menu's writes.
 
-## First proof and acceptance
+## Validation
 
-Before building the full option catalogue, prove a native-font test page at the
-main menu and during native pause. Check resource ownership, bounded glyph
-capture, desktop draw ordering, VR visibility and unchanged retained-world data.
-This resolves the two main unknowns: font lifetime and independently changing
-pause UI.
+Initial UI validation checked native-font placement over live captured geometry
+and during pause through the actual viewer shaders. The user confirmed its
+appearance and operation in VR before settings wiring was added.
 
-Then check every public option's coverage, validation, live/restart behavior,
-save failures, opening without writes, input isolation, per-player pause/resume,
+The launcher generates menu-font.rgba through tools/extract_menu_font.py from
+the owned supported game. The asset is not distributed. The viewer uses its own
+texture instead of calling native Options or changing native resource loading.
+
+Checks cover every public option's coverage, validation, live/restart behavior,
+save failures, opening without writes, input isolation, native pause passthrough,
 viewer expiry and retained scene restoration. Keep cheats off for mapping/menu
 tests unless a particular cheat is deliberately being tested. Build/offline
 success does not establish headset readability or comfort.
 
-## UI-only POC (superseded)
-
-Uncommitted POC: launch the worktree viewer with `--menu-poc`. It uses glyphs
-extracted from the owned game's files by `tools/poc_menu_font.py`, rather than
-calling native Options or changing native resource loading. Group navigation and
-sample values work; no real settings or cheats are changed or saved. In desktop
-preview use arrows, Enter, Backspace and F8 to reopen. In VR use stick, Trigger,
-B/Y and A/X; pausing opens the preview again. Left click remains reserved.
-
-Cheap model/input smoke checks pass. A read-only offscreen render through the
-actual viewer shaders places the menu over live captured game geometry; images
-are in `build/menu-poc-integrated*.bmp`. Native font lifetime and headset comfort
-remain unproven. Existing unrelated VR tests were left running; the POC was
-started separately with `--preview-only --menu-poc` for desktop review.
-
 ## Settings wiring
 
-The user confirmed the POC's appearance and operation in VR, then authorized
-real option wiring. The viewer now presents 46 existing numeric/boolean options
+The viewer presents 46 existing numeric/boolean options
 from its effective launch configuration, grouped and paginated. Live options
 update their existing variables/heartbeat; brightness/gamma swap their three
 affected pixel shaders as one successful set. Resource/startup settings stage
@@ -125,8 +107,8 @@ diagnostic flags and the menu's own enable switch are not editable panel rows.
 The launcher generates the native font before starting a game when absent.
 Offline checks cover live values/heartbeat, real shader rendering, restart-only
 staging, paging/edges/input isolation, unchanged/unknown INI keys and comments,
-backup, locked-file retry, held stick clicks and unchanged native pause state. Real option changes still need
-headset acceptance beyond the earlier UI-only POC acceptance.
+backup, locked-file retry, held stick clicks and unchanged native pause state.
+Offline checks alone do not establish headset readability or comfort.
 
 Live desktop validation changed master volume through the real menu, observed
 its heartbeat update before any INI write, then verified its saved value and

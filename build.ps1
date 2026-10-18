@@ -60,7 +60,7 @@ $batch = @"
 @call "$vs\VC\Auxiliary\Build\vcvars64.bat" >nul
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\src\hotd2vr.c" /Fo"$out\hotd2vr.obj" /Fe"$out\HOTD2VR.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
-@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_menu_poc.c" /Fo"$out\test_menu_poc.obj" /Fe"$out\test_menu_poc.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_vr_menu.c" /Fo"$out\test_vr_menu.obj" /Fe"$out\test_vr_menu.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_frame_snapshot.c" /Fo"$out\test_frame_snapshot.obj" /Fe"$out\test_frame_snapshot.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
@@ -75,7 +75,7 @@ $batch = @"
 [IO.File]::WriteAllText("$out\compile-viewer.cmd", $batch)
 & $env:ComSpec /d /c "$out\compile-viewer.cmd"
 if ($LASTEXITCODE) { throw 'Viewer build failed.' }
-& "$out\test_menu_poc.exe"
+& "$out\test_vr_menu.exe"
 if ($LASTEXITCODE) { throw 'Settings menu test failed.' }
 & "$out\test_frame_snapshot.exe"
 if ($LASTEXITCODE) { throw 'Frame snapshot test failed.' }

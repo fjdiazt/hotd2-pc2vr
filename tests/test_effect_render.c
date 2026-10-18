@@ -57,7 +57,7 @@ static void check_effect(DWORD colour,unsigned style,int textured,int expected,i
 static void brightness_shaders(int brightness,float gamma)
 {
     g_cfgBrightness=brightness;g_gammaOut=gamma;
-    assert(menuPocShaders());
+    assert(vrMenuShaders());
 }
 
 static void check_menu_alpha(float x,float y,const int expected[3])
@@ -74,15 +74,15 @@ static void check_menu_alpha(float x,float y,const int expected[3])
     ID3D11DeviceContext_VSSetConstantBuffers(g_ctx,0,1,&g_cb);
     ID3D11DeviceContext_OMSetRenderTargets(g_ctx,1,&rtv,NULL);
     ID3D11DeviceContext_ClearRenderTargetView(g_ctx,rtv,clear);
-    g_menuPocEnabled=g_menuPocOpen=g_menuPocDirty=1;g_menuPocPage=-1;g_menuPocRow=0;
-    menuPocDraw();
+    g_vrMenuEnabled=g_vrMenuOpen=g_vrMenuDirty=1;g_vrMenuPage=-1;g_vrMenuRow=0;
+    vrMenuDraw();
     ID3D11BlendState *blend=NULL;ID3D11DeviceContext_OMGetBlendState(g_ctx,&blend,NULL,NULL);assert(!blend);
     ID3D11DeviceContext_CopyResource(g_ctx,(ID3D11Resource *)staging,(ID3D11Resource *)target);
     assert(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)staging,0,D3D11_MAP_READ,0,&mapped)));
     BYTE *pixel=(BYTE *)mapped.pData+4*mapped.RowPitch+4*4;
     for(unsigned c=0;c<3;c++)assert(abs(pixel[c]-expected[c])<=2);
     ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)staging,0);
-    g_menuPocEnabled=g_menuPocOpen=0;
+    g_vrMenuEnabled=g_vrMenuOpen=0;
 }
 
 int main(void)
@@ -208,7 +208,7 @@ int main(void)
         sample_depth=0;
     }
     brightness_shaders(100,1);
-    memset(g_menuPocFont['V'][0][0],255,4);
+    memset(g_vrMenuFont['V'][0][0],255,4);
     const int background[]={65,63,62},text[]={232,232,232};
     check_menu_alpha(630,470,background); /* 50% dark panel over 40% grey scene. */
     check_menu_alpha(42,24,text);         /* Title glyph remains opaque. */

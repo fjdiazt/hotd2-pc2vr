@@ -408,42 +408,42 @@ int main(void)
     check_head_relative_reload();
     check_shot_haptics();
     check_swapped_player_hud();
-    g_cheatFlags=0;menuPocInit();
-    g_menuPocEnabled=g_menuPocOpen=g_menuPocArmed=1;g_menuPocPage=-1;g_menuPocRow=0;
-    g_menuPocPrevious=0;g_menuPocBlock=0;g_nativePaused=0;
+    g_cheatFlags=0;vrMenuInit();
+    g_vrMenuEnabled=g_vrMenuOpen=g_vrMenuArmed=1;g_vrMenuPage=-1;g_vrMenuRow=0;
+    g_vrMenuPrevious=0;g_vrMenuBlock=0;g_nativePaused=0;
     controller_fires=controller_pauses=controller_backs=controller_reloads=0;controller_tick();
     controller_fires=3;controller_tick();
-    assert(g_menuPocPage==0 && !g_frame->aim_buttons && !g_frame->aim2_buttons);
-    controller_fires=0;controller_tick();g_menuPocPage=4;g_menuPocRow=0;
+    assert(g_vrMenuPage==0 && !g_frame->aim_buttons && !g_frame->aim2_buttons);
+    controller_fires=0;controller_tick();g_vrMenuPage=4;g_vrMenuRow=0;
     controller_fires=2;controller_tick();
-    assert(menuPocItems[4][0].value==1 && g_cheatFlags==HOTD_CHEAT_AMMO);
+    assert(vrMenuItems[4][0].value==1 && g_cheatFlags==HOTD_CHEAT_AMMO);
     assert(g_frame->cheat_flags==HOTD_CHEAT_AMMO);
     assert(!g_frame->aim_buttons && !g_frame->aim2_buttons); /* UI Trigger cannot join/fire behind the page. */
-    controller_fires=0;g_cheatFlags=0;menuPocInit();
+    controller_fires=0;g_cheatFlags=0;vrMenuInit();
     g_actSettings=(XrAction)(uintptr_t)10;
     controller_backs=2;controller_tick();controller_backs=0;controller_tick(); /* Back to root. */
-    controller_backs=2;controller_tick();controller_backs=0;controller_tick();assert(g_menuPocOpen);
-    controller_pauses=3;controller_tick();controller_pauses=0;controller_tick();assert(g_menuPocOpen);
+    controller_backs=2;controller_tick();controller_backs=0;controller_tick();assert(g_vrMenuOpen);
+    controller_pauses=3;controller_tick();controller_pauses=0;controller_tick();assert(g_vrMenuOpen);
     for(int h=0;h<2;h++) {
         controller_pauses=1u<<h;controller_tick();
         assert(((h?g_frame->aim_buttons:g_frame->aim2_buttons)&(VC2_BTN_START|VC2_BTN_PAUSE))==(VC2_BTN_START|VC2_BTN_PAUSE));
         assert(!((h?g_frame->aim2_buttons:g_frame->aim_buttons)&(VC2_BTN_START|VC2_BTN_PAUSE)));
-        assert(!((g_frame->aim_buttons|g_frame->aim2_buttons)&(VC2_BTN_FIRE|VC2_BTN_RELOAD|VC2_BTN_BACK)) && g_menuPocOpen);
+        assert(!((g_frame->aim_buttons|g_frame->aim2_buttons)&(VC2_BTN_FIRE|VC2_BTN_RELOAD|VC2_BTN_BACK)) && g_vrMenuOpen);
         controller_pauses=0;controller_tick();
     }
-    controller_settings=1;controller_tick();controller_settings=0;controller_tick();assert(!g_menuPocOpen);
+    controller_settings=1;controller_tick();controller_settings=0;controller_tick();assert(!g_vrMenuOpen);
     for(int paused=0;paused<2;paused++) {
-        g_nativePaused=paused;controller_tick();assert(!g_menuPocOpen);
-        controller_settings=1;controller_tick();controller_tick();assert(g_menuPocOpen);
+        g_nativePaused=paused;controller_tick();assert(!g_vrMenuOpen);
+        controller_settings=1;controller_tick();controller_tick();assert(g_vrMenuOpen);
         assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);
         controller_settings=0;controller_tick();
         controller_reloads=3;controller_tick();assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);
-        controller_reloads=0;controller_settings=1;controller_tick();assert(!g_menuPocOpen);
+        controller_reloads=0;controller_settings=1;controller_tick();assert(!g_vrMenuOpen);
         assert(g_nativePaused==paused && !g_frame->aim_buttons && !g_frame->aim2_buttons);
-        controller_tick();assert(!g_menuPocOpen); /* Held click cannot reopen. */
+        controller_tick();assert(!g_vrMenuOpen); /* Held click cannot reopen. */
         controller_settings=0;controller_tick();
     }
-    g_menuPocEnabled=0;g_cheatFlags=0;
+    g_vrMenuEnabled=0;g_cheatFlags=0;
     free(g_frame);
     puts("Viewer: independent/paired players, gun visibility, INI/CLI cheats, heartbeat and coherent snapshots passed.");
     return 0;
