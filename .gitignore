@@ -1,4 +1,5 @@
 /build/
+/.worktrees/
 *.exe
 *.obj
 !/assets/gun/*.obj
