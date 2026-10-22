@@ -14,6 +14,16 @@ The native free-play DWORD at `0x9C8E70` controls credit admission. With value `
 
 The first fresh viewer request saves the original DWORD, including when infinite continues is off. Fresh requests force free play to `1` when enabled or `0` when disabled; viewer exit and heartbeat expiry restore the saved value. Lives/ammo use the same explicit override semantics for both players. Toggling settings during one connection does not replace the saved baseline. The mod does not refill credit pools, change lives, synthesize Start presses or alter the continue countdown.
 
+## Rescue NPC protection
+
+`protect_rescue_npcs=1`, launcher `-ProtectRescueNpcs`, viewer `--protect-rescue-npcs`, or **Cheats > Protect rescue NPCs** enables this default-off option. It shares the existing cheat heartbeat and changes no shared-memory layout.
+
+Native `Civ_Update` at `0x48A920` handles ordinary civilians and is also called by both branches of vehicle update `0x48B140`. The hook validates its five-byte entry and the separate shot/death tests before installation. For those two civilian task identities only, a fresh enabled request clears pending player-hit bits `0xE` at actor offset `0x34` before running the entire original update. Enemy/script death bit `0x4000000` and all other actor data remain intact. Native enemy hit handling, shot collision/occlusion and player damage routines are not replaced. Already-dead civilians are not revived.
+
+The entry `83 EC 18 53 56` contains complete non-relative instructions. The shot guard at `0x48AB8F` tests bit `8`; the preceding check at `0x48AADC` reads actor `+0x34` and tests enemy/script death independently. The native flow reaches the player life/score penalty and alternate death script only after that shot test. Disabling protection or expiring the 500 ms heartbeat passes subsequent pending hits through unchanged. No native game files are patched on disk.
+
+Offline checks execute the entry-prologue trampoline, reject every mutated signature byte before patching, and exercise both civilian identities, both players, retained enemy/script deaths, unrelated actor data, unexpected actor types, off/stale/unsupported requests and unaffected player damage. Viewer checks cover default-off parsing, CLI/heartbeat delivery, menu persistence/reset and PowerShell forwarding. These establish hook dispatch and configuration behavior; native gameplay, rescue scoring/routes, Original-mode weapons and headset acceptance remain unverified.
+
 ## Verification
 
 - `tests/test_protection.c` executes real five- and nine-byte trampoline probes; verifies both damage dispatchers for both player indices; checks stale/unsupported pass-through, native free-play signatures, credit/life preservation, option combinations and restoration of prior free-play values.

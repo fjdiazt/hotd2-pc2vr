@@ -99,6 +99,7 @@ static int cheats_supported;
 static unsigned cheat_owned,cheat_applied;
 static BYTE saved_cheats[2][2];
 static int continues_supported,invincibility_ready;
+static int rescue_protection_ready;
 static DWORD saved_freeplay;
 static uint32_t shot_events[2];
 static void (__cdecl *native_shot_ray_original)(int,float,float);
@@ -521,6 +522,17 @@ static int cheat_request_active(void)
 static unsigned requested_cheats(void)
 {
     return cheat_request_active() ? frame->cheat_flags&HOTD_CHEAT_MASK:0;
+}
+static void (__cdecl *native_civilian_original)(BYTE *);
+static void __cdecl native_civilian(BYTE *actor)
+{
+    if(actor && rescue_protection_ready && (requested_cheats()&HOTD_CHEAT_RESCUE_NPCS)) {
+        DWORD task=*(DWORD *)actor;
+        if(task==(DWORD)(uintptr_t)(game_base+0x8A920) || task==(DWORD)(uintptr_t)(game_base+0x8B140))
+            /* Player-hit bits are independent of the enemy/script-death bit 0x4000000. */
+            *(DWORD *)(actor+0x34)&=~0xEu;
+    }
+    native_civilian_original(actor);
 }
 static void (__cdecl *native_damage_original)(int,int,int);
 static void (__cdecl *native_damage_forced_original)(int,int,int,int,int);
@@ -1482,6 +1494,16 @@ static int install_invincibility(void)
         detour(0x15430,signature,sizeof(signature),native_damage_forced,(void **)&native_damage_forced_original);
 }
 
+static int install_rescue_protection(void)
+{
+    static const BYTE entry[]={0x83,0xEC,0x18,0x53,0x56}; /* sub esp,24; push ebx; push esi */
+    static const BYTE death[]={0x8B,0x4E,0x34,0xF7,0xC1,0x00,0x00,0x00,0x04};
+    static const BYTE shot[]={0xF6,0xC1,0x08};
+    if(memcmp(game_base+0x8A920,entry,sizeof(entry)) || memcmp(game_base+0x8AADC,death,sizeof(death)) ||
+       memcmp(game_base+0x8AB8F,shot,sizeof(shot)))return 0;
+    return detour(0x8A920,entry,sizeof(entry),native_civilian,(void **)&native_civilian_original);
+}
+
 static int install_capture_visibility(void)
 {
     static const BYTE submit[]={0x56,0x8B,0x74,0x24,0x08};
@@ -1785,6 +1807,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     logline("native continues profile: %s",continues_supported?"verified":"unsupported; free play unchanged");
     invincibility_ready=install_invincibility();
     logline("native invincibility hooks: %s",invincibility_ready?"ready":"unavailable; damage unchanged");
+    rescue_protection_ready=install_rescue_protection();
+    logline("native rescue NPC protection: %s",rescue_protection_ready?"ready":"unavailable; civilian hits unchanged");
     if(!capture_enabled) {
         int ready=install_bridge_services();
         logline("native services: %s; graphics hooks=0 framebuffer readback=0; input-driven checkpoint/cheat/audio services",ready?"ready":"hook failed");

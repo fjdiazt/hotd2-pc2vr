@@ -63,13 +63,13 @@ int wmain(int argc,wchar_t **argv) {
             command = [shutil.which("pwsh") or "powershell", "-NoProfile", "-File",
                        str(fixture / "Start-HOTD2.ps1"), "-GameExe", str(game),
                        "-NoWindow", "-NoVrWindow", "-StartStage", "4", "-StartScene", "0",
-                       "-NoContinueGame", "-InfiniteAmmo", "-Invincibility", "-MasterVolume", "25"]
+                       "-NoContinueGame", "-InfiniteAmmo", "-Invincibility", "-ProtectRescueNpcs", "-MasterVolume", "25"]
             result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(log.read_text().splitlines(), [str(game), "--start-stage", "4",
                              "--start-scene", "0", "--no-continue-game", "--no-window", "--no-vrwindow"])
             self.assertEqual(viewer_log.read_text().splitlines(), ["--no-window", "--no-vrwindow",
-                             "--infinite-ammo", "--invincibility", "--master-volume", "25"])
+                             "--infinite-ammo", "--invincibility", "--protect-rescue-npcs", "--master-volume", "25"])
             # A first launch must dispatch PowerShell extraction without Python on PATH.
             (build / "menu-font.rgba").unlink()
             (fixture / "tools").mkdir()

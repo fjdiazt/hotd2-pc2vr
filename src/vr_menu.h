@@ -59,13 +59,14 @@ static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][11]={
      MI("Focus game","focusgame",&g_cfgFocus,0,1,1,MENU_INT,MENU_RESTART_VIEWER,1)},
     {MC("Infinite ammo","infinite_ammo",HOTD_CHEAT_AMMO),MC("Infinite lives","infinite_lives",HOTD_CHEAT_LIVES),
      MC("Invincibility","invincibility",HOTD_CHEAT_INVINCIBILITY),
+     MC("Protect rescue NPCs","protect_rescue_npcs",HOTD_CHEAT_RESCUE_NPCS),
      MC("Infinite continues","infinite_continues",HOTD_CHEAT_CONTINUES),MC("Rapid fire","rapid_fire",HOTD_CHEAT_RAPID),
      MI("Shots per second","rapid_fire_rate",&g_cfgRapidRate,1,30,1,MENU_UNSIGNED,0,4)}
 };
 #undef MI
 #undef MB
 #undef MC
-static const unsigned vrMenuCounts[]={2,6,11,3,9,6};
+static const unsigned vrMenuCounts[]={2,6,11,3,9,7};
 static const char *g_vrMenuError;
 static int vrMenuClose(void);
 #define MENU_TOGGLE 0x80000000u

@@ -46,7 +46,7 @@ Right click recenters. Desktop F8 toggles the panel; companion previews are read
 | Rendering | World scale, units per metre, resolution, MSAA, Sharp HUD, native lighting, mesh/world expansion, depth mode/bias and background rendering, in that order. |
 | Audio | Master, music and effects volumes. |
 | Controls | Akimbo, haptics, arcade gun colors, laser/crosshair, gun scale, reload duration, aiming reach and initial game focus. |
-| Cheats | Infinite ammo/lives/continues, invincibility, rapid fire and its rate. |
+| Cheats | Infinite ammo/lives/continues, invincibility, rescue NPC protection, rapid fire and its rate. |
 
 The option table follows existing parsing, ranges and shipped defaults.
 Swap player HUD includes gameplay join prompts and credit indicators alongside ammo/lives;
@@ -83,7 +83,7 @@ success does not establish headset readability or comfort.
 
 ## Settings wiring
 
-The viewer presents 37 numeric/boolean options
+The viewer presents 38 numeric/boolean options
 from its effective launch configuration, grouped and paginated. Live options
 update their existing variables/heartbeat; brightness/gamma swap their three
 affected pixel shaders as one successful set. Resource/startup settings stage

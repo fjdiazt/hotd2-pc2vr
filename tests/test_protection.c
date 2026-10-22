@@ -25,11 +25,14 @@ static void check_detours(void)
     static const BYTE short_function[]={0x56,0x8B,0x74,0x24,0x08,0x8B,0xC6,0x5E,0xC3};
     static const BYTE long_function[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF,
         0x8B,0x44,0x24,0x34,0x5F,0x5E,0x5D,0x5B,0x83,0xC4,0x20,0xC3};
+    static const BYTE civilian_function[]={0x83,0xEC,0x18,0x53,0x56,0x8B,0x44,0x24,0x24,
+        0x5E,0x5B,0x83,0xC4,0x18,0xC3};
     BYTE *saved_base=game_base;
     game_base=VirtualAlloc(NULL,4096,MEM_RESERVE|MEM_COMMIT,PAGE_EXECUTE_READWRITE);assert(game_base);
-    for(unsigned n=5;n<=9;n+=4) {
-        const BYTE *code=n==5?short_function:long_function;
-        unsigned size=n==5?sizeof(short_function):sizeof(long_function);
+    for(unsigned kind=0;kind<3;kind++) {
+        unsigned n=kind==1?9:5;
+        const BYTE *code=kind==0?short_function:kind==1?long_function:civilian_function;
+        unsigned size=kind==0?sizeof(short_function):kind==1?sizeof(long_function):sizeof(civilian_function);
         memcpy(game_base,code,size);
         int (__cdecl *entry)(int)=(void *)game_base;
         FlushInstructionCache(GetCurrentProcess(),game_base,size);
@@ -72,17 +75,65 @@ static void check_shot_feedback(void)
     shot_events[0]=UINT32_MAX;native_shot_ray(0,12.5f,-3);assert(!shot_events[0]);
 }
 
+static unsigned civilian_calls;
+static DWORD civilian_flags;
+static void __cdecl civilian_probe(BYTE *actor)
+{civilian_calls++;civilian_flags=actor?*(DWORD *)(actor+0x34):0;}
+static void check_rescue_protection(void)
+{
+    const BYTE entry[]={0x83,0xEC,0x18,0x53,0x56};
+    const BYTE death[]={0x8B,0x4E,0x34,0xF7,0xC1,0x00,0x00,0x00,0x04};
+    const BYTE shot[]={0xF6,0xC1,0x08};
+    assert(!install_rescue_protection() && !game_base[0x8A920]);
+    memcpy(game_base+0x8A920,entry,sizeof(entry));
+    memcpy(game_base+0x8AADC,death,sizeof(death));
+    memcpy(game_base+0x8AB8F,shot,sizeof(shot));
+    const unsigned offsets[]={0x8A920,0x8AADC,0x8AB8F},sizes[]={sizeof(entry),sizeof(death),sizeof(shot)};
+    for(unsigned k=0;k<3;k++)for(unsigned b=0;b<sizes[k];b++) {
+        game_base[offsets[k]+b]^=1;
+        assert(!install_rescue_protection());
+        if(k)assert(!memcmp(game_base+0x8A920,entry,sizeof(entry)));
+        game_base[offsets[k]+b]^=1;
+    }
+    assert(install_rescue_protection() && game_base[0x8A920]==0xE9);
+    assert(VirtualFree(native_civilian_original,0,MEM_RELEASE));
+    memcpy(game_base+0x8A920,entry,sizeof(entry));
+    native_civilian_original=civilian_probe;rescue_protection_ready=1;
+    DWORD actor[32],expected[32];
+    const unsigned tasks[]={0x8A920,0x8B140,0x20000};
+    for(unsigned task=0;task<3;task++)for(unsigned player=0;player<2;player++)for(unsigned dead=0;dead<2;dead++) {
+        memset(actor,0xA5,sizeof(actor));actor[0]=(DWORD)(uintptr_t)(game_base+tasks[task]);
+        DWORD flags=0x80018001u|(dead?0x4000000u:0)|(2u<<player)|8u;
+        for(unsigned mode=0;mode<4;mode++) {
+            actor[0x34/4]=flags;memcpy(expected,actor,sizeof(actor));
+            frame->cheat_flags=mode?HOTD_CHEAT_RESCUE_NPCS:0;frame->cheat_tick=GetTickCount();
+            if(mode==2)frame->cheat_tick-=500;
+            rescue_protection_ready=mode!=3;
+            unsigned calls=civilian_calls;native_civilian((BYTE *)actor);
+            if(task<2 && mode==1)expected[0x34/4]&=~0xEu;
+            assert(civilian_calls==calls+1 && civilian_flags==expected[0x34/4]);
+            assert(!memcmp(actor,expected,sizeof(actor)));
+        }
+    }
+    rescue_protection_ready=1;frame->cheat_tick=0;
+    actor[0]=(DWORD)(uintptr_t)(game_base+0x8A920);actor[0x34/4]=0xFu;
+    native_civilian((BYTE *)actor);assert(civilian_flags==0xFu);
+    frame->cheat_tick=GetTickCount();native_civilian(NULL);assert(!civilian_flags);
+    request(0);
+}
+
 int main(void)
 {
     game_base=calloc(1,0x5CA200);frame=calloc(1,sizeof(*frame));assert(game_base && frame);
     check_detours();
     check_shot_feedback();
+    check_rescue_protection();
     /* Refuse both hooks before modifying either unsupported entry. */
     assert(!install_invincibility() && !game_base[0x15300] && !game_base[0x15430]);
     native_damage_original=damage_probe;native_damage_forced_original=forced_probe;invincibility_ready=1;
     for(unsigned p=0;p<2;p++) {
         *(short *)(game_base+0x5A5C66+p*0x130)=3;
-        request(0);native_damage(p,1,9);
+        request(HOTD_CHEAT_RESCUE_NPCS);native_damage(p,1,9);
         assert(damage_calls[p]==1 && *(short *)(game_base+0x5A5C66+p*0x130)==2);
         *(short *)(game_base+0x5A5CD0+p*0x130)=0;
         request(HOTD_CHEAT_INVINCIBILITY);native_damage(p,1,9);native_damage_forced(p,1,9,1,-1);

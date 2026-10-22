@@ -84,9 +84,9 @@ static void check_menu_layout(void)
         {"worldscale","units_per_metre","supersample","msaa","hudsharp","native_lighting","expand_meshes","expand_world","depth","depthbias","background"},
         {"master_volume","music_volume","effects_volume"},
         {"akimbo","haptic","arcade_gun_colors","laser","crosshair","gunscale","reloadms","aimreach","focusgame"},
-        {"infinite_ammo","infinite_lives","invincibility","infinite_continues","rapid_fire","rapid_fire_rate"}
+        {"infinite_ammo","infinite_lives","invincibility","protect_rescue_npcs","infinite_continues","rapid_fire","rapid_fire_rate"}
     };
-    const unsigned counts[]={2,6,11,3,9,6};
+    const unsigned counts[]={2,6,11,3,9,7};
     assert(vrMenuRootCount==12);
     g_vrMenuEnabled=g_vrMenuOpen=1;g_vrMenuArmed=g_vrMenuBlock=g_vrMenuPrevious=0;
     for(unsigned g=0;g<6;g++) {
@@ -132,6 +132,12 @@ int main(void)
     fputs("; keep this comment\r\n[vr]\r\nlaser=1\r\nworldscale=1.25\r\n[other]\r\nunknown=preserved\r\n",ini);
     assert(!fclose(ini));
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
+    VrMenuItem *rescue=&vrMenuItems[MENU_CHEATS][3];
+    assert(!strcmp(rescue->label,"Protect rescue NPCs") && !rescue->flags && !rescue->value);
+    assert(vrMenuSet(rescue,1) && g_cheatFlags==HOTD_CHEAT_RESCUE_NPCS && g_frame->cheat_flags==HOTD_CHEAT_RESCUE_NPCS);
+    assert(vrMenuSave() && GetPrivateProfileIntA("vr","protect_rescue_npcs",0,g_vrIniPath)==1);
+    assert(vrMenuSet(rescue,0) && !g_cheatFlags && !g_frame->cheat_flags && vrMenuSave());
+    assert(GetPrivateProfileIntA("vr","protect_rescue_npcs",-1,g_vrIniPath)==-1);
     VrMenuItem *arcade=&vrMenuItems[MENU_CONTROLS][2];
     assert(!strcmp(arcade->label,"Arcade gun colors") && !arcade->flags && !g_cfgArcadeGunColors);
     assert(vrMenuSet(arcade,1) && g_cfgArcadeGunColors && vrMenuSave());

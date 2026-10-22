@@ -317,6 +317,10 @@ int main(void)
     assert(GetTempPathA(MAX_PATH,temp) && GetTempFileNameA(temp,"htc",0,ini));
     assert(!readCheats(ini));
     unsigned rate;
+    assert(WritePrivateProfileStringA("vr","protect_rescue_npcs","1",ini));
+    assert(readCheats(ini)==HOTD_CHEAT_RESCUE_NPCS);
+    assert(WritePrivateProfileStringA("vr","protect_rescue_npcs","0",ini));
+    assert(!readCheats(ini));
     assert(readRapidRate(ini,&rate) && rate==4);
     assert(WritePrivateProfileStringA("vr","rapid_fire_rate","5",ini));
     assert(readRapidRate(ini,&rate) && rate==5);
@@ -327,6 +331,7 @@ int main(void)
     assert(cheatArg("--invincibility")==HOTD_CHEAT_INVINCIBILITY);
     assert(cheatArg("--infinite-continues")==HOTD_CHEAT_CONTINUES);
     assert(cheatArg("--rapid-fire")==HOTD_CHEAT_RAPID);
+    assert(cheatArg("--protect-rescue-npcs")==HOTD_CHEAT_RESCUE_NPCS);
     assert(!cheatArg("--infinite-amm"));
     assert(WritePrivateProfileStringA("vr","infinite_ammo","1",ini));
     assert(readCheats(ini)==HOTD_CHEAT_AMMO);
@@ -336,12 +341,14 @@ int main(void)
     assert(WritePrivateProfileStringA("vr","invincibility","1",ini));
     assert(readCheats(ini)==(HOTD_CHEAT_AMMO|HOTD_CHEAT_LIVES|HOTD_CHEAT_RAPID|HOTD_CHEAT_INVINCIBILITY));
     assert(WritePrivateProfileStringA("vr","infinite_continues","1",ini));
+    assert(WritePrivateProfileStringA("vr","protect_rescue_npcs","1",ini));
     assert(readCheats(ini)==HOTD_CHEAT_MASK);
     assert(WritePrivateProfileStringA("vr","infinite_ammo","0",ini));
     assert(readCheats(ini)==(HOTD_CHEAT_MASK&~HOTD_CHEAT_AMMO));
     assert(WritePrivateProfileStringA("vr","infinite_lives","0",ini));
     assert(WritePrivateProfileStringA("vr","rapid_fire","0",ini));
     assert(WritePrivateProfileStringA("vr","invincibility","0",ini));
+    assert(WritePrivateProfileStringA("vr","protect_rescue_npcs","0",ini));
     assert(readCheats(ini)==HOTD_CHEAT_CONTINUES);
     assert(WritePrivateProfileStringA("vr","infinite_continues","0",ini));
     assert(!readCheats(ini));
