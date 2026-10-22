@@ -293,6 +293,18 @@ int main(void)
         !keys[DIK_LEFT] && !keys[DIK_RIGHT]);
     check_pause_input();
     check_reload_input();
+    char temporary[MAX_PATH],path[MAX_PATH],messages[2048]={0};
+    assert(GetTempPathA(sizeof(temporary),temporary) && GetTempFileNameA(temporary,"log",0,path));
+    logfile=fopen(path,"w+");assert(logfile);
+    tick(0,0);tick(VC2_BTN_FIRE,0);tick(0,0);tick(VC2_BTN_RELOAD,0);
+    rewind(logfile);assert(fread(messages,1,sizeof(messages)-1,logfile)<sizeof(messages)-1);
+    assert(!strstr(messages,"native trigger") && !strstr(messages,"native reload"));
+    assert(!fseek(logfile,0,SEEK_END));trace_input=1;
+    tick(0,0);tick(VC2_BTN_FIRE,0);tick(0,0);tick(VC2_BTN_RELOAD,0);
+    rewind(logfile);memset(messages,0,sizeof(messages));
+    assert(fread(messages,1,sizeof(messages)-1,logfile)<sizeof(messages)-1);
+    assert(strstr(messages,"native trigger P1") && strstr(messages,"native reload P1"));
+    assert(!fclose(logfile) && DeleteFileA(path));logfile=NULL;trace_input=0;
     free(game_base);free(frame);
     puts("Input/cheats: separate pause edges, preserved Start, reload, rapid fire and watchdogs passed.");
     return 0;

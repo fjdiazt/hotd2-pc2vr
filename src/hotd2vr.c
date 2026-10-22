@@ -3834,6 +3834,8 @@ int main(int argc, char **argv)
         else { note("usage: HOTD2VR [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
+    int rendering=stereo || g_cfgWindow || g_cfgVrWindow;
+    if(!rendering)g_vrMenuEnabled=0;
     if(g_vrMenuEnabled && !vrMenuLoadFont()) {
         note("Settings menu disabled: menu-font.rgba missing or invalid. Run Start-HOTD2.ps1 to generate it.\n");
         g_vrMenuEnabled=0;
@@ -3867,7 +3869,7 @@ int main(int argc, char **argv)
     if(g_vrMenuEnabled)vrMenuSave();
     g_cheatFlags=0;
     pushCheats();
-    pushAim(320, 240, 0); pushAim2(320, 240, 0);
+    if(rendering){pushAim(320, 240, 0); pushAim2(320, 240, 0);}
     if(!g_previewOnly)g_frame->cheat_tick=GetTickCount()-500; /* Release overrides on normal exit. */
     if (g_gameProc) CloseHandle(g_gameProc);
     UnmapViewOfFile(g_frame); CloseHandle(g_map);

@@ -5,6 +5,11 @@ static unsigned loads,starts;
 static int loaded_mode,started_scene;
 static void *expected_out;
 static unsigned events;
+static unsigned inputs,pauses;
+static DWORD __cdecl fake_input(void)
+{inputs++;return 0x1234;}
+static int __cdecl fake_pause(void)
+{pauses++;return 7;}
 static void __cdecl fake_event(void)
 {
     events++;*(short *)(game_base+0x5A2BB0)=1;*(DWORD *)(game_base+0x5C7108)=0x12345678;
@@ -190,6 +195,30 @@ int main(void)
         assert(DeleteFileA(fixture));
     }
     snprintf(fixture,sizeof(fixture),"%s\\evt",directory);assert(RemoveDirectoryA(fixture) && RemoveDirectoryA(directory));
+    /* Native bridge services need no D3D device and must not touch captured graphics. */
+    capture_enabled=0;input_ready=1;active_device=NULL;
+    checkpoint_pending=checkpoint_continue=checkpoint_ready=0;
+    frame->checkpoint_request=frame->checkpoint_response;
+    *(DWORD *)(game_base+0x5C8E98)=6;*(DWORD *)(game_base+0x5C90A4)=2;
+    *(short *)(game_base+0x5A5C62)=5;*(short *)(game_base+0x5A5C62+0x130)=9;
+    frame->seq=frame->frame=0;frame->vertex_count=12;frame->verts[0].x=123;
+    native_input_original=fake_input;
+    assert(native_input()==0x1234 && inputs==1);
+    assert(frame->frame==1 && frame->seq==2 && frame->heartbeat && frame->active_players==1);
+    assert(frame->reserved[1]==1 && frame->checkpoint_current_stage==1);
+    assert(frame->vertex_count==12 && frame->verts[0].x==123 && !frame->screen_seq && !frame->atlas_seq);
+    /* Non-graphics services retain explicit cheats and release them on heartbeat expiry. */
+    cheats_supported=continues_supported=1;
+    frame->cheat_tick=GetTickCount();frame->cheat_flags=HOTD_CHEAT_AMMO|HOTD_CHEAT_LIVES|HOTD_CHEAT_CONTINUES;
+    assert(native_input()==0x1234);
+    assert(game_base[0x5C9FD8] && game_base[0x5C9FD9] && *(DWORD *)(game_base+0x5C8E70)==1);
+    assert(!frame->aim_seq && !frame->aim2_seq && frame->verts[0].x==123);
+    frame->cheat_tick=GetTickCount()-1000;
+    assert(native_input()==0x1234);
+    assert(!game_base[0x5C9FD8] && !game_base[0x5C9FD9] && !*(DWORD *)(game_base+0x5C8E70));
+    native_pause_original=fake_pause;checkpoint_unpause=0;
+    assert(native_pause()==7 && pauses==1);
+    checkpoint_unpause=1;assert(native_pause()==1 && pauses==1 && !checkpoint_unpause);
     free(frame);frame=NULL;
     /* All three pass-through entry hooks validate before any instruction changes. */
     strcpy(ini_path,path);checkpoint_ready=checkpoint_continue=checkpoint_stage=0;checkpoint_scene=-1;
@@ -212,7 +241,24 @@ int main(void)
     memcpy(game_base+0x60710,(BYTE[]){0xE8,0xAB,0xE4,0xFF,0xFF},5);
     assert(install_checkpoints() && checkpoint_ready && !checkpoint_continue);
     assert(SetEnvironmentVariableW(L"HOTD2VR_CONTINUE_GAME",NULL));
-    assert(!checkpoint_continue);free(game_base);assert(DeleteFileA(path));
+    assert(!checkpoint_continue);
+    /* Only pause/input predicates change; all graphics code and presentation imports stay native. */
+    BYTE *before=malloc(0x600000);assert(before);
+    original_present=NULL;
+    *(void **)(game_base+0x172304)=game_base+0xBA3FF;
+    memcpy(game_base+0xE9C0,(BYTE[]){0x66,0x83,0x3D,0x00,0x1A,0x9A,0x00,0x00},8);
+    memcpy(before,game_base,0x600000);
+    assert(!install_bridge_services() && !memcmp(before,game_base,0x600000));
+    memcpy(game_base+0xCBB0,(BYTE[]){0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF},9);
+    game_base[0xE9C0]^=1;memcpy(before,game_base,0x600000);
+    assert(!install_bridge_services() && !memcmp(before,game_base,0x600000));
+    game_base[0xE9C0]^=1;memcpy(before,game_base,0x600000);
+    assert(install_bridge_services());
+    assert(*(void **)(game_base+0x172304)==game_base+0xBA3FF && !original_present);
+    memcpy(before+0xE9C0,game_base+0xE9C0,8);
+    memcpy(before+0xCBB0,game_base+0xCBB0,9);
+    assert(!memcmp(before,game_base,0x600000));
+    free(before);free(game_base);assert(DeleteFileA(path));
     puts("Checkpoints: stage/scene selection, Arcade guards, strict files, atomic replacement, autosave changes and fallback passed.");
     return 0;
 }

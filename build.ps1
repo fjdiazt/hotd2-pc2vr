@@ -17,6 +17,10 @@ if ($LASTEXITCODE) { throw 'Startup test failed.' }
 if ($LASTEXITCODE) { throw 'Checkpoint test build failed.' }
 & "$out\test_checkpoint.exe"
 if ($LASTEXITCODE) { throw 'Checkpoint test failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_bat_trace.exe" "$root\tests\test_bat_trace.c" -ldxguid -luser32 -lkernel32
+if ($LASTEXITCODE) { throw 'Bat trace test build failed.' }
+& "$out\test_bat_trace.exe"
+if ($LASTEXITCODE) { throw 'Bat trace test failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_lighting.exe" "$root\tests\test_lighting.c"
 if ($LASTEXITCODE) { throw 'Lighting test build failed.' }
 & "$out\test_lighting.exe"

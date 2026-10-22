@@ -1,8 +1,29 @@
 /* Independent outputs and preview ownership; no game or OpenXR session. */
 #include <assert.h>
+#define COBJMACROS
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+static char output_test_share[96];
+static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
+{(void)name;return OpenFileMappingA(access,inherit,output_test_share);}
+#define OpenFileMappingA output_test_open
 #define main viewer_application_main
 #include "../src/hotd2vr.c"
 #undef main
+#undef OpenFileMappingA
+
+static Vc2Frame *headless_frame;
+static DWORD WINAPI observe_headless(void *unused)
+{
+    (void)unused;
+    DWORD deadline=GetTickCount()+4000;
+    while((LONG)(deadline-GetTickCount())>0) {
+        if(headless_frame->cheat_tick && (headless_frame->cheat_flags&HOTD_CHEAT_AMMO) &&
+           (DWORD)(GetTickCount()-headless_frame->cheat_tick)<500)return 1;
+        Sleep(5);
+    }
+    return 0;
+}
 
 int main(int argc,char **argv)
 {
@@ -33,6 +54,23 @@ int main(int argc,char **argv)
     pushCheats();pushAim(1,2,VC2_BTN_FIRE);pushAim2(3,4,VC2_BTN_FIRE);
     assert(g_frame->aim_seq==17 && g_frame->aim2_seq==19 && g_frame->cheat_tick==23);
     assert(VirtualFree(g_frame,0,MEM_RELEASE));g_frame=NULL;g_previewOnly=0;
+
+    /* Real headless main against an isolated mapping, never the running game's bridge. */
+    snprintf(output_test_share,sizeof(output_test_share),"Local\\HOTD2_Output_Test_%lu",GetCurrentProcessId());
+    HANDLE mapping=CreateFileMappingA(INVALID_HANDLE_VALUE,NULL,PAGE_READWRITE,0,sizeof(Vc2Frame),output_test_share);
+    assert(mapping && GetLastError()!=ERROR_ALREADY_EXISTS);
+    headless_frame=MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Vc2Frame));assert(headless_frame);
+    headless_frame->magic=VC2_SHARE_MAGIC;headless_frame->version=VC2_SHARE_VERSION;
+    headless_frame->game_pid=GetCurrentProcessId();headless_frame->aim_seq=17;headless_frame->aim2_seq=19;
+    HANDLE observer=CreateThread(NULL,0,observe_headless,NULL,0,NULL);assert(observer);
+    char *headless[]={"viewer","--no-window","--no-vrwindow","--infinite-ammo","--seconds","1"};
+    assert(viewer_application_main(6,headless)==0);
+    assert(WaitForSingleObject(observer,5000)==WAIT_OBJECT_0);
+    DWORD observed=0;assert(GetExitCodeThread(observer,&observed) && observed==1);CloseHandle(observer);
+    assert(!g_dev && !g_ctx && !g_vrMenuEnabled);
+    assert(headless_frame->aim_seq==17 && headless_frame->aim2_seq==19);
+    assert(!headless_frame->cheat_flags && (DWORD)(GetTickCount()-headless_frame->cheat_tick)>=500);
+    UnmapViewOfFile(headless_frame);CloseHandle(mapping);g_frame=NULL;g_map=NULL;g_gameProc=NULL;
 
     DesktopPreview preview={0};
     assert(openDesktopPreview(&preview,GetCommandLineA()));

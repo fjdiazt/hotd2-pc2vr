@@ -5,6 +5,7 @@ param(
     [switch]$NoWindow,
     [switch]$VrWindow,
     [switch]$NoVrWindow,
+    [switch]$NoGraphicsHooks,
     [int]$Seconds = 0,
     [switch]$InfiniteAmmo,
     [switch]$InfiniteLives,
@@ -51,7 +52,7 @@ if ($PSBoundParameters.ContainsKey('StartStage') -and ($StartStage -lt 1 -or $St
 if ($PSBoundParameters.ContainsKey('StartScene') -and ($StartScene -lt 0 -or $StartScene -gt 255)) { throw "Invalid scene $StartScene" }
 if ($PSBoundParameters.ContainsKey('StartScene') -and !$PSBoundParameters.ContainsKey('StartStage')) { throw '-StartScene requires -StartStage.' }
 $out = Join-Path $PSScriptRoot 'build'
-if (!(Test-Path "$out\HOTD2VR.exe") -or !(Test-Path "$out\HOTD2Bridge.dll")) { throw 'Run build.ps1 first.' }
+if (!(Test-Path "$out\HOTD2Launch.exe") -or !(Test-Path "$out\HOTD2Bridge.dll") -or !(Test-Path "$out\HOTD2VR.exe")) { throw 'Run build.ps1 first.' }
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
 if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) { throw 'Unsupported HOTD2 executable; no process started.' }
 if (!(Test-Path "$out\menu-font.rgba")) {
@@ -59,14 +60,13 @@ if (!(Test-Path "$out\menu-font.rgba")) {
     if ($LASTEXITCODE) { throw 'Native menu font extraction failed; no process started.' }
 }
 $launchArgs = @($GameExe)
+if ($NoGraphicsHooks) { $launchArgs += '--no-graphics-hooks' }
 if ($SkipSplash) { $launchArgs += '--skip-splash' }
 if ($ShowSplash) { $launchArgs += '--show-splash' }
 if ($PSBoundParameters.ContainsKey('StartStage')) { $launchArgs += '--start-stage', "$StartStage" }
 if ($PSBoundParameters.ContainsKey('StartScene')) { $launchArgs += '--start-scene', "$StartScene" }
 if ($ContinueGame) { $launchArgs += '--continue-game' }
 if ($NoContinueGame) { $launchArgs += '--no-continue-game' }
-& "$out\HOTD2Launch.exe" @launchArgs
-if ($LASTEXITCODE) { throw 'Game injection failed.' }
 $viewerArgs = @()
 if ($PSBoundParameters.ContainsKey('Mode') -and $Mode -eq 'VR') { $viewerArgs += '--vrwindow' }
 if ($Mode -eq 'Window') { $viewerArgs += '--window', '--no-vrwindow' }
@@ -75,6 +75,9 @@ if ($Window) { $viewerArgs += '--window' }
 if ($NoWindow) { $viewerArgs += '--no-window' }
 if ($VrWindow) { $viewerArgs += '--vrwindow' }
 if ($NoVrWindow) { $viewerArgs += '--no-vrwindow' }
+if ($NoGraphicsHooks) { $viewerArgs = @('--no-window', '--no-vrwindow') }
+& "$out\HOTD2Launch.exe" @launchArgs @viewerArgs
+if ($LASTEXITCODE) { throw 'Game injection failed.' }
 if ($Seconds -gt 0) { $viewerArgs += '--seconds', "$Seconds" }
 if ($InfiniteAmmo) { $viewerArgs += '--infinite-ammo' }
 if ($InfiniteLives) { $viewerArgs += '--infinite-lives' }

@@ -11,7 +11,7 @@
 #include "checkpoint.h"
 
 typedef struct {
-    int wait,native_window,skip_splash,start_stage,start_scene,continue_game;
+    int wait,native_window,capture,skip_splash,launchfix,start_stage,start_scene,continue_game;
     const wchar_t *invalid_kind,*invalid_value;
 } LaunchOptions;
 
@@ -20,10 +20,19 @@ static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOp
     memset(options,0,sizeof(*options));
     options->start_scene=options->continue_game=-1;
     options->skip_splash=GetPrivateProfileIntW(L"bridge",L"skip_splash",1,ini)!=0;
+    options->launchfix=GetPrivateProfileIntW(L"bridge",L"launchfix",0,ini)!=0;
+    int window=GetPrivateProfileIntW(L"vr",L"window",0,ini)!=0;
+    int vrwindow=GetPrivateProfileIntW(L"vr",L"vrwindow",1,ini)!=0,stereo=0,no_graphics_hooks=0;
     if(argc<2)return 0;
     for(int i=2;i<argc;i++) {
         if(!wcscmp(argv[i],L"--wait"))options->wait=1;
         else if(!wcscmp(argv[i],L"--native-window"))options->native_window=1;
+        else if(!wcscmp(argv[i],L"--no-graphics-hooks"))no_graphics_hooks=1;
+        else if(!wcscmp(argv[i],L"--window"))window=1;
+        else if(!wcscmp(argv[i],L"--no-window"))window=0;
+        else if(!wcscmp(argv[i],L"--vrwindow"))vrwindow=1;
+        else if(!wcscmp(argv[i],L"--no-vrwindow"))vrwindow=0;
+        else if(!wcscmp(argv[i],L"--stereo"))stereo=1;
         else if(!wcscmp(argv[i],L"--skip-splash"))options->skip_splash=1;
         else if(!wcscmp(argv[i],L"--show-splash"))options->skip_splash=0;
         else if(!wcscmp(argv[i],L"--continue-game"))options->continue_game=1;
@@ -42,16 +51,17 @@ static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOp
         }
         else return 0;
     }
+    options->capture=!no_graphics_hooks && (window || vrwindow || stereo);
     return !(options->start_scene>=0 && !options->start_stage) &&
         !(options->native_window && (options->start_stage || options->continue_game==1));
 }
 
 static BOOL setCheckpointEnvironment(const LaunchOptions *options)
 {
-    const wchar_t *keys[]={L"HOTD2VR_START_STAGE",L"HOTD2VR_START_SCENE",L"HOTD2VR_CONTINUE_GAME"};
-    int values[]={options->start_stage?options->start_stage:-1,options->start_scene,options->continue_game};
+    const wchar_t *keys[]={L"HOTD2VR_START_STAGE",L"HOTD2VR_START_SCENE",L"HOTD2VR_CONTINUE_GAME",L"HOTD2VR_CAPTURE"};
+    int values[]={options->start_stage?options->start_stage:-1,options->start_scene,options->continue_game,options->capture};
     wchar_t text[16];
-    for(unsigned i=0;i<3;i++) {
+    for(unsigned i=0;i<sizeof(keys)/sizeof(*keys);i++) {
         if(values[i]>=0)swprintf(text,16,L"%d",values[i]);
         if(!SetEnvironmentVariableW(keys[i],values[i]>=0?text:NULL))return FALSE;
     }
@@ -77,6 +87,25 @@ static BOOL skipSplash(HANDLE process,BYTE *base)
     return TRUE;
 }
 
+static BOOL bypassDiscCheck(HANDLE process,BYTE *base)
+{
+    const BYTE signature[]={0xF6,0x05,0x80,0xEB,0x7D,0x00,0x40,0x74,0x0D},zero=0;
+    BYTE actual[sizeof(signature)],check=0xFF;SIZE_T bytes;DWORD protection,ignored;
+    /* Both flag outcomes use the native success return; skip only the CD-ROM scan. */
+    if(!ReadProcessMemory(process,base+0xA6850,actual,sizeof(actual),&bytes))return FALSE;
+    if(bytes!=sizeof(actual) || memcmp(actual,signature,sizeof(actual))) {
+        SetLastError(ERROR_BAD_EXE_FORMAT);return FALSE;
+    }
+    if(!VirtualProtectEx(process,base+0xA6858,1,PAGE_EXECUTE_READWRITE,&protection))return FALSE;
+    BOOL patched=WriteProcessMemory(process,base+0xA6858,&zero,1,&bytes) && bytes==1;
+    BOOL restored=VirtualProtectEx(process,base+0xA6858,1,protection,&ignored);
+    if(!patched || !restored || !FlushInstructionCache(process,base+0xA6858,1))return FALSE;
+    if(!ReadProcessMemory(process,base+0xA6858,&check,1,&bytes) || bytes!=1 || check) {
+        SetLastError(ERROR_WRITE_FAULT);return FALSE;
+    }
+    return TRUE;
+}
+
 int wmain(int argc,wchar_t **argv)
 {
     wchar_t game[MAX_PATH],dir[MAX_PATH],dll[MAX_PATH],ini[MAX_PATH],command[MAX_PATH+4],*slash;
@@ -93,7 +122,7 @@ int wmain(int argc,wchar_t **argv)
             fwprintf(stderr,L"Invalid %ls%ls%ls\n",options.invalid_kind,
                 options.invalid_value?L" ":L"",options.invalid_value?options.invalid_value:L"");return 2;
         }
-        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--wait] [--native-window] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
+        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--wait] [--native-window | --no-graphics-hooks] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
     }
     native_window=options.native_window;
     module=GetFullPathNameW(argv[1],MAX_PATH,game,NULL);
@@ -120,8 +149,9 @@ int wmain(int argc,wchar_t **argv)
     if(!setCheckpointEnvironment(&options))goto cleanup;
     swprintf(command,MAX_PATH+4,L"\"%ls\"",game);startup.cb=sizeof(startup);
     if(!CreateProcessW(game,command,NULL,NULL,FALSE,CREATE_SUSPENDED,NULL,dir,&startup,&process))goto cleanup;
+    if(options.launchfix && !bypassDiscCheck(process.hProcess,(BYTE *)0x400000))goto cleanup;
     if(options.skip_splash && !skipSplash(process.hProcess,(BYTE *)0x400000))goto cleanup;
-    if(native_window) {
+    if(native_window || (!options.capture && GetPrivateProfileIntW(L"bridge",L"windowed",1,ini))) {
         const BYTE signature[]={0x6A,0x0B,0xA3,0x28,0xE6,0x7D,0x00},mode=7;
         BYTE actual[sizeof(signature)],check=0;DWORD protection,ignored;
         /* Select the existing native windowed mode before any fullscreen setup. */
@@ -136,7 +166,7 @@ int wmain(int argc,wchar_t **argv)
         if(!ReadProcessMemory(process.hProcess,(void *)0x49E462,&check,1,&written) || written!=1 || check!=mode) {
             SetLastError(ERROR_WRITE_FAULT);goto cleanup;
         }
-        goto resume;
+        if(native_window)goto resume;
     }
     remote=VirtualAllocEx(process.hProcess,NULL,(wcslen(dll)+1)*sizeof(wchar_t),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
     if(!remote || !WriteProcessMemory(process.hProcess,remote,dll,(wcslen(dll)+1)*sizeof(wchar_t),&written))goto cleanup;
@@ -149,6 +179,8 @@ resume:
     if(ResumeThread(process.hThread)==(DWORD)-1)goto cleanup;
     resumed=1;
     wprintf(native_window?L"Native windowed game; game PID %lu\n":L"Injected HOTD2Bridge.dll; game PID %lu\n",process.dwProcessId);fflush(stdout);
+    if(!native_window && !options.capture){wprintf(L"Graphics hooks disabled; native renderer with gameplay services.\n");fflush(stdout);}
+    if(options.launchfix){wprintf(L"CD check bypassed in memory.\n");fflush(stdout);}
     if(options.skip_splash){wprintf(L"Startup splashes skipped.\n");fflush(stdout);}
     result=0;
     if(options.wait){WaitForSingleObject(process.hProcess,INFINITE);GetExitCodeProcess(process.hProcess,&module);result=(int)module;}

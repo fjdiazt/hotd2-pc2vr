@@ -68,12 +68,14 @@ Under `[vr]`, `window` controls the existing reconstructed desktop preview and `
 
 | `window` | `vrwindow` | Outputs besides native game window |
 | --- | --- | --- |
-| `0` | `0` | None; game controls/cheats remain active |
+| `0` | `0` | Native graphics with checkpoint, cheat and audio services; no capture hooks |
 | `1` | `0` | Desktop preview |
 | `0` | `1` | Headset (default) |
 | `1` | `1` | Desktop preview and headset |
 
 CLI overrides: `--window` / `--no-window`, `--vrwindow` / `--no-vrwindow`. For both outputs, use `HOTD2VR.exe --window --vrwindow` or `Start-HOTD2.ps1 -Window -VrWindow`. `-Mode Window` selects preview only; `-Mode VR` enables the headset while preserving the INI preview setting. With no explicit mode/switches, the INI selects both outputs. `--stereo` remains a separate desktop diagnostic mode.
+
+The launcher applies these same flags before bridge injection. Both outputs off skips graphics capture, lighting reconstruction, culling expansion and native pause replay while retaining checkpoint, cheat and audio services. `HOTD2VR.exe` then runs its existing service loop without D3D11/OpenXR or synthetic aiming. Changing whether capture hooks are installed requires a game restart through the launcher; reconnecting a viewer alone cannot remove or install those hooks.
 
 With both outputs enabled, the preview uses the existing independent desktop camera and runs read-only; only the VR viewer sends controller input, cheats and audio controls. Closing the preview leaves the headset and native game running. Closing the VR viewer closes its preview; closing the native game ends both. This is not a left-eye mirror. Running both renderers costs additional CPU/GPU work.
 
@@ -296,6 +298,8 @@ See the commented [default INI](HOTD2VR.ini) for the complete shipped configurat
 
 `[bridge] skip_splash=1` skips the SEGA and Empire logos and starts at the title. Missing keys also default to on. Set `skip_splash=0`, use `Start-HOTD2.ps1 -ShowSplash`, or pass `--show-splash` to `HOTD2Launch.exe` to restore them. `-SkipSplash` / `--skip-splash` enables the bypass for one launch. Direct launcher flags also work with `--wait` or `--native-window`; the last splash flag wins.
 
+Optional `[bridge] launchfix=1` bypasses the supported game's CD check in memory before startup. The launcher checks the original instruction signature, changes one branch displacement, restores memory protection and verifies the result. Unsupported code stops launch. The default is off; set it in `build/HOTD2VR.ini` to enable. `Hod2.exe` stays unchanged; setting `launchfix=0` restores the original check on the next launch. Installed game data is still required.
+
 The launcher validates the startup instruction and changes one byte while the process is suspended, preserving normal initialization. The bridge selects native 640×480 windowed mode, keeps the game rendering in the background, and accepts the known renderer-selection and quit-confirmation dialogs. Back retains its native action; quit confirmation is accepted whenever the game asks it. Other dialogs retain normal behavior.
 
 For a native windowed comparison with the original splash sequence, without the capture bridge or viewer:
@@ -303,6 +307,24 @@ For a native windowed comparison with the original splash sequence, without the 
 ```powershell
 .\build\HOTD2Launch.exe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' --native-window --show-splash
 ```
+
+For native graphics with no graphics hooks:
+
+```powershell
+.\Start-HOTD2.ps1 -NoGraphicsHooks -StartStage 4 -StartScene 0 -NoContinueGame
+```
+
+Start a new Arcade game through the normal menus to enter the selected scene. Native keyboard/mouse controls remain available. Existing cheat and volume flags still work; ammo, lives, invincibility and free-play controls do not require conversion rendering. Rapid fire remains tied to VR trigger input and supplies no physical mouse auto-fire in this mode.
+
+`-NoGraphicsHooks` (launcher `--no-graphics-hooks`) forces both conversion outputs off regardless of INI/output flags. Services run from the native input update, with no presentation, DirectDraw/Direct3D, model/texture, culling, lighting, pause-renderer hooks or framebuffer readback. The normal native windowed selection and optional CD/splash startup patches still apply. The existing `-NoWindow -NoVrWindow` combination uses the same services path.
+
+Use `-ContinueGame` instead of explicit stage/scene options to resume the checkpoint INI. Existing autosave settings and the shared-memory Save/Load/New request interface remain available. No VR menu is displayed with both outputs off. Saves contain stage/scene, not exact enemy positions or animation state. Close the existing game before launching another session.
+
+Direct bridge launch: `HOTD2Launch.exe path-to-Hod2.exe --no-graphics-hooks --start-stage 4 --start-scene 0 --no-continue-game`; attach `HOTD2VR.exe --no-window --no-vrwindow` to publish configured cheats/audio. `--native-window` remains the separate comparison mode without any bridge injection.
+
+For the bat-wing investigation, optional `[bridge] trace_bats=1` records only chapter 4, scene 0 bat models `0x1B01..0x1B09` while unpaused. It buffers four frames at least 15 game frames apart, capped at 256 draw records, then writes `HOTD2BatTrace-<pid>-<tick>.bin` plus layout metadata `.json` and matching native-frame BMPs beside the bridge. Pause or scene exit flushes an already started partial trace. Each draw retains the native model record, matrices, material/lights, up to 256 input vertices and 768 converted vertices; truncation is marked. Capture-disabled launches install no trace. Default is off; no rendering state is changed by the trace. The final bounded write can cause a brief hitch, so this is diagnostic output rather than a performance benchmark. Inspect it with `python tools/read_bat_trace.py path-to-trace.json`.
+
+Other diagnostics also default off: `[bridge] trace_render_states=1` enables render-state sampling (at most 32 distinct states, sampled every 30 frames), and `trace_input=1` enables per-shot/reload log lines. Restart the game to change them. Ordinary startup, failure and periodic health logs remain available. Native mode with graphics hooks disabled does no render-state sampling.
 
 Native renderer and quit questions remain in this comparison mode. Starting `Hod2.exe` normally retains its original behavior.
 
@@ -365,6 +387,14 @@ python .\tests\test_live.py --input
 ```
 
 Close the viewer before the `--input` check. It briefly drives both aim coordinates without firing, then checks watchdog expiry and the native axis-write instructions. Logs and diagnostic images stay under ignored `build\`.
+
+For the chapter-4/scene-0 bat comparison, close game/viewer/VR sessions, then run:
+
+```powershell
+python tools/capture_bats.py --game 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe' --re-source 'C:\src\gaming\hotd2-re' --runtime build/bat-trace-stage/build
+```
+
+This diagnostic build reuses the RE project's autoplay selector and gun calibration. It shoots opening enemies through normal gun input, permanently stops firing when live bats appear, and captures at a nearest-bat distance of 30 game units. It runs native graphics and desktop conversion separately with `launchfix=1`, never enables OpenXR, and closes its own game/viewers afterward. Native mode explicitly uses `--no-graphics-hooks` and takes its screenshot externally, without pausing or reading the game's D3D device. That screenshot can follow the actor snapshot by several game frames; it is not an exact-frame comparison. Each run has an isolated INI/checkpoint under `build/bat-bot-*`; normal builds and game configuration stay untouched. Output includes native actor records/transforms, desktop screenshots, and converted-frame/atlas evidence. Both modes reached the bat capture in desktop testing; see [findings](docs/findings.md#bounded-bat-autoplay-diagnostic-2026-10-22).
 
 ## Removal and rollback
 

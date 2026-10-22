@@ -1,21 +1,94 @@
 """Launcher option validation without starting a game."""
 from pathlib import Path
+import hashlib
+import os
+import shutil
 import subprocess
+import tempfile
 import unittest
 
 
 class LaunchOptionsTest(unittest.TestCase):
     def test_splash_flags_reach_game_validation(self):
-        launcher = Path(__file__).resolve().parents[1] / "build/HOTD2Launch.exe"
+        launcher = Path(os.environ.get("HOTD2_TEST_BUILD_DIR", Path(__file__).resolve().parents[1] / "build")) / "HOTD2Launch.exe"
         for flags in (("--skip-splash",), ("--show-splash",),
                       ("--wait", "--skip-splash"),
-                      ("--native-window", "--show-splash")):
+                      ("--native-window", "--show-splash"),
+                      ("--no-graphics-hooks", "--start-stage", "4", "--start-scene", "0"),
+                      ("--no-window", "--no-vrwindow", "--start-stage", "4", "--start-scene", "0"),
+                      ("--no-window", "--no-vrwindow", "--continue-game")):
             with self.subTest(flags=flags):
                 result = subprocess.run(
                     [str(launcher), "__missing_hotd2__.exe", *flags],
                     capture_output=True, text=True, timeout=5)
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("Game executable missing.", result.stderr)
+
+    def test_output_flags_reach_both_bridge_and_service_process(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix="hotd2-launch-") as temporary:
+            fixture = Path(temporary)
+            build = fixture / "build"
+            build.mkdir()
+            game = fixture / "game.exe"
+            game.write_bytes(b"Test identity; never executed")
+            script = (root / "Start-HOTD2.ps1").read_text()
+            script = script.replace(
+                "C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A",
+                hashlib.sha256(game.read_bytes()).hexdigest().upper())
+            (fixture / "Start-HOTD2.ps1").write_text(script)
+            (build / "HOTD2Bridge.dll").touch()
+            (build / "menu-font.rgba").touch()
+            shim = fixture / "launch.c"
+            shim.write_text('''#include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
+int wmain(int argc,wchar_t **argv) {
+    int viewer=wcsstr(argv[0],L"HOTD2VR.exe")!=NULL;
+    FILE *out=fopen(getenv(viewer?"HOTD2_TEST_VIEWER_ARGS":"HOTD2_TEST_LAUNCH_ARGS"),"w");
+    if(!out)return 99;
+    for(int i=1;i<argc;i++)fprintf(out,"%ls\\n",argv[i]);
+    fclose(out);
+    const char *failure=getenv("HOTD2_TEST_LAUNCH_EXIT");
+    return !viewer && failure?atoi(failure):0;
+}
+''')
+            subprocess.run(["gcc", "-municode", "-static-libgcc", "-o",
+                            str(build / "HOTD2Launch.exe"), str(shim)], check=True,
+                           capture_output=True, text=True, timeout=30)
+            shutil.copyfile(build / "HOTD2Launch.exe", build / "HOTD2VR.exe")
+            log = fixture / "args.txt"
+            viewer_log = fixture / "viewer-args.txt"
+            env = dict(os.environ, HOTD2_TEST_LAUNCH_ARGS=str(log), HOTD2_TEST_VIEWER_ARGS=str(viewer_log))
+            command = [shutil.which("pwsh") or "powershell", "-NoProfile", "-File",
+                       str(fixture / "Start-HOTD2.ps1"), "-GameExe", str(game),
+                       "-NoWindow", "-NoVrWindow", "-StartStage", "4", "-StartScene", "0",
+                       "-NoContinueGame", "-InfiniteAmmo", "-Invincibility", "-MasterVolume", "25"]
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(game), "--start-stage", "4",
+                             "--start-scene", "0", "--no-continue-game", "--no-window", "--no-vrwindow"])
+            self.assertEqual(viewer_log.read_text().splitlines(), ["--no-window", "--no-vrwindow",
+                             "--infinite-ammo", "--invincibility", "--master-volume", "25"])
+            log.unlink()
+            viewer_log.unlink()
+            result = subprocess.run(command + ["-Window"], env=env, capture_output=True,
+                                    text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Choose either -Window or -NoWindow.", result.stderr)
+            self.assertFalse(log.exists())
+            result = subprocess.run(command + ["-NoGraphicsHooks"], env=env, capture_output=True,
+                                    text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("--no-graphics-hooks", log.read_text().splitlines())
+            self.assertEqual(viewer_log.read_text().splitlines()[:2], ["--no-window", "--no-vrwindow"])
+            log.unlink()
+            viewer_log.unlink()
+            env["HOTD2_TEST_LAUNCH_EXIT"] = "3"
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Game injection failed.", result.stderr)
+            self.assertFalse(viewer_log.exists())
 
 
 if __name__ == "__main__":

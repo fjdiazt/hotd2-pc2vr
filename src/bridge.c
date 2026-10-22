@@ -22,6 +22,9 @@
 #include "audio_control.h"
 #include "desktop_pause.h"
 #include "checkpoint.h"
+#ifdef HOTD_BAT_BOT
+#include "../tools/bat_bot.h"
+#endif
 
 static FILE *logfile;
 static Vc2Frame *frame;
@@ -35,6 +38,9 @@ static DWORD checkpoint_retry;
 static unsigned checkpoint_pending;
 static DWORD checkpoint_deadline;
 static int checkpoint_entered,checkpoint_unpause;
+static int capture_enabled=1;
+static int trace_render_states,trace_input;
+static void publish_bridge_state(void);
 static char checkpoint_path[MAX_PATH];
 static char checkpoint_game_directory[MAX_PATH];
 static void (__cdecl *checkpoint_load_original)(void);
@@ -565,10 +571,14 @@ static DWORD (__cdecl *native_input_original)(void);
 static int (__cdecl *native_pause_original)(void);
 static int __cdecl native_pause(void)
 {
+#ifdef HOTD_BAT_BOT
+    if(hotd_bat_bot_pause() && !*(short *)(game_base+0x5A1A00))return 1;
+#endif
     if(checkpoint_unpause) {
         checkpoint_unpause=0;
         if(*(short *)(game_base+0x5A1A00))return 1;
     }
+    if(!capture_enabled)return native_pause_original();
     static unsigned previous;
     DWORD *input=(DWORD *)(game_base+0x5C9028),saved=*input,pause_input=saved;
     unsigned held=0;
@@ -609,6 +619,15 @@ static DWORD __cdecl native_input(void)
     static unsigned previous[2];
     unsigned p;
     DWORD result=native_input_original();
+    if(!capture_enabled) {
+#ifdef HOTD_BAT_BOT
+        hotd_bat_bot_poll();
+#endif
+        publish_bridge_state();return result;
+    }
+#ifdef HOTD_BAT_BOT
+    if(hotd_bat_bot_poll()){native_cheats(requested_cheats());return result;}
+#endif
     unsigned requested=requested_cheats();
     update_input();
     reload_input=*(DWORD *)(game_base+0x5C9028);
@@ -629,11 +648,11 @@ static DWORD __cdecl native_input(void)
             }
             if(action==VC2_BTN_RELOAD) {
                 int accepted=native_reload(p,gun);
-                logline("native reload P%u: queued=%d ammo_before=%d phase=%lu status=%d control=%u",p+1,accepted,
+                if(trace_input)logline("native reload P%u: queued=%d ammo_before=%d phase=%lu status=%d control=%u",p+1,accepted,
                     *(short *)(game_base+0x5A5C7C+p*0x130),*(DWORD *)(game_base+0x5C8E98),
                     *(short *)(game_base+0x5A5C62+p*0x130),game_base[0x5A5D85+p*0x130]);
             }
-            if(action==VC2_BTN_FIRE)
+            if(trace_input && action==VC2_BTN_FIRE)
                 logline("native trigger P%u: valid=%d fire=%d ammo=%d",p+1,gun->valid,gun->fire,
                     *(short *)(game_base+0x5A5C7C+p*0x130));
         } else {previous[p]=0;rapid_fire[p].active=0;}
@@ -994,7 +1013,7 @@ static void trace_draw_state(IDirect3DDevice7 *device,DWORD fvf,Texture *tex,con
     static DWORD seen[32][19];
     static unsigned used;
     DWORD key[19]={0};D3DMATERIAL7 material={0};unsigned i;
-    if(used==32 || frame_no%30)return;
+    if(!trace_render_states || used==32 || frame_no%30)return;
     key[0]=fvf;key[1]=tex!=NULL;
     for(i=0;i<10;i++)IDirect3DDevice7_GetRenderState(device,rs[i],key+2+i);
     if(tex && !key[2])return;
@@ -1010,6 +1029,8 @@ static void trace_draw_state(IDirect3DDevice7 *device,DWORD fvf,Texture *tex,con
         (unsigned long)key[16],(unsigned long)key[17],material.diffuse.r,material.diffuse.g,
         material.diffuse.b,material.diffuse.a,((const float *)data)[0],((const float *)data)[1],((const float *)data)[2]);
 }
+
+#include "bat_trace.h"
 
 static void capture_draw(IDirect3DDevice7 *device,D3DPRIMITIVETYPE type,DWORD fvf,
                          const void *data,DWORD n,const WORD *indices,DWORD ni)
@@ -1118,6 +1139,23 @@ static void capture_screen(IDirect3DDevice7 *device)
 unlock: IDirectDrawSurface7_Unlock(surface,NULL);
 done: IDirectDrawSurface7_Release(surface);
 }
+
+#ifdef HOTD_BAT_BOT
+static void capture_bat_bot_frame(void)
+{
+    static int saved;
+    if(saved || !hotd_bat_bot_ready() || *(short *)(game_base+0x5A1A00))return;
+    if(capture_enabled && !frame->screen_ok)return;
+    char path[MAX_PATH];char *slash=strrchr(ini_path,'\\');
+    if(!slash || slash-ini_path>MAX_PATH-24)return;
+    snprintf(path,sizeof(path),"%.*s\\BatBotFrame.bin",(int)(slash-ini_path),ini_path);
+    FILE *file=fopen(path,"wb");if(!file)return;
+    int ok=fwrite(frame,sizeof(*frame),1,file)==1;if(fclose(file))ok=0;
+    if(!ok){logline("batbot frame write failed");return;}
+    saved=1;hotd_bat_bot_captured(capture_enabled);
+    logline("batbot frame saved: capture=%d frame=%u vertices=%u path=%s",capture_enabled,frame->frame,frame->vertex_count,path);
+}
+#endif
 
 typedef DWORD (__cdecl *NativeDraw)(const void *,DWORD);
 typedef int (__cdecl *NativeModel)(const BYTE *,int);
@@ -1332,6 +1370,8 @@ static int native_letterbox(const BYTE *record)
 }
 static int native_model_draw(const BYTE *record,int pass,NativeModel original)
 {
+    HotdBatScope previous_bat;int tracing=bat_trace.records!=NULL;
+    if(tracing){previous_bat=bat_scope;bat_scope=bat_trace_scope(record,pass);}
     unsigned previous=capture_kind,previous_skip=capture_skip,previous_model=capture_model;
     int previous_gfile=capture_gfile;
     DWORD previous_planes=capture_visibility_planes;
@@ -1357,6 +1397,7 @@ static int native_model_draw(const BYTE *record,int pass,NativeModel original)
     capture_kind=previous;capture_skip=previous_skip;capture_model=previous_model;
     capture_gfile=previous_gfile;
     capture_visibility_planes=previous_planes;
+    if(tracing)bat_scope=previous_bat;
     return result;
 }
 static int __cdecl native_model(const BYTE *record,int pass)
@@ -1367,7 +1408,12 @@ static NativeDraw native_strip_original,native_list_original,native_tl_original;
 static DWORD native_draw(const void *v,DWORD n,D3DPRIMITIVETYPE type,DWORD fvf,NativeDraw original)
 {
     IDirect3DDevice7 *device=*(IDirect3DDevice7 **)(game_base+0x3DEB74);
-    if(device){active_device=device;capture_draw(device,type,fvf,v,n,NULL,0);}
+    if(device){
+        unsigned first=count;
+        active_device=device;capture_draw(device,type,fvf,v,n,NULL,0);
+        if(bat_trace.records && bat_scope.model)
+            bat_trace_draw(device,type,fvf,v,n,vertices+first,count-first,first);
+    }
     return original(v,n);
 }
 static DWORD __cdecl native_strip(const void *v,DWORD n)
@@ -1494,6 +1540,20 @@ static unsigned native_active_players(void)
             *(short *)(game_base+0x5A5C62+p*0x130)))active|=1u<<p;
     return active;
 }
+static void publish_bridge_state(void)
+{
+    unsigned active=native_active_players();
+    frame->seq++;MemoryBarrier();
+    frame->frame++;frame->heartbeat=GetTickCount();frame->active_players=active;
+    frame->reserved[1]=*(short *)(game_base+0x5A1A00)!=0;
+    checkpoint_locations(active);
+    MemoryBarrier();frame->seq++;
+    checkpoint_manual(active);checkpoint_record(active);checkpoint_refresh_saved();
+    native_cheats(requested_cheats());update_audio_levels();
+#ifdef HOTD_BAT_BOT
+    capture_bat_bot_frame();
+#endif
+}
 static void publish_frame(void)
 {
     if(!frame || !active_device)return;
@@ -1501,6 +1561,7 @@ static void publish_frame(void)
     int retain_scene=paused && pause_scene_ready;
     frame_no++;
     if(!IsWindow(game_window))EnumWindows(find_game_window,0);
+    unsigned screen_before=frame->screen_seq;
     if(!paused)capture_screen(active_device);
     if(!atlas_dirty)frame->seq++;
     MemoryBarrier();
@@ -1529,6 +1590,10 @@ static void publish_frame(void)
     checkpoint_manual(frame->active_players);
     checkpoint_record(frame->active_players);
     checkpoint_refresh_saved();
+    bat_trace_frame(frame->screen_seq!=screen_before);
+#ifdef HOTD_BAT_BOT
+    capture_bat_bot_frame();
+#endif
     unsigned pressure=stage_records.overflow || visibility_queue_drops;
     int report=frame_no==1 || frame_no%300==0 || texture_failures ||
         (pressure!=visibility_pressure && frame_no-visibility_last_pressure_log>=60);
@@ -1629,6 +1694,16 @@ static int hook_import(const char *dll,const char *name,void *hook,void **origin
     return 0;
 }
 
+static int install_bridge_services(void)
+{
+    static const BYTE pause_signature[]={0x66,0x83,0x3D,0x00,0x1A,0x9A,0x00,0x00};
+    static const BYTE input_signature[]={0x83,0xEC,0x20,0x53,0x55,0x56,0x57,0x33,0xFF};
+    if(memcmp(game_base+0xE9C0,pause_signature,sizeof(pause_signature)) ||
+       memcmp(game_base+0xCBB0,input_signature,sizeof(input_signature)))return 0;
+    return detour(0xE9C0,pause_signature,sizeof(pause_signature),native_pause,(void **)&native_pause_original) &&
+        detour(0xCBB0,input_signature,sizeof(input_signature),native_input,(void **)&native_input_original);
+}
+
 BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
 {
     char path[MAX_PATH],*slash;
@@ -1640,7 +1715,12 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     GetModuleFileNameA(module,path,MAX_PATH);slash=strrchr(path,'\\');if(!slash)return FALSE;
     strcpy(slash+1,"HOTD2Bridge.log");logfile=fopen(path,"w");
     strcpy(slash+1,"HOTD2VR.ini");strcpy(ini_path,path);
+    trace_render_states=GetPrivateProfileIntA("bridge","trace_render_states",0,ini_path)!=0;
+    trace_input=GetPrivateProfileIntA("bridge","trace_input",0,ini_path)!=0;
     game_base=(BYTE *)GetModuleHandleA(NULL);
+    capture_enabled=GetPrivateProfileIntA("vr","window",0,ini_path)!=0 ||
+        GetPrivateProfileIntA("vr","vrwindow",1,ini_path)!=0;
+    if(!checkpoint_environment(L"HOTD2VR_CAPTURE",0,1,&capture_enabled))return FALSE;
     mapping=CreateFileMappingA(INVALID_HANDLE_VALUE,NULL,PAGE_READWRITE,0,sizeof(Vc2Frame),VC2_SHARE_NAME);
     if(!mapping || GetLastError()==ERROR_ALREADY_EXISTS){logline("bridge mapping unavailable or another session active");return FALSE;}
     frame=MapViewOfFile(mapping,FILE_MAP_ALL_ACCESS,0,0,sizeof(Vc2Frame));
@@ -1665,14 +1745,11 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     frame->input_supported=input_ready;
     logline("HOTD2 bridge pid=%lu input_profile=%d",(unsigned long)GetCurrentProcessId(),input_ready);
     if(!input_ready){logline("unsupported executable layout; injection refused");return FALSE;}
+#ifdef HOTD_BAT_BOT
+    hotd_bat_bot_init(game_base,ini_path);
+#endif
     if(!install_checkpoints()){logline("checkpoint configuration/signature invalid; injection refused");return FALSE;}
     frame->checkpoint_autosave=checkpoint_continue?2:1;
-    {
-        static const BYTE signature[]={0x83,0xEC,0x1C,0x8B,0x44,0x24,0x20};
-        int ready=native_shot_profile(game_base) &&
-            detour(0x6110,signature,sizeof(signature),native_shot_ray,(void **)&native_shot_ray_original);
-        logline("native shot feedback: %s",ready?"ready":"unavailable; shot rumble disabled");
-    }
     {
         static const BYTE signature[]={0xA1,0xB8,0xE5,0x7D,0};
         audio_ready=hotd_audio_profile(game_base) &&
@@ -1685,6 +1762,18 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     logline("native continues profile: %s",continues_supported?"verified":"unsupported; free play unchanged");
     invincibility_ready=install_invincibility();
     logline("native invincibility hooks: %s",invincibility_ready?"ready":"unavailable; damage unchanged");
+    if(!capture_enabled) {
+        int ready=install_bridge_services();
+        logline("native services: %s; graphics hooks=0 framebuffer readback=0; input-driven checkpoint/cheat/audio services",ready?"ready":"hook failed");
+        return ready;
+    }
+    bat_trace_init();
+    {
+        static const BYTE signature[]={0x83,0xEC,0x1C,0x8B,0x44,0x24,0x20};
+        int ready=native_shot_profile(game_base) &&
+            detour(0x6110,signature,sizeof(signature),native_shot_ray,(void **)&native_shot_ray_original);
+        logline("native shot feedback: %s",ready?"ready":"unavailable; shot rumble disabled");
+    }
     int crosshair_profile_valid=hotd_crosshair_profile(game_base);
     logline("native capture visibility hooks: %s",install_capture_visibility()?"ready":"unavailable; native culling retained");
     gfile_ready=visibility_hooks_ready && native_gfile_profile();
