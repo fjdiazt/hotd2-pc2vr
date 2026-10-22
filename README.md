@@ -1,8 +1,157 @@
 # HOTD2 PC2VR
 
-An experimental PC VR mod for the original Windows version of **The House of the Dead 2**. The mod captures the running game's geometry and textures, reconstructs the scene around you, and renders it through OpenXR. Your motion controllers become the light guns.
+Play the original Windows version of **The House of the Dead 2** in VR. Look around the scene, aim with your motion controllers, and use them as light guns. This is an experimental mod for the original PC game.
 
-The viewer is adapted from [NeuralF's Virtua Cop 2 VR (VC2VR)](https://github.com/NeuralF/Rea-Virtua-Cop-2-VR). Its OpenXR, controller, sight and gun-rendering code provided the foundation; the launcher, Direct3D7 capture and native input integration are specific to HOTD2. The revolver model and texture also come from VC2VR; see [Credits](#credits).
+![The House of the Dead 2 main menu](docs/screenshots/game-menu.png)
+
+## How to play
+
+You need your own installed Windows PC copy of the game, a PC VR headset, and motion controllers. The Remake and emulated versions are not supported.
+
+1. **Get the mod.** Download the Windows ZIP from [Releases](https://github.com/fjdiazt/hotd2-pc2vr/releases) and choose **Extract All**. Keep the extracted folders together; you do not need to copy anything into your game folder. If no release ZIP is listed yet, a ready-to-play download is not available; see [Build from source](#build-from-source).
+2. **Find your game.** Locate the original game's **`Hod2.exe`**. You need its full path, including `Hod2.exe`, for the next step.
+3. **Connect your headset and controllers.** Start your usual PC VR software and make sure the headset is ready.
+4. **Start the mod.** Open the extracted mod folder, right-click an empty space and choose **Open in Terminal**. Paste this command, replace the example game path with your own, keep the quotation marks, and press **Enter**:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-HOTD2.ps1 -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -Mode VR
+   ```
+
+5. **Start playing.** Put on the headset, face forward, choose **Arcade mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
+
+### Buttons you need
+
+| What you want to do | What to press |
+| --- | --- |
+| Shoot | Pull that hand's **trigger**. |
+| Reload | Press that hand's **grip**. You can also point the gun up, down or sideways away from your view and pull its trigger. |
+| Choose a menu item | Move either **thumbstick**; press **A/X** or pull the **trigger** to confirm. |
+| Pause or resume | Press **A/X**. |
+| Skip a scene or go back | Press **B/Y**. |
+| Make your current direction the centre | Face forward and **click the right thumbstick**. |
+| Open or close VR Settings | **Click the left thumbstick**. |
+
+The right controller is Player 1; the left is Player 2. By default, **Two guns** is on, so starting joins both players. Turn it off in **VR Settings > Controls** if you want each hand to join separately.
+
+For Vive controllers, use the menu button for Start/Pause and the left/right trackpad clicks for Settings/recentering. On Index, use A/B on either hand.
+
+When finished, choose **Quit game** in VR Settings to close both the game and its VR viewer.
+
+## VR Settings menu
+
+**Press the left thumbstick straight down, like a button.** This opens VR Settings. Press it again to close the panel and save your changes. Moving the stick without clicking it does not open the menu.
+
+This panel controls the VR mod. The original game's **Options** menu is separate.
+
+![VR Settings main page with Save game, Load game and settings groups](docs/screenshots/vr-settings.png)
+
+- **Up/down:** select an item. Keep moving down to reach the next page.
+- **Left/right:** change the selected setting.
+- **Trigger:** open the selected group or activate the selected action.
+- **B/Y:** return to the list of groups.
+- **Left thumbstick click:** close the menu and save changes.
+
+**Opening Settings does not pause the game.** Press **A/X** first if you want to stop the action while changing options; press it again to resume. On a desktop-only preview, **F8** opens/closes Settings, the arrow keys navigate, **Enter** selects, and **Backspace** goes back. A companion preview beside a headset session is read-only.
+
+Changed settings save automatically when you close the panel. If a setting says a restart is needed, choose **Quit game**, then start the mod again. You can leave everything at its default and play without changing any settings.
+
+## Settings explained
+
+The names below match the menu. **On/off** options show `1` for on and `0` for off. Defaults describe a fresh installation; your saved settings may differ.
+
+### Save, load, reset and quit
+
+| Action | What it does |
+| --- | --- |
+| **Save game** | Saves the current Arcade chapter and scene. Works during play or pause. This is a scene checkpoint: loading restarts that scene, rather than restoring the exact moment, enemy positions or player state. |
+| **Load game** | Restarts the saved Arcade scene. Also works from the title/menu. There is one save slot, shared with Autosave. The destination appears below the selected row. |
+| **New game** | Starts chapter 1, scene 0. Keeps the existing save, although Autosave can replace it when enabled. |
+| **Reset defaults** | Restores all 47 menu settings to their shipped values, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
+| **Quit game** | Saves your changed settings, closes the game normally, and ends the VR viewer. |
+
+### Display
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **World scale percent** | 125% | Changes how large the world feels around you. 100% is the original scale; 125% makes it 25% larger. Range: 10–1000%. |
+| **Brightness percent** | 90% | Lightens or darkens the game scene. 100% is neutral. It does not change the HUD or guns. Range: 25–400%. |
+| **Gamma percent** | 220% | Corrects the headset's picture tones. 100% disables this correction; 220% is the default. Try Brightness first if you only want a lighter or darker scene. Range: 0–300%. |
+| **Laser** | On | Shows a beam from each gun to help you aim. Turning it off does not affect shooting. |
+| **Crosshair** | On | Shows an aiming marker where your gun points. Independent of the laser. |
+| **Sharp HUD** | On | Makes on-screen text and counters look sharper. Turn it off for softer filtering. |
+| **Zoom HUD** | Off | Makes the HUD grow with the scene during zoom. Off keeps the HUD at its normal size. |
+| **Swap player HUD** | On | Places Player 1's ammo/lives on the right and Player 2's on the left, matching the gun hands. Off keeps the original game's arrangement. |
+
+### Rendering
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **Native lighting** | On | Reproduces the game's lights, shading, shiny highlights and fog. Off uses simpler lighting. |
+| **Expand meshes** | On | Helps keep character/body parts visible when they extend beyond the original flat-screen view. Off restores the original rejection of those parts. |
+| **Expand world** | On | Tries to show more loaded scenery beside and behind you. Experimental: it can add visual glitches and extra work for the PC, and cannot fill scenery the game never loaded. |
+| **MSAA** | 4 | Smooths jagged edges. Choices: 1, 2, 4 or 8; 1 disables it. Higher values cost more GPU work. Restart required. |
+| **Resolution percent** | 100% | Changes rendering resolution. Higher looks sharper and costs more performance; lower can help a struggling PC. Range: 50–250%. Restart required. |
+| **Depth mode** | 2 | Controls which surfaces appear in front of others. 2 uses real 3D depth and is the normal choice; 0 draws in submission order; 1 uses the game's sorting values. Restart required. |
+| **Depth bias** | 0 | Adds a small separation between overlapping layers. Leave at 0 unless investigating overlapping/flickering surfaces. Range: 0–200. Restart required. |
+
+### Audio
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **Master volume** | 100% | Overall game volume. 0 mutes the game. It does not change Windows or other apps. |
+| **Music volume** | 100% | Background music volume. Multiplies with Master volume: 50% master and 50% music gives 25% of the original music level. |
+| **Effects volume** | 100% | Gunshots, voices and other effects. Also multiplies with Master volume. |
+
+### Controls
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **Two guns** | On | Shows both guns and joins both players together. Off lets the right and left hands join Player 1 and Player 2 separately. |
+| **Haptics** | On | Controller vibration after confirmed shots. |
+| **Auto zoom** | Off | Magnifies the view during the original game's zoom moments. Enables the zoom/scope options below. |
+| **Scope** | Off | Shows zoom through a scope instead of magnifying the whole view. Used when zoom is active. |
+| **Gun scale percent** | 100% | Size of the visible gun models. Does not change world scale. Range: 10–1000%. Restart required. |
+| **Reload duration ms** | 180 | Length of the gun's reload animation, in milliseconds. Does not change the native game's ammunition/reload rules. Range: 60–1000 ms. |
+| **Aim reach metres** | 6 | Fallback aiming distance when your gun points at empty space. It does not limit shots that hit real scene geometry. Range: 1–100 metres. |
+| **Zoom percent** | 400% | Maximum zoom magnification: 400% means 4×. Range: 110–1200%. |
+| **Zoom speed** | 4 | How quickly zoom eases in and out. Higher values change faster. Range: 1–50. |
+| **Auto zoom threshold** | 30 | How much the original camera must zoom before Auto zoom starts. Higher values require a stronger zoom moment. Range: 5–200%. |
+| **Zoom smoothing** | 55 | Reduces wobble during whole-view zoom. 0 disables smoothing; higher values damp more movement. Range: 0–90%. |
+| **Scope size degrees** | 12 | Angular size of the floating scope when Scope on gun is off. Range: 3–40 degrees. |
+| **Scope distance** | 25 | Distance of that floating scope, in metres. Used when Scope on gun is off. Range: 2–200 metres. |
+| **Scope on gun** | On | Attaches the scope glass to your gun. Off places the scope in front of your head instead. Requires Scope and active zoom. |
+| **Scope glass mm** | 26 | Radius of the gun-mounted scope glass, in millimetres. Used with Scope on gun. Range: 8–120 mm. |
+| **Focus game** | On | Brings the native game window to the front at startup. Restart required. |
+
+### Cheats
+
+All cheats start **off**. They apply to both players.
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **Infinite ammo** | Off | Stops ammunition being used. If the gun is already empty when enabled, reload once. |
+| **Infinite lives** | Off | Prevents life loss and the native damage handler's score/rank penalty. |
+| **Invincibility** | Off | Blocks player damage, hit reactions and damage-related camera shake. Enemies still attack. |
+| **Infinite continues** | Off | Enables free play, so joining/continuing does not require credits. If you die, you still need to confirm Continue. |
+| **Rapid fire** | Off | Repeats shots while you hold the trigger. Reload gestures still take priority. |
+| **Shots per second** | 4 | Requested firing rate with Rapid fire on. Range: 1–30; the game's own weapon timing can make it slower. Changing this alone does not enable Rapid fire. |
+
+### Advanced
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **Desktop preview** | Off | Opens a separate desktop view of the reconstructed scene. The original game window remains available either way. Restart the game/mod to change it. |
+| **Headset output** | On | Sends the game to the headset. Turning it off allows desktop use without VR output. Restart the game/mod to change it. |
+| **Skip startup logos** | On | Skips the SEGA/Empire boot logos. Restart required. |
+| **Native windowed** | On | Runs the original game in a desktop window instead of full screen. Restart required. |
+| **Background rendering** | On | Lets the game keep rendering when another app has focus. Restart required. |
+| **Units per metre** | 10 | Base conversion from the old game's units to VR metres. Leave this at 10 for normal play; use World scale percent to change how large the world feels. Restart required. |
+| **Autosave** | Off | Records the latest Arcade chapter/scene and resumes it on the next new Arcade start. Shares the single slot used by Save game. Saves scene progress, not an exact game state. |
+
+
+## Technical details
+
+### Features and integration
 
 - Stereo VR with head tracking and controller aiming against captured world geometry.
 - Right controller as P1, left controller as P2; paired akimbo or independent joining.
@@ -14,7 +163,7 @@ The viewer is adapted from [NeuralF's Virtua Cop 2 VR (VC2VR)](https://github.co
 
 Your existing game installation stays in place. No HOTD2 game files are included or changed on disk.
 
-## Requirements
+### Requirements
 
 - Your own working Windows PC copy of The House of the Dead 2.
 - Windows x64, a Direct3D 11-capable GPU, and a PC VR headset with an active OpenXR runtime.
@@ -30,7 +179,7 @@ MD5    97C9E516A287AAB33A455A396DADAA45
 
 The launcher checks the SHA256 before starting a game; native hooks also check their instruction signatures. Other executable layouts, the Remake, and emulated versions are outside the supported target.
 
-## Download and run
+### Download and run
 
 Download `HOTD2-PC2VR-<version>-windows-x64.zip` from the repository's Releases page and extract it into a writable folder. Keep its directory structure, including `build\` and `tools\`.
 
@@ -40,11 +189,11 @@ From the extracted folder, run:
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -Mode VR
 ```
 
-Supply your own game path. The first launch extracts the menu font from your game with PowerShell/.NET; no game artwork is bundled. No files need copying into the game directory. The command's execution-policy override applies only to that PowerShell process.
+Supply your own game path. The first launch extracts the menu font from your game with PowerShell/.NET; no extracted font is bundled. No files need copying into the game directory. The command's execution-policy override applies only to that PowerShell process.
 
 Release ZIPs include the matching x86 bridge/launcher, x64 viewer, default settings, gun assets, official x64 OpenXR loader, scripts, documentation and licenses. The adjacent `.zip.sha256` file contains the ZIP's SHA256 checksum.
 
-## Build from source
+### Build from source
 
 Source builds require 32-bit MinGW GCC (`i686-w64-mingw32`) and Visual Studio C++ x64 build tools with a Windows SDK. Python 3 is used only by developer tests and optional diagnostic tools.
 
@@ -57,7 +206,7 @@ From the repository root:
 
 Replace the example game path with your own. Supplying `-GameExe` avoids the launch script's machine-specific development default.
 
-The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun assets and `HOTD2VR.ini` under `build\`. It runs offline checks before reporting success. It copies an OpenXR loader from the configured local VC2VR installation when available; otherwise place the official x64 loader in `build\` yourself.
+The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun assets and `HOTD2VR.ini` under `build\`. It runs offline checks before reporting success. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
 
 1. Close any existing `Hod2.exe` session.
 2. Start your OpenXR runtime and connect the headset.
@@ -66,7 +215,7 @@ The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun 
 
 Keep the bridge and viewer from the same build together: their shared-memory formats must match. No DLL needs to be copied into the game directory.
 
-### Automated releases
+#### Automated releases
 
 Publishing a GitHub release, including a prerelease, runs `.github/workflows/release.yml` against its tagged commit. It builds on Windows, runs offline and packaging tests, creates the runtime ZIP and checksum, and attaches both to that release. Draft releases do not trigger a build. Assets appear after the workflow succeeds; a failed build leaves the release without new binaries.
 
@@ -80,7 +229,7 @@ To package a local build:
 
 The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256, checks binary architectures, and writes to `build\releases\`. It packages only listed runtime files and fresh repository defaults; local INI edits, generated fonts, checkpoints, logs and test executables are excluded. Offline/CI checks do not prove headset rendering or controller behavior.
 
-### Desktop previews and reconnecting
+#### Desktop previews and reconnecting
 
 ```powershell
 .\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -Mode Window
@@ -108,7 +257,7 @@ The launcher applies these same flags before bridge injection. Both outputs off 
 
 With both outputs enabled, the preview uses the existing independent desktop camera and runs read-only; only the VR viewer sends controller input, cheats and audio controls. Closing the preview leaves the headset and native game running. Closing the VR viewer closes its preview; closing the native game ends both. This is not a left-eye mirror. Running both renderers costs additional CPU/GPU work.
 
-## Controls
+### Controls
 
 | Input | Action |
 | --- | --- |
@@ -125,7 +274,7 @@ Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game c
 
 Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Grip supplies Reload only; B/Y supplies Skip/Cancel only. Two signature-checked weapon input reads preserve native reload rules while separating those commands. Physical Ctrl retains native behavior. Both sticks navigate native menus; right click recenters once per press. Left click toggles VR Settings. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload, right trackpad click for recenter and left trackpad click for VR Settings.
 
-### Player HUD placement
+#### Player HUD placement
 
 `[vr] swap_player_hud=1` (default) moves converted gameplay ammo and lives rows to match the fixed gun assignments: P1 on the right, P2 on the left. Player labels, Original-mode weapon counts and reload messages/hints move with their row. Text, digit order, artwork, animation and HUD depth stay intact. Each row is aligned to the opposite side using its complete bounds; its width can vary with ammo/lives or messages.
 
@@ -133,7 +282,7 @@ Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwap
 
 Ownership comes from the native player ammo/lives draw routines, including deferred sprite copies. Shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 21 bridge/viewer builds are required. Akimbo headset placement is user-confirmed; non-akimbo placement still needs runtime confirmation.
 
-### Experimental Save game and scene selection
+#### Experimental Save game and scene selection
 
 To start a new Arcade game at another chapter, use `./Start-HOTD2.ps1 -StartStage 6`. `-StartStage` accepts 1–6. Optional `-StartScene 3` selects the native zero-based scene ID within that stage; omitted scene uses the chapter entrance (scene 7 for chapter 3, scene 0 for the others). These options change the next **new Arcade start after the normal menus**, rather than jumping immediately from the title. Original, Training, Boss and attract modes keep their native behavior.
 
@@ -153,21 +302,21 @@ Invalid numeric arguments report `Invalid stage 20` or `Invalid scene 256` befor
 
 This is a debugging checkpoint facility, **not a full save state**. Scene IDs are script boundaries, not labeled or validated checkpoints. Startup Arcade-script entries are checked before use; unavailable startup entries fall back to a normal chapter-1 start and log rejection. Live Load validates the saved destination against bounded, relocated native event tables on disk before requesting a transition; invalid destinations report failure without unloading the current scene. Mid-scene starts run the scene's native variant-0 setup script before its variant-1 gameplay script when available, loading its section/resources through the normal event system. Chapter entrances retain the native variant choice. Valid scripts can still depend on earlier flags, actors or route choices, or lack complete setup. Those prerequisites and full chapter/scene coverage need runtime qualification. Failed writes retain the previous file and retry after five seconds; startup and save results appear in `HOTD2Bridge.log`.
 
-### Pausing
+#### Pausing
 
 A/X retains native Start/Pause with VR Settings open or closed. Both the VR view and the injected game's desktop window retain the last complete 3D scene and HUD, without the native pause backdrop or pause text. Head and controller tracking continue in VR, so you can look around the frozen scene. Press the same player's A/X again to resume. Pausing never opens/closes VR Settings.
 
 The desktop window redraws the retained geometry and native textures through Direct3D 7; it does not display a saved screenshot. This requires the injected bridge and a prior gameplay scene. Rendering continues while paused, but gameplay stays frozen. The native desktop view does not apply the viewer's brightness, gamma or world-scale settings.
 
-### VR Settings
+#### VR Settings
 
 Only left thumbstick click opens/closes the native-font settings panel. It starts closed; toggling it never changes native pause state: running stays running, paused stays paused. Stick up/down selects rows across pages; left/right changes values; Trigger selects a group or changes its selected value. B/Y returns to groups and stays there. A/X retains its native Start/Pause action while the panel stays open. Right stick click still recenters. Other menu input cannot fire, reload, join or skip behind the panel. Use A/X if you want gameplay frozen while editing.
 
 The menu background is 50% opaque, with fully visible text and selection accents over the game scene.
 
-Display, Rendering, Audio, Controls, Cheats and Advanced expose 47 numeric/boolean settings. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale, focus and output changes require a viewer restart; bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
+Display, Rendering, Audio, Controls, Cheats and Advanced expose 47 numeric/boolean settings. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale and focus changes require a viewer restart; output and bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
 
-**Reset defaults**, after Advanced, restores all 46 menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
+**Reset defaults**, after Advanced, restores all 47 menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
 
 **Quit game** is the final root row, after Reset defaults. It saves pending options, then sends the connected native game window its normal close request. The existing bridge handles the native quit confirmation, and the viewer exits when the game closes. A missing/mismatched window or failed INI save keeps the menu open; read-only companion previews cannot quit the game.
 
@@ -179,7 +328,7 @@ Desktop preview: arrows navigate, Enter selects, Backspace returns, F8 opens/clo
 
 The bridge and viewer must both be rebuilt for the current protocol 21; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 18 combined separate VR Pause and Reload/Cancel inputs with player-HUD ownership. Protocol 19 added acknowledged manual-save requests. Protocol 20 appends Save/Load/New actions and live Autosave control; Protocol 21 adds read-only current/saved stage and scene previews under the frame seqlock; all earlier fields retain their offsets. Details and verification: [docs/pause.md](docs/pause.md).
 
-### Two hands and akimbo
+#### Two hands and akimbo
 
 Right always controls P1; left always controls P2.
 
@@ -188,13 +337,13 @@ Right always controls P1; left always controls P2.
 
 Firing and tracking loss do not swap player identities. A hidden hand's held trigger must be released before it can fire after joining. Recenter and menu navigation remain available before joining.
 
-## Configuration
+### Configuration
 
 Edit **`build\HOTD2VR.ini`**, beside the executables. The root `HOTD2VR.ini` supplies defaults for a new build directory; later builds preserve the active file. Command-line switches override the INI for that launch without saving changes.
 
 Restart the viewer for `[vr]` changes. Restart the injected game for `[bridge]` changes.
 
-### Audio volume
+#### Audio volume
 
 ```ini
 [vr]
@@ -214,7 +363,7 @@ For music and effects muted, without changing the INI:
 
 Use `-MasterVolume N` or `--master-volume N` for the overall game volume. The PowerShell launcher forwards volume overrides only when explicitly supplied, preserving INI settings otherwise. Restart the viewer after changing the INI; matching audio-capable bridge/viewer builds are required. Missing or invalid INI values use 100; invalid CLI values are rejected, and the last valid CLI override wins. Overrides reach the game when the viewer connects and remain for that game process. Build/offline checks pass; audible game/headset verification remains pending.
 
-### World scale
+#### World scale
 
 ```ini
 [vr]
@@ -225,7 +374,7 @@ World scale is a multiplier: **1** restores the previous size, **1.25** makes th
 
 Use `Start-HOTD2.ps1 -WorldScale 1.25` or `HOTD2VR.exe --world-scale 1.25` for a session override. Geometry and controller-ray conversion share the scale; HUD/menu size and controller gun size stay fixed. `[bridge] units_per_metre` remains the base conversion from native game units, not this multiplier.
 
-### Laser and crosshair
+#### Laser and crosshair
 
 ```ini
 [vr]
@@ -246,7 +395,7 @@ Use `-Laser` / `-Crosshair` or `--laser` / `--crosshair` to enable either over a
 
 Native gameplay crosshairs are omitted automatically from converted geometry for both players and all four native styles. Options previews and native desktop rendering stay intact. These switches control only the generated VR aiming graphics. The legacy positional `hidecross` setting is no longer used; existing copies are ignored. A native framebuffer panel still mirrors the desktop pixels, including its crosshair.
 
-### Advanced graphics
+#### Advanced graphics
 
 ```ini
 [vr]
@@ -277,9 +426,9 @@ For 80% scene brightness, without changing the INI:
 
 Restart the viewer to apply it. The last direct CLI value wins; invalid CLI values are rejected.
 
-These controls already cover VC2VR's main picture settings. Its extra scene-reconstruction passes and backdrop fixes are game-specific. Configurable HUD size/distance remains a possible follow-up; a settings menu is not implemented yet.
+These picture controls are also available in VR Settings. Configurable HUD size/distance remains a possible follow-up.
 
-### Visibility expansion
+#### Visibility expansion
 
 ```ini
 [vr]
@@ -300,7 +449,7 @@ Session overrides, without changing the INI:
 
 Use `-ExpandMeshes` / `-NoExpandMeshes` and `-ExpandWorld` / `-NoExpandWorld`, or viewer flags `--expand-meshes` / `--no-expand-meshes` and `--expand-world` / `--no-expand-world`. Last direct CLI switch wins; PowerShell rejects opposing switches. Restart the viewer to apply changes. Matching bridge/viewer builds are required.
 
-### Other shipped settings
+#### Other shipped settings
 
 These are the values in the shipped INI; an existing active file can differ.
 
@@ -323,7 +472,7 @@ These are the values in the shipped INI; an existing active file can differ.
 
 See the commented [default INI](HOTD2VR.ini) for the complete shipped configuration. Relative gun-model paths resolve beside the viewer.
 
-### Startup splashes and native window
+#### Startup splashes and native window
 
 `[bridge] skip_splash=1` skips the SEGA and Empire logos and starts at the title. Missing keys also default to on. Set `skip_splash=0`, use `Start-HOTD2.ps1 -ShowSplash`, or pass `--show-splash` to `HOTD2Launch.exe` to restore them. `-SkipSplash` / `--skip-splash` enables the bypass for one launch. Direct launcher flags also work with `--wait` or `--native-window`; the last splash flag wins.
 
@@ -357,7 +506,7 @@ Other diagnostics also default off: `[bridge] trace_render_states=1` enables ren
 
 Native renderer and quit questions remain in this comparison mode. Starting `Hod2.exe` normally retains its original behavior.
 
-## Optional cheats
+### Optional cheats
 
 All default off. Enable for a session:
 
@@ -381,20 +530,20 @@ While the viewer heartbeat is fresh, lives/ammo and free-play settings override 
 
 Implementation and test evidence: [docs/cheats.md](docs/cheats.md).
 
-## How it works
+### How it works
 
 1. The x86 launcher creates `Hod2.exe` suspended, applies selected startup changes, injects `HOTD2Bridge.dll`, then resumes the game.
 2. The HOTD2 bridge hooks DirectDraw/Direct3D7 submissions. It captures geometry, textures and the live projection, reconstructs pretransformed vertices, and retains native material, blending, alpha-test and culling information.
 3. Coherent frames and a texture atlas pass through shared memory to the separate x64 Direct3D11/OpenXR viewer.
 4. The viewer renders the scene for both eyes. Controller rays intersect world geometry; the hit projects through HOTD2's camera back into each player's native gun input. HUD and shot-effect geometry are excluded from aim intersections.
 
-This differs from VC2VR's `HGL_VIEW.DLL` integration and extra rotated-camera passes. HOTD2 uses an injected capture bridge with configurable mesh/stage visibility expansion. Experimental `expand_world` broadens loaded stage submissions without rotating the camera or retaining scenery across frames. Full 360-degree coverage is not established: other culling, unloaded sections and never-authored surfaces can still leave gaps when you turn or lean.
+The upstream renderer uses `HGL_VIEW.DLL` integration and extra rotated-camera passes. HOTD2 uses an injected capture bridge with configurable mesh/stage visibility expansion. Experimental `expand_world` broadens loaded stage submissions without rotating the camera or retaining scenery across frames. Full 360-degree coverage is not established: other culling, unloaded sections and never-authored surfaces can still leave gaps when you turn or lean.
 
 The bridge also repairs alpha after native bitmap uploads so menu art remains visible. Screen-space UI is captured in every game mode, including tutorial, story, game-over and menus, without a native depth cutoff. It uses a canvas 2 m away and 2 × 1.5 m in size, anchored to the recenter origin. Native transparency and submission order remain; UI draws above world geometry and never becomes an aim or splash target. The captured-screen panel replaces that HUD layer when its texture is available, avoiding duplicate UI. Model geometry, including untagged traveling tracers, keeps its world depth. Native letterbox bars are omitted from VR capture. During pause, VR retains the last gameplay scene; full-screen blackouts outside pause remain captured. These capture changes leave the native game rendering path running.
 
 Texture capture preserves each material's independent U/V wrap, mirror and clamp modes. World and HUD shaders apply addressing after UV interpolation, preserving the native mapping on mirrored model halves. Opening-car material inspection and offscreen viewer replay passed; boss/headset appearance still needs confirmation. Rebuild and restart both bridge and viewer after capture-format changes.
 
-## Troubleshooting and current limits
+### Troubleshooting and current limits
 
 - **Unsupported executable:** compare the game's hash with the supported build above. This is an exact-build integration.
 - **No bridge / protocol mismatch:** launch through `Start-HOTD2.ps1`, close stale game/viewer sessions, and rebuild the bridge and viewer together. A viewer alone cannot inject an already running unmodified game.
@@ -404,7 +553,7 @@ Texture capture preserves each material's independent U/V wrap, mirror and clamp
 
 Core 3D rendering, startup centering, controller shooting, close aiming, reload, the mode-selection menu, gameplay HUD placement and letterbox removal have user headset confirmation. World-scale changes, laser/crosshair toggles, independent-player presentation, exact reload thresholds, broader UI/mode coverage, stereoscopic comfort and full-game compatibility still need further headset checks. Native cheat activation/restoration passed desktop checks; damage protection, P2 gameplay and Original-mode weapons still need runtime confirmation. Offline or desktop success does not establish those results. Detailed evidence and remaining checks live in [docs/findings.md](docs/findings.md).
 
-## Validation
+### Validation
 
 `build.ps1` runs offline checks for capture/projection, native input signatures and trigger edges, startup patches, cheat restoration and rapid-fire guards, texture-cache behavior, coherent frame snapshots, scale and indicator options, and offscreen Direct3D11 rendering. These checks start neither the game nor OpenXR.
 
@@ -425,13 +574,13 @@ python tools/capture_bats.py --game 'N:\games\systems\pcvr\bin\TheHouseOfTheDead
 
 This diagnostic build reuses the RE project's autoplay selector and gun calibration. It shoots opening enemies through normal gun input, permanently stops firing when live bats appear, and captures at a nearest-bat distance of 30 game units. It runs native graphics and desktop conversion separately with `launchfix=1`, never enables OpenXR, and closes its own game/viewers afterward. Native mode explicitly uses `--no-graphics-hooks` and takes its screenshot externally, without pausing or reading the game's D3D device. That screenshot can follow the actor snapshot by several game frames; it is not an exact-frame comparison. Each run has an isolated INI/checkpoint under `build/bat-bot-*`; normal builds and game configuration stay untouched. Output includes native actor records/transforms, desktop screenshots, and converted-frame/atlas evidence. Both modes reached the bat capture in desktop testing; see [findings](docs/findings.md#bounded-bat-autoplay-diagnostic-2026-10-22).
 
-## Removal and rollback
+### Removal and rollback
 
 Close the viewer and game. All hooks and startup changes disappear with the game process. Launch the original `Hod2.exe` normally to play without the mod; the mod does not deploy DLLs into its folder or edit `Hod2.ini`. The development backup `build\Hod2.ini.before-test`, when present, predates the first desktop test.
 
 ## Credits
 
-- **[NeuralF — Virtua Cop 2 VR / VC2VR](https://github.com/NeuralF/Rea-Virtua-Cop-2-VR):** the viewer foundation, OpenXR/shared-memory approach, controller handling, gun rendering, recoil and sight code. The upstream MIT copyright notice is retained in [LICENSE](LICENSE).
+The viewer is adapted from [NeuralF's Virtua Cop 2 VR (VC2VR)](https://github.com/NeuralF/Rea-Virtua-Cop-2-VR). Its OpenXR/shared-memory approach, controller handling, sights, gun rendering and recoil provided the foundation. The launcher, Direct3D7 capture and native input integration are specific to HOTD2. The upstream MIT copyright notice is retained in [LICENSE](LICENSE).
 - **Gun assets bundled with VC2VR:** the Emerald revolver OBJ, material and texture, reused for both hands. The [upstream model header](https://github.com/NeuralF/Rea-Virtua-Cop-2-VR/blob/d99da1e6795ead74ac1bd9f24eec1a89e414ca62/gun/gun.obj) labels it “Emerald revolver (Meshy)”. No separate artist name or original model-page link was found in the checked upstream files. See [asset provenance](THIRD-PARTY.md#gun-model-and-texture).
 - **[The Khronos Group](https://github.com/KhronosGroup/OpenXR-SDK):** OpenXR headers and loader.
 - **[Argonlefou / DemulShooter](https://github.com/argonlefou/DemulShooter):** HOTD2 input-location and keyboard-convention reference, cross-checked against the supported executable. No DemulShooter code is included.

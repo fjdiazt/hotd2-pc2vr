@@ -20,7 +20,8 @@ foreach ($name in 'HOTD2Launch.exe', 'HOTD2Bridge.dll') { Assert-PeMachine (Join
 Assert-PeMachine (Join-Path $BuildDirectory 'HOTD2VR.exe') 0x8664
 $runtime = @('HOTD2Launch.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'gun.obj', 'gun.mtl', 'gun.bmp')
 $sources = @('Start-HOTD2.ps1', 'tools\extract_menu_font.ps1', 'README.md', 'LICENSE', 'THIRD-PARTY.md',
-    'third_party\openxr\LICENSE', 'docs\vr-menu.md', 'docs\cheats.md', 'docs\pause.md', 'docs\findings.md')
+    'third_party\openxr\LICENSE', 'docs\vr-menu.md', 'docs\cheats.md', 'docs\pause.md', 'docs\findings.md',
+    'docs\screenshots\game-menu.png', 'docs\screenshots\vr-settings.png')
 foreach ($name in $runtime) {
     if (!(Test-Path -LiteralPath (Join-Path $BuildDirectory $name) -PathType Leaf)) { throw "Missing runtime file: $name" }
 }

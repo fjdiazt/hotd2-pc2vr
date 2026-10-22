@@ -30,7 +30,8 @@ class PackageTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         for name in ('Start-HOTD2.ps1', 'HOTD2VR.ini', 'README.md', 'LICENSE',
                      'THIRD-PARTY.md', 'tools/extract_menu_font.ps1', 'third_party/openxr/LICENSE',
-                     'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md'):
+                     'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md',
+                     'docs/screenshots/game-menu.png', 'docs/screenshots/vr-settings.png'):
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
@@ -82,8 +83,12 @@ class PackageTest(unittest.TestCase):
                 'docs/findings.md', 'build/HOTD2Launch.exe', 'build/HOTD2Bridge.dll',
                 'build/HOTD2VR.exe', 'build/HOTD2VR.ini', 'build/openxr_loader.dll',
                 'build/gun.obj', 'build/gun.mtl', 'build/gun.bmp',
+                'docs/screenshots/game-menu.png', 'docs/screenshots/vr-settings.png',
             })
             self.assertEqual(package.read('build/HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
+            for image in ('game-menu.png', 'vr-settings.png'):
+                name = 'docs/screenshots/' + image
+                self.assertEqual(package.read(name), (ROOT / name).read_bytes())
         checksum = archive.with_suffix('.zip.sha256').read_text().strip()
         self.assertEqual(checksum.lower(), f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}'.lower())
 
