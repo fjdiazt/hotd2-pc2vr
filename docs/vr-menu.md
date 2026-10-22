@@ -69,8 +69,8 @@ Initial UI validation checked native-font placement over live captured geometry
 and during pause through the actual viewer shaders. The user confirmed its
 appearance and operation in VR before settings wiring was added.
 
-The launcher generates menu-font.rgba through tools/extract_menu_font.py from
-the owned supported game. The asset is not distributed. The viewer uses its own
+The launcher generates menu-font.rgba through tools/extract_menu_font.ps1 using
+PowerShell/.NET and the owned supported game; no Python is needed. The asset is not distributed. The viewer uses its own
 texture instead of calling native Options or changing native resource loading.
 
 Checks cover every public option's coverage, validation, live/restart behavior,

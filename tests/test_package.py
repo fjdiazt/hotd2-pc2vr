@@ -1,0 +1,117 @@
+"""Release contents, architecture and loader integrity without network or game files."""
+from pathlib import Path
+import hashlib
+import os
+import shutil
+import struct
+import subprocess
+import tempfile
+import unittest
+import zipfile
+
+
+ROOT = Path(__file__).resolve().parents[1]
+LOADER_HASH = '05638C526F07BA3A5F1084BBC3308D654D5167F844FFA1E35515325CB72E0C34'
+
+
+def pe(machine):
+    image = bytearray(128)
+    image[:2] = b'MZ'
+    struct.pack_into('<I', image, 60, 64)
+    image[64:68] = b'PE\x00\x00'
+    struct.pack_into('<H', image, 68, machine)
+    return image
+
+
+class PackageTest(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory(prefix='hotd2-package-')
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        for name in ('Start-HOTD2.ps1', 'HOTD2VR.ini', 'README.md', 'LICENSE',
+                     'THIRD-PARTY.md', 'tools/extract_menu_font.ps1', 'third_party/openxr/LICENSE',
+                     'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md'):
+            target = self.root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / name, target)
+        self.build = self.root / 'built files'
+        self.build.mkdir()
+        for name, machine in (('HOTD2Launch.exe', 0x14C), ('HOTD2Bridge.dll', 0x14C), ('HOTD2VR.exe', 0x8664)):
+            (self.build / name).write_bytes(pe(machine))
+        for name in ('gun.obj', 'gun.mtl', 'gun.bmp'):
+            shutil.copyfile(ROOT / 'assets/gun' / name, self.build / name)
+        for name in ('menu-font.rgba', 'test_startup.exe', 'private.log', 'HOTD2VR.ini'):
+            (self.build / name).write_bytes(b'local data must not ship')
+        self.loader = self.root / 'loader.nupkg'
+        with zipfile.ZipFile(self.loader, 'w') as archive:
+            archive.writestr('native/x64/release/bin/openxr_loader.dll', pe(0x8664))
+        digest = hashlib.sha256(self.loader.read_bytes()).hexdigest().upper()
+        self.script = self.root / 'package.ps1'
+        self.script.write_text((ROOT / 'package.ps1').read_text().replace(LOADER_HASH, digest))
+        self.output = self.root / 'release output'
+
+    def run_package(self, version='v1.2.3', defaults=False):
+        env = dict(os.environ)
+        env.pop('PSMODULEPATH', None)
+        command = ['powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                   '-File', str(self.script), '-Version', version]
+        if not defaults:
+            command += ['-BuildDirectory', str(self.build), '-OutputDirectory', str(self.output),
+                        '-LoaderPackage', str(self.loader)]
+        return subprocess.run(command,
+                              env=env, capture_output=True, text=True, timeout=30)
+
+    def test_default_paths_work_in_windows_powershell(self):
+        shutil.copytree(self.build, self.root / 'build')
+        cache = self.root / 'build/release-deps/OpenXR.Loader.1.1.65.nupkg'
+        cache.parent.mkdir()
+        shutil.copyfile(self.loader, cache)
+        result = self.run_package(defaults=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.root / 'build/releases/HOTD2-PC2VR-v1.2.3-windows-x64.zip').is_file())
+
+    def test_release_allowlist_and_checksum(self):
+        result = self.run_package()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        archive = self.output / 'HOTD2-PC2VR-v1.2.3-windows-x64.zip'
+        with zipfile.ZipFile(archive) as package:
+            files = {name.replace('\\', '/') for name in package.namelist() if not name.endswith('/')}
+            self.assertEqual(files, {
+                'Start-HOTD2.ps1', 'tools/extract_menu_font.ps1', 'README.md', 'LICENSE', 'THIRD-PARTY.md',
+                'third_party/openxr/LICENSE', 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
+                'docs/findings.md', 'build/HOTD2Launch.exe', 'build/HOTD2Bridge.dll',
+                'build/HOTD2VR.exe', 'build/HOTD2VR.ini', 'build/openxr_loader.dll',
+                'build/gun.obj', 'build/gun.mtl', 'build/gun.bmp',
+            })
+            self.assertEqual(package.read('build/HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
+        checksum = archive.with_suffix('.zip.sha256').read_text().strip()
+        self.assertEqual(checksum.lower(), f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}'.lower())
+
+    def test_wrong_architecture_rejected(self):
+        (self.build / 'HOTD2VR.exe').write_bytes(pe(0x14C))
+        result = self.run_package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Wrong PE architecture', result.stderr)
+        self.assertFalse(list(self.output.glob('*.zip')))
+
+    def test_loader_integrity_rejected(self):
+        self.loader.write_bytes(b'tampered')
+        result = self.run_package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('OpenXR loader package SHA256 mismatch', result.stderr)
+        self.assertFalse(list(self.output.glob('*.zip')))
+
+    def test_unsafe_version_rejected(self):
+        result = self.run_package('../escape')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.output.exists())
+
+    def test_missing_runtime_rejected(self):
+        (self.build / 'HOTD2Bridge.dll').unlink()
+        result = self.run_package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(list(self.output.glob('*.zip')))
+
+
+if __name__ == '__main__':
+    unittest.main()

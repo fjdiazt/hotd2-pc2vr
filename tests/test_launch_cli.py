@@ -70,8 +70,25 @@ int wmain(int argc,wchar_t **argv) {
                              "--start-scene", "0", "--no-continue-game", "--no-window", "--no-vrwindow"])
             self.assertEqual(viewer_log.read_text().splitlines(), ["--no-window", "--no-vrwindow",
                              "--infinite-ammo", "--invincibility", "--master-volume", "25"])
+            # A first launch must dispatch PowerShell extraction without Python on PATH.
+            (build / "menu-font.rgba").unlink()
+            (fixture / "tools").mkdir()
+            extractor = fixture / "tools/extract_menu_font.ps1"
+            extractor.write_text('param($GameExe,$Output)\n[IO.File]::WriteAllBytes($Output,[byte[]](1,2,3))\n')
+            no_python = dict(env, PATH=str(Path(os.environ['SystemRoot']) / 'System32'))
+            result = subprocess.run(command, env=no_python, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((build / "menu-font.rgba").read_bytes(), b'\x01\x02\x03')
+            (build / "menu-font.rgba").unlink()
             log.unlink()
             viewer_log.unlink()
+            extractor.write_text("throw 'Font extraction stopped'\n")
+            result = subprocess.run(command, env=no_python, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Font extraction stopped', result.stderr)
+            self.assertFalse(log.exists())
+            self.assertFalse(viewer_log.exists())
+            (build / "menu-font.rgba").touch()
             result = subprocess.run(command + ["-Window"], env=env, capture_output=True,
                                     text=True, timeout=15)
             self.assertNotEqual(result.returncode, 0)

@@ -31,6 +31,7 @@ Upstream provenance was checked on **2026-10-18**, at commit `d99da1e6795ead74ac
 
 - **Headers:** [Khronos OpenXR SDK](https://github.com/KhronosGroup/OpenXR-SDK), API header version 1.1.62. Copyright and SPDX notices remain in the headers (`Apache-2.0 OR MIT`); the supplied license text is retained at [third_party/openxr/LICENSE](third_party/openxr/LICENSE).
 - **Loader:** `openxr_loader.dll`, when copied by the build from the existing VC2VR installation, is Khronos's x64 OpenXR loader. It is a runtime dependency, separate from either game's code. The build preserves an existing local loader.
+- **Release loader:** release ZIPs include the x64 DLL from Khronos's [OpenXR.Loader 1.1.65 package](https://github.com/KhronosGroup/OpenXR-SDK/releases/tag/release-1.1.65), verified against package SHA256 `05638C526F07BA3A5F1084BBC3308D654D5167F844FFA1E35515325CB72E0C34`. Its Apache-2.0 license is included at `third_party/openxr/LICENSE`. Packaging does not reuse a development machine's loader.
 
 ## Input references
 

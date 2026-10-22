@@ -18,9 +18,8 @@ Your existing game installation stays in place. No HOTD2 game files are included
 
 - Your own working Windows PC copy of The House of the Dead 2.
 - Windows x64, a Direct3D 11-capable GPU, and a PC VR headset with an active OpenXR runtime.
-- PowerShell, 32-bit MinGW GCC (`i686-w64-mingw32`), and Visual Studio C++ x64 build tools with a Windows SDK.
-- Python 3 for the first launch's native menu font extraction (standard library only).
-- The x64 `openxr_loader.dll` beside the built viewer. OpenXR headers are included in this repository.
+- Windows PowerShell 5.1 or PowerShell 7. Python and compilers are not required to use a release ZIP.
+- The x64 `openxr_loader.dll` beside the viewer (included in release ZIPs).
 
 Only this `Hod2.exe` build is currently supported:
 
@@ -31,7 +30,23 @@ MD5    97C9E516A287AAB33A455A396DADAA45
 
 The launcher checks the SHA256 before starting a game; native hooks also check their instruction signatures. Other executable layouts, the Remake, and emulated versions are outside the supported target.
 
-## Build and run
+## Download and run
+
+Download `HOTD2-PC2VR-<version>-windows-x64.zip` from the repository's Releases page and extract it into a writable folder. Keep its directory structure, including `build\` and `tools\`.
+
+From the extracted folder, run:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -Mode VR
+```
+
+Supply your own game path. The first launch extracts the menu font from your game with PowerShell/.NET; no game artwork is bundled. No files need copying into the game directory. The command's execution-policy override applies only to that PowerShell process.
+
+Release ZIPs include the matching x86 bridge/launcher, x64 viewer, default settings, gun assets, official x64 OpenXR loader, scripts, documentation and licenses. The adjacent `.zip.sha256` file contains the ZIP's SHA256 checksum.
+
+## Build from source
+
+Source builds require 32-bit MinGW GCC (`i686-w64-mingw32`) and Visual Studio C++ x64 build tools with a Windows SDK. Python 3 is used only by developer tests and optional diagnostic tools.
 
 From the repository root:
 
@@ -50,6 +65,20 @@ The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun 
 4. Face forward while the headset becomes focused and tracked. Right thumbstick click recenters afterward.
 
 Keep the bridge and viewer from the same build together: their shared-memory formats must match. No DLL needs to be copied into the game directory.
+
+### Automated releases
+
+Publishing a GitHub release, including a prerelease, runs `.github/workflows/release.yml` against its tagged commit. It builds on Windows, runs offline and packaging tests, creates the runtime ZIP and checksum, and attaches both to that release. Draft releases do not trigger a build. Assets appear after the workflow succeeds; a failed build leaves the release without new binaries.
+
+The workflow also supports **Actions → Build release → Run workflow** for an inspection build. Manual runs save workflow artifacts and do not publish a release. Tag names used for packaging must start with a letter or digit and contain only letters, digits, dots, underscores or hyphens (maximum 80 characters). Reruns do not overwrite existing release assets.
+
+To package a local build:
+
+```powershell
+.\package.ps1 -Version v1.0.0
+```
+
+The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256, checks binary architectures, and writes to `build\releases\`. It packages only listed runtime files and fresh repository defaults; local INI edits, generated fonts, checkpoints, logs and test executables are excluded. Offline/CI checks do not prove headset rendering or controller behavior.
 
 ### Desktop previews and reconnecting
 
