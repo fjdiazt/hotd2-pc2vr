@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #define WIN32_LEAN_AND_MEAN
+#define COBJMACROS
 #include <windows.h>
 static char config_test_exe[MAX_PATH];
 static DWORD config_test_module(HMODULE module,char *path,DWORD size)
@@ -13,6 +14,18 @@ static DWORD config_test_module(HMODULE module,char *path,DWORD size)
     return GetModuleFileNameA(module,path,size);
 }
 #define GetModuleFileNameA config_test_module
+static int keyboard_fixture;
+static SHORT keyboard_keys[256];
+static DWORD keyboard_owner;
+static SHORT WINAPI menu_key_state(int key)
+{return keyboard_fixture?keyboard_keys[key]:GetAsyncKeyState(key);}
+static HWND WINAPI menu_foreground(void)
+{return keyboard_fixture?(HWND)(ULONG_PTR)1:GetForegroundWindow();}
+static DWORD WINAPI menu_window_owner(HWND window,LPDWORD owner)
+{if(!keyboard_fixture)return GetWindowThreadProcessId(window,owner);*owner=keyboard_owner;return 1;}
+#define GetAsyncKeyState menu_key_state
+#define GetForegroundWindow menu_foreground
+#define GetWindowThreadProcessId menu_window_owner
 #define main viewer_application_main
 #include "../src/hotd2vr.c"
 #undef main
@@ -87,7 +100,7 @@ static void check_menu_layout(void)
         {"infinite_ammo","infinite_lives","invincibility","protect_rescue_npcs","infinite_continues","rapid_fire","rapid_fire_rate"}
     };
     const unsigned counts[]={2,7,11,3,8,7};
-    assert(vrMenuRootCount==12);
+    assert(vrMenuRootCount==13);
     g_vrMenuEnabled=g_vrMenuOpen=1;g_vrMenuArmed=g_vrMenuBlock=g_vrMenuPrevious=0;
     for(unsigned g=0;g<6;g++) {
         g_vrMenuPage=-1;g_vrMenuRow=MENU_GROUP_FIRST+g;
@@ -153,6 +166,46 @@ static void check_menu_help(void)
     check_footer("USE GAME LIGHTS AND FOG","APPLIES WHEN GAME RESUMES");
     g_nativePaused=0;g_vrMenuPage=-1;g_vrMenuRow=0;memset(g_vrMenuFont,0,sizeof(g_vrMenuFont));
 }
+static void check_keyboard(void)
+{
+    keyboard_fixture=1;keyboard_owner=GetCurrentProcessId();
+    g_vrMenuEnabled=1;g_vrMenuOpen=g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;
+    keyboard_keys[VK_F8]=(SHORT)0x8000;
+    vrMenuKeyboard();assert(g_vrMenuOpen && g_vrMenuOwnsInput && (g_frame->aim_buttons&VC2_BTN_MENU));
+    assert(g_frame->menu_open==1 && g_frame->menu_tick && !(g_frame->menu_seq&1));
+    assert(!memcmp(g_frame->menu_pixels,g_vrMenuPixels,sizeof(g_vrMenuPixels)));
+    unsigned published=g_frame->menu_seq;vrMenuKeyboard();assert(g_frame->menu_seq==published);
+    assert(g_vrMenuTextureDirty && !g_vrMenuDirty); /* Native upload cannot consume the VR texture upload. */
+    vrMenuKeyboard();assert(g_vrMenuOpen); /* Held toggle does not bounce. */
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_DOWN]=(SHORT)0x8000;vrMenuKeyboard();vrMenuKeyboard();assert(g_vrMenuRow==1);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    g_vrMenuRow=MENU_GROUP_FIRST;
+    keyboard_keys[VK_RETURN]=(SHORT)0x8000;vrMenuKeyboard();assert(g_vrMenuPage==0);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;vrMenuKeyboard();assert(g_vrMenuPage==-1 && g_vrMenuOpen);
+    vrMenuKeyboard();assert(g_vrMenuOpen); /* Held Back cannot close the parent page too. */
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;vrMenuKeyboard();assert(!g_vrMenuOpen && g_vrMenuOwnsInput);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();vrMenuKeyboard();
+    assert(!g_vrMenuOwnsInput && !(g_frame->aim_buttons&VC2_BTN_MENU));
+    assert(!g_frame->menu_open);
+    keyboard_keys[VK_F8]=(SHORT)0x8000;
+    keyboard_owner=123456;g_frame->game_pid=123457;
+    vrMenuKeyboard();assert(!g_vrMenuOpen); /* Other applications cannot toggle or navigate. */
+    keyboard_owner=g_frame->game_pid;vrMenuKeyboard();assert(g_vrMenuOpen); /* Native window focus. */
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();
+    keyboard_keys[VK_TAB]=(SHORT)0x8000;assert(vrMenuKeyboardInput()==VC2_BTN_START);
+    keyboard_keys[VK_TAB]=0;keyboard_keys[VK_LCONTROL]=(SHORT)0x8000;assert(vrMenuKeyboardInput()==MENU_KEY_BACK);
+    keyboard_keys[VK_LCONTROL]=0;keyboard_keys[VK_ESCAPE]=(SHORT)0x8000;vrMenuKeyboard();assert(!g_vrMenuOpen);
+    memset(keyboard_keys,0,sizeof(keyboard_keys));vrMenuKeyboard();vrMenuKeyboard();
+    g_previewOnly=1;keyboard_keys[VK_F8]=(SHORT)0x8000;assert(!vrMenuKeyboardInput());
+    published=g_frame->menu_seq;vrMenuNativePublish();assert(g_frame->menu_seq==published);
+    keyboard_owner=GetCurrentProcessId();assert(vrMenuKeyboardInput()==MENU_TOGGLE);
+    g_previewOnly=0;g_vrMenuEnabled=0;assert(!vrMenuKeyboardInput());g_vrMenuEnabled=1;
+    g_frame->game_pid=0;keyboard_fixture=0;memset(keyboard_keys,0,sizeof(keyboard_keys));
+    g_vrMenuPage=-1;g_vrMenuRow=0;g_vrMenuPrevious=0;
+}
 int main(void)
 {
     check_menu_layout();check_config_defaults();check_menu_help();
@@ -181,6 +234,7 @@ int main(void)
     g_previewOnly=1;assert(!vrMenuSet(arcade,0) && g_cfgArcadeGunColors);g_previewOnly=0;
     assert(vrMenuSet(arcade,0) && !g_cfgArcadeGunColors && vrMenuSave());
     assert(GetPrivateProfileIntA("vr","arcade_gun_colors",-1,g_vrIniPath)==-1);
+    check_keyboard();
     g_vrMenuEnabled=1;assert(vrMenuControl(0)==0 && !g_vrMenuOpen);
     g_nativePaused=1;assert(vrMenuControl(0)==0 && !g_vrMenuOpen);
     g_nativePaused=0;assert(vrMenuControl(0)==0);
@@ -237,6 +291,41 @@ int main(void)
     g_frame->seq=2;g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=9;
     g_vrMenuDirty=0;vrMenuDestination();assert(g_vrMenuDirty && strstr(g_vrMenuDestination,"SCENE 9"));
     assert(g_frame->checkpoint_request==4 && g_frame->checkpoint_response==4);
+    /* Stage select follows Load; browse stage, then actual scene IDs before issuing a restart. */
+    assert(!strcmp(vrMenuRootLabels[2],"STAGE SELECT"));
+    g_frame->checkpoint_stage_scenes[2][0]=(1u<<0)|(1u<<7)|(1u<<9)|(1u<<14);
+    g_frame->checkpoint_stage_scenes[2][1]=(1u<<3)|(1u<<7)|(1u<<8)|(1u<<31);
+    g_frame->checkpoint_stage_scenes[2][2]=1u;g_frame->checkpoint_stage_scenes[2][7]=1u<<31;
+    g_frame->checkpoint_stage_scenes[5][7]=1u<<31;
+    g_vrMenuRow=MENU_STAGE_SELECT;press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_STAGES && g_vrMenuRow==2 && g_frame->checkpoint_request==4);
+    check_footer("SELECT STAGE TO CHOOSE ITS SCENE",NULL);
+    if(font)image("build/menu-stage-select.bmp");
+    assert(vrMenuControl(VC2_BTN_START)==1 && vrMenuControl(VC2_BTN_START)==1 && vrMenuControl(0)==1);
+    assert(g_vrMenuPage==MENU_SCENES && g_vrMenuStage==3 && g_vrMenuRow==1 && vrMenuCount()==10);
+    check_footer("START STAGE 3 DARKNESS SCENE 7",NULL);
+    assert(g_vrMenuScenes[0]==0 && g_vrMenuScenes[4]==35 && g_frame->checkpoint_request==4);
+    press(VC2_BTN_UP);assert(g_vrMenuRow==0);press(VC2_BTN_DOWN);press(VC2_BTN_DOWN);
+    assert(g_vrMenuScenes[g_vrMenuRow]==9);if(font)image("build/menu-scene-select.bmp");
+    for(int i=0;i<4;i++)press(VC2_BTN_DOWN);
+    assert(g_vrMenuRow==6 && g_vrMenuScenes[g_vrMenuRow]==40);if(font)image("build/menu-scene-select-page2.bmp");
+    for(int i=0;i<4;i++)press(VC2_BTN_UP);
+    g_previewOnly=1;press(VC2_BTN_START);g_previewOnly=0;
+    assert(g_frame->checkpoint_request==4 && !g_frame->checkpoint_target_stage);
+    press(VC2_BTN_START);assert(g_frame->checkpoint_request==5 && g_frame->checkpoint_action==HOTD_CHECKPOINT_SELECT);
+    assert(g_frame->checkpoint_target_stage==3 && g_frame->checkpoint_target_scene==9);
+    assert(!strcmp(g_vrMenuStatus,"STARTING SELECTED SCENE"));
+    press(VC2_BTN_START);assert(g_frame->checkpoint_request==5);
+    g_frame->checkpoint_response=5;g_frame->checkpoint_result=HOTD_SAVE_OK;
+    g_frame->checkpoint_stage=3;g_frame->checkpoint_scene=9;vrMenuCheckpointPoll();
+    assert(!strcmp(g_vrMenuStatus,"LOADED DARKNESS SCENE 9"));
+    press(VC2_BTN_BACK);assert(g_vrMenuPage==MENU_STAGES && g_vrMenuRow==2);
+    for(int i=0;i<3;i++)press(VC2_BTN_DOWN);press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_SCENES && vrMenuCount()==1 && g_vrMenuScenes[0]==255);
+    press(VC2_BTN_BACK);press(VC2_BTN_UP);press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_STAGES && !strcmp(g_vrMenuError,"NO AVAILABLE SCENES"));
+    press(VC2_BTN_BACK);assert(g_vrMenuPage==-1 && g_vrMenuRow==MENU_STAGE_SELECT && !g_vrMenuError);
+    g_vrMenuRow=0;g_vrMenuError=NULL;
     vrMenuCanvas();assert(g_vrMenuPixels[479][639]==0x8017191D);
     vrMenuRect(0,0,32,32,0x80FFFFFF);
     memset(g_vrMenuFont['?'][0][0],255,4);g_vrMenuFont['?'][0][0][3]=128;

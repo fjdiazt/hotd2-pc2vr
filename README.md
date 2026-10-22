@@ -31,7 +31,7 @@ You need your own installed Windows PC copy of the game, a PC VR headset, and mo
 | Make your current direction the centre | Face forward and **click the right thumbstick**. |
 | Open or close VR Settings | **Click the left thumbstick**. |
 
-The right controller is Player 1; the left is Player 2. By default, **Two guns** is on, so starting joins both players. Turn it off in **VR Settings > Controls** if you want each hand to join separately.
+The right controller is Player 1; the left is Player 2. By default, **Akimbo** is on, so starting joins both players. Turn it off in **VR Settings > Controls** if you want each hand to join separately.
 
 For Vive controllers, use the menu button for Start/Pause and the left/right trackpad clicks for Settings/recentering. On Index, use A/B on either hand.
 
@@ -51,7 +51,7 @@ This panel controls the VR mod. The original game's **Options** menu is separate
 - **B/Y:** return to the list of groups.
 - **Left thumbstick click:** close the menu and save changes.
 
-**Opening Settings does not pause the game.** Press **A/X** first if you want to stop the action while changing options; press it again to resume. On a desktop-only preview, **F8** opens/closes Settings, the arrow keys navigate, **Enter** selects, and **Backspace** goes back. A companion preview beside a headset session is read-only.
+**Opening Settings does not pause the game.** Press **A/X** first if you want to stop the action while changing options; press it again to resume. In the native game window or desktop preview, **F8** opens/closes Settings, the arrow keys navigate, **Enter** selects, and **Backspace** goes back. A companion preview beside a headset session is read-only.
 
 Changed settings save automatically when you close the panel. The INI stores overrides: missing keys use built-in defaults, and changing an option back to its default removes its key. Existing unedited keys are preserved. If a setting says a restart is needed, choose **Quit game**, then start the mod again. You can leave everything at its default and play without changing any settings.
 
@@ -59,7 +59,7 @@ The selected option shows a short explanation below the list. For example, **Aki
 
 ## Settings explained
 
-Groups appear after Save game, Load game and New game in this order: **Game Settings**, **Display**, **Rendering**, **Audio**, **Controls**, **Cheats**.
+Groups appear after Save game, Load game, Stage select and New game in this order: **Game Settings**, **Display**, **Rendering**, **Audio**, **Controls**, **Cheats**.
 
 The names below match the menu. **On/off** options show `1` for on and `0` for off. Defaults describe a fresh installation; your saved settings may differ.
 
@@ -69,6 +69,7 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 | --- | --- |
 | **Save game** | Saves the current Arcade chapter and scene. Works during play or pause. This is a scene checkpoint: loading restarts that scene, rather than restoring the exact moment, enemy positions or player state. |
 | **Load game** | Restarts the saved Arcade scene. Also works from the title/menu. There is one save slot, shared with Autosave. The destination appears below the selected row. |
+| **Stage select** | Choose one of six named stages, then an available native scene ID. Confirm to restart there; browsing leaves the game unchanged. Scene availability does not guarantee every earlier route/script prerequisite. |
 | **New game** | Starts chapter 1, scene 0. Keeps the existing save, although Autosave can replace it when enabled. |
 | **Reset defaults** | Restores the menu settings to their built-in defaults, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
 | **Return to title** | Ends the current run and returns to the startup title/attract sequence after the publisher logos. Saves changed settings first and keeps the checkpoint file. |
@@ -241,7 +242,7 @@ The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256,
 
 To attach a new viewer to an already injected game, run `build\HOTD2VR.exe` directly, optionally with `--window --no-vrwindow` or `--stereo`. Closing the viewer leaves the game running; closing the connected game ends the viewer. `-Seconds 20` limits the viewer session without closing the game.
 
-Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the floating panel through auto/on/off, and Escape closes the viewer.
+Desktop preview controls: W/A/S/D move, mouse drag turns, R resets, M cycles the floating panel through auto/on/off, and Escape closes the viewer when VR Settings is closed. F8 toggles VR Settings; arrows navigate, Enter confirms and Right Ctrl goes back/closes.
 
 Under `[vr]`, `window` controls the existing reconstructed desktop preview and `vrwindow` controls headset rendering independently. The native game window stays available in every combination; `[bridge] windowed` only selects its windowed/fullscreen mode.
 
@@ -271,7 +272,7 @@ With both outputs enabled, the preview uses the existing independent desktop cam
 | Right thumbstick click | Recenter the VR view |
 | Left thumbstick click | Open/close VR Settings, save edits on close |
 
-Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-21 bridge/viewer builds are required.
+Trigger supplies Start and Fire; A/X supplies Start and Pause. The native game consumes them in its own interfaces. The pause input reader ignores synthetic trigger Start and accepts A/X press edges, retaining native eligibility, player ownership and automatic device-disconnect pause. Physical Enter/Tab retain native Start/pause. No menu classifier is used. Matching protocol-24 bridge/viewer builds are required.
 
 Reload direction is measured from each tracked gun relative to the current headset orientation: up **50°**, down **45°**, or left/right **60°**, then pull the trigger. Head pitch/yaw/roll defines the reference; scripted game-camera motion and recenter offsets do not change these thresholds. A trigger pull remains a shot or reload until release; lost tracking disarms it until release. Grip supplies Reload only; B/Y supplies Skip/Cancel only. Two signature-checked weapon input reads preserve native reload rules while separating those commands. Physical Ctrl retains native behavior. Both sticks navigate native menus; right click recenters once per press. Left click toggles VR Settings. Index uses A/B on each hand; Vive uses menu for Start/Pause, grip for Reload, right trackpad click for recenter and left trackpad click for VR Settings.
 
@@ -281,7 +282,7 @@ Reload direction is measured from each tracked gun relative to the current heads
 
 Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwapPlayerHud` to retain the native layout. `--swap-player-hud` / `-SwapPlayerHud` enable it. Last direct CLI switch wins; the launcher rejects opposing switches. The flag works independently of `akimbo` and never changes controller/player assignments.
 
-Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 21 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
+Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol-24 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
 
 #### Experimental Save game and scene selection
 
@@ -289,11 +290,11 @@ To start a new Arcade game at another chapter, use `./Start-HOTD2.ps1 -StartStag
 
 Enable `[vr] continue_game=1` to record the latest Arcade stage/scene and resume it on subsequent new Arcade starts. Default is `0`. Launcher switches `-ContinueGame` / `-NoContinueGame` override this for one launch; opposing PowerShell switches are rejected. Explicit `-StartStage` / `-StartScene` take priority over the saved location. With recording enabled, subsequent scene changes update the checkpoint even after an explicit jump.
 
-VR Settings starts with **Save game**, **Load game**, then **New game**. Save writes the current Arcade stage/scene during active or paused gameplay. Load restarts the last saved scene, including from the title/menu, with Autosave off or on. New game starts chapter 1, scene 0 and retains the save file; enabled Autosave can subsequently replace it. Load and New game override startup stage/scene options and rebuild through native mode/task/resource initialization, resuming native pause when necessary. Existing active players remain joined; menu loads start P1 (both with akimbo on). Companion desktop previews remain read-only.
+VR Settings starts with **Save game**, **Load game**, **Stage select**, then **New game**. Save writes the current Arcade stage/scene during active or paused gameplay. Load restarts the last saved scene, including from the title/menu, with Autosave off or on. New game starts chapter 1, scene 0 and retains the save file; enabled Autosave can subsequently replace it. Load, Stage select and New game override startup stage/scene options and rebuild through native mode/task/resource initialization, resuming native pause when necessary. Existing active players remain joined; menu loads start P1 (both with akimbo on). Companion desktop previews remain read-only.
 
 **Game Settings > Autosave** controls `continue_game` live and saves its edited value to the active INI on settings close. The effective startup/CLI value is shown when connecting. Before selection, Save shows the current stage, chapter name and scene; Load shows the saved destination, for example `SAVE STAGE 3 DARKNESS SCENE 7` and `LOAD STAGE 2 MUDDY SCENE 8`. Missing saves and unavailable gameplay are labeled explicitly. Locations update while the menu stays open, including during pause. Save/Load captions then report progress and the acknowledged chapter name and scene, for example `SAVED A PRELUDE SCENE 4` or `LOADED MUDDY SCENE 8`. Status clears on navigation. Invalid/missing saves leave the running game intact. Initialization failure reports failure instead of success. There is one save slot, shared by manual saves and Autosave; both manual actions work with Autosave off.
 
-The bridge hook uses the writable shared frame: set `checkpoint_action` (`HOTD_CHECKPOINT_SAVE`, `HOTD_CHECKPOINT_LOAD` or `HOTD_CHECKPOINT_NEW`), publish an incremented nonzero `checkpoint_request` with a memory barrier, then wait for the same ID in `checkpoint_response` before reading `checkpoint_result`, `checkpoint_stage` and `checkpoint_scene`. Serialize callers; never write through the companion preview's read-only mapping. The game thread performs writes and transitions; the viewer polls without blocking rendering. Load acknowledgment waits for destination root/scene activation, with a 30-second bridge timeout. The viewer's 45-second timeout reports an unknown result and retains outstanding bridge ownership. `checkpoint_autosave` is heartbeat-owned (`0` inherits launch configuration, `1` off, `2` on); disconnect restores launch configuration. Save outside Arcade gameplay reports unavailable; write failures preserve the old file. No save CLI or arbitrary live scene-jump command is exposed.
+The bridge hook uses the writable shared frame: set `checkpoint_action` (`HOTD_CHECKPOINT_SAVE`, `HOTD_CHECKPOINT_LOAD` or `HOTD_CHECKPOINT_NEW`), publish an incremented nonzero `checkpoint_request` with a memory barrier, then wait for the same ID in `checkpoint_response` before reading `checkpoint_result`, `checkpoint_stage` and `checkpoint_scene`. Serialize callers; never write through the companion preview's read-only mapping. The game thread performs writes and transitions; the viewer polls without blocking rendering. Load acknowledgment waits for destination root/scene activation, with a 30-second bridge timeout. The viewer's 45-second timeout reports an unknown result and retains outstanding bridge ownership. `checkpoint_autosave` is heartbeat-owned (`0` inherits launch configuration, `1` off, `2` on); disconnect restores launch configuration. Save outside Arcade gameplay reports unavailable; write failures preserve the old file. The Stage select menu uses the same native scene-restart hook with an explicit destination; no save CLI is exposed.
 
 The bridge stores `[checkpoint] version=1`, `stage=1..6` and `scene=0..255` in `HOTD2VR.checkpoint.ini` beside its DLL, separate from both configuration and native game saves. It writes only when the location changes during active Arcade gameplay, using a flushed temporary file and atomic replacement. No player health, score, inventory, enemy state, route history or exact script position is saved. Resume restarts the selected scene. Disabling the feature retains the file; deleting it starts normally until another checkpoint is recorded.
 
@@ -327,9 +328,9 @@ Closing the panel saves only edited keys to `HOTD2VR.ini` beside that viewer. No
 
 `[vr] menu=0` or `--no-menu` disables the panel; `--menu` enables it. The launcher extracts `menu-font.rgba` from your supported game once; no original artwork is distributed. A missing/invalid font disables the panel with a log message. Native Game Options remain unchanged; their existing entry does not open VR Settings yet.
 
-Desktop preview: arrows navigate, Enter selects, Backspace returns, F8 opens/closes. A simultaneous companion preview is read-only and cannot save or change gameplay settings. The native desktop game window does not render the VR Settings panel.
+Keyboard works while either the native game or viewer window has focus: **F8** opens/closes, **arrows** navigate/change values, **Enter** confirms and **Right Ctrl** goes back (closes at the root), matching native P1 confirm/cancel keys. Native P2 keys **Tab/Left Ctrl** also work; **Backspace/Escape** are back aliases. Menu keys do not reach native menus while this panel owns input. The same panel renders in the native window, desktop preview and headset. With both outputs disabled, the existing graphics-free services mode keeps cheats/audio/checkpoints alive; the settings panel stays disabled. Native-window panel rendering requires a desktop or headset output to keep capture enabled. The bridge draws the native panel after capture, so framebuffer views do not contain a second copy. A simultaneous companion preview remains read-only; focus the native game to control the editable menu.
 
-The bridge and viewer must both be rebuilt for the current protocol 21; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 18 combined separate VR Pause and Reload/Cancel inputs with player-HUD ownership. Protocol 19 added acknowledged manual-save requests. Protocol 20 appends Save/Load/New actions and live Autosave control; Protocol 21 adds read-only current/saved stage and scene previews under the frame seqlock; all earlier fields retain their offsets. Details and verification: [docs/pause.md](docs/pause.md).
+The bridge and viewer must both be rebuilt for the current protocol 24; pause state was introduced in protocol 13, audio controls in 14, briefing-book provenance in 15 and confirmed shot events in 16. Protocol 18 combined separate VR Pause and Reload/Cancel inputs with player-HUD ownership. Protocol 19 added acknowledged manual-save requests. Protocol 20 appends Save/Load/New actions and live Autosave control; Protocol 21 adds read-only current/saved stage and scene previews under the frame seqlock; Protocol 22 appends an explicit selected destination and native scene catalogs for Stage select. Protocol 23 appends the native menu canvas and its independent sequence/heartbeat; all earlier fields retain their offsets. Protocol 24 separates Return to Title (command 3) from Stage select (command 4), rejecting older conflicting command assignments. Details and verification: [docs/pause.md](docs/pause.md).
 
 #### Two hands and akimbo
 

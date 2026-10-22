@@ -2,6 +2,13 @@
 #include <assert.h>
 #define COBJMACROS
 #include <windows.h>
+static SHORT menu_keyboard_keys[256];
+static SHORT WINAPI menu_test_key(int key){return menu_keyboard_keys[key];}
+static HWND WINAPI menu_test_foreground(void){return (HWND)(ULONG_PTR)1;}
+static DWORD WINAPI menu_test_owner(HWND window,LPDWORD owner){(void)window;*owner=GetCurrentProcessId();return 1;}
+#define GetAsyncKeyState menu_test_key
+#define GetForegroundWindow menu_test_foreground
+#define GetWindowThreadProcessId menu_test_owner
 static void snapshot_copy(void *dst,const void *src,size_t bytes);
 #undef CopyMemory
 #define CopyMemory snapshot_copy
@@ -440,12 +447,12 @@ int main(void)
     g_vrMenuPrevious=0;g_vrMenuBlock=0;g_nativePaused=0;
     controller_fires=controller_pauses=controller_backs=controller_reloads=0;controller_tick();
     controller_fires=3;controller_tick();
-    assert(g_vrMenuPage==0 && !g_frame->aim_buttons && !g_frame->aim2_buttons);
+    assert(g_vrMenuPage==0 && g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons);
     controller_fires=0;controller_tick();g_vrMenuPage=MENU_CHEATS;g_vrMenuRow=0;
     controller_fires=2;controller_tick();
     assert(vrMenuItems[MENU_CHEATS][0].value==1 && g_cheatFlags==HOTD_CHEAT_AMMO);
     assert(g_frame->cheat_flags==HOTD_CHEAT_AMMO);
-    assert(!g_frame->aim_buttons && !g_frame->aim2_buttons); /* UI Trigger cannot join/fire behind the page. */
+    assert(g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons); /* UI Trigger cannot join/fire behind the page. */
     controller_fires=0;g_cheatFlags=0;vrMenuInit();
     g_actSettings=(XrAction)(uintptr_t)10;
     controller_backs=2;controller_tick();controller_backs=0;controller_tick(); /* Back to root. */
@@ -462,14 +469,28 @@ int main(void)
     for(int paused=0;paused<2;paused++) {
         g_nativePaused=paused;controller_tick();assert(!g_vrMenuOpen);
         controller_settings=1;controller_tick();controller_tick();assert(g_vrMenuOpen);
-        assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);
+        assert(g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons);
         controller_settings=0;controller_tick();
-        controller_reloads=3;controller_tick();assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);
+        controller_reloads=3;controller_tick();assert(g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons);
         controller_reloads=0;controller_settings=1;controller_tick();assert(!g_vrMenuOpen);
-        assert(g_nativePaused==paused && !g_frame->aim_buttons && !g_frame->aim2_buttons);
+        assert(g_nativePaused==paused && g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons);
         controller_tick();assert(!g_vrMenuOpen); /* Held click cannot reopen. */
         controller_settings=0;controller_tick();
     }
+    /* Keyboard joins the same input sample; a held key stays held across controller frames. */
+    controller_tick();menu_keyboard_keys[VK_F8]=(SHORT)0x8000;controller_tick();assert(g_vrMenuOpen);
+    menu_keyboard_keys[VK_F8]=0;controller_tick();
+    menu_keyboard_keys[VK_DOWN]=(SHORT)0x8000;controller_tick();int row=g_vrMenuRow;
+    controller_tick();assert(g_vrMenuRow==row && row==1);
+    menu_keyboard_keys[VK_DOWN]=0;controller_tick();
+    g_vrMenuRow=MENU_GROUP_FIRST;controller_fires=2;controller_tick();assert(g_vrMenuPage==0);
+    controller_fires=0;controller_tick();
+    menu_keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;controller_tick();assert(g_vrMenuPage==-1 && g_vrMenuOpen);
+    menu_keyboard_keys[VK_RCONTROL]=0;controller_tick();
+    controller_sync_lost=1;menu_keyboard_keys[VK_RCONTROL]=(SHORT)0x8000;
+    controller_tick();assert(!g_vrMenuOpen && g_frame->aim_buttons==VC2_BTN_MENU);
+    menu_keyboard_keys[VK_RCONTROL]=0;controller_tick();controller_tick();
+    assert(!g_frame->aim_buttons && !g_frame->aim2_buttons);controller_sync_lost=0;
     g_vrMenuEnabled=0;g_cheatFlags=0;
     free(g_frame);
     puts("Viewer: independent/paired players, gun visibility, INI/CLI cheats, heartbeat and coherent snapshots passed.");

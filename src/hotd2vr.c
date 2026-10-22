@@ -56,6 +56,7 @@
 #include "openxr/openxr_platform.h"
 
 #include "hotd_share.h"
+#include "checkpoint.h"
 #include "game_input.h"
 #include "player_hud.h"
 #include "audio_control.h"
@@ -186,7 +187,7 @@ static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
 static int g_cfgArcadeGunColors;
 static const DWORD g_arcadeGunColors[2]={0xFF2B24DEu,0xFF8F4B1Du}; /* sRGB, 0xAABBGGRR */
-static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_vrMenuEnabled;
+static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_vrMenuEnabled,g_vrMenuOwnsInput;
 static int g_cfgSwapPlayerHud=1;
 static int g_cfgContinueGame,g_cfgContinueEdited;
 static int g_cfgBrightness = 90;
@@ -538,7 +539,7 @@ static void pushAim(float sx, float sy, unsigned buttons)
     g_aimSX = sx; g_aimSY = sy;
     g_frame->aim_x = sx;
     g_frame->aim_y = sy;
-    g_frame->aim_buttons = buttons;
+    g_frame->aim_buttons = buttons | (g_vrMenuOwnsInput ? VC2_BTN_MENU:0);
     MemoryBarrier();
     g_frame->aim_seq++;
 }
@@ -2697,6 +2698,8 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         triggers[0].action=triggers[1].action=0;
         menuHeld[0]=menuHeld[1]=0;
         menuHorizontal[0]=menuHorizontal[1]=0;
+        vrMenuInput(vrMenuKeyboardInput());
+        pushAim(320,240,0);pushAim2(320,240,0);
         return 0;
     }
 
@@ -2749,14 +2752,14 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
         if(menuHorizontal[h]==VC2_BTN_DOWN)buttons|=VC2_BTN_LEFT;
     }
     if(g_vrMenuEnabled) {
-        unsigned input=buttons;
+        unsigned input=buttons|vrMenuKeyboardInput();
         if(bsettings.isActive && bsettings.currentState)input|=MENU_TOGGLE;
         for(h=0;h<2;h++) {
             if(fire[h].isActive && fire[h].currentState)input|=VC2_BTN_START;
             if(bback[h].isActive && bback[h].currentState)input|=VC2_BTN_BACK;
             if(bpause[h].isActive && bpause[h].currentState)input|=VC2_BTN_PAUSE;
         }
-        int owned=vrMenuControl(input);
+        int owned=vrMenuInput(input);
         if(owned) {
             g_gunPose=poses[1].pose;g_gun2Pose=poses[0].pose;
             g_gunValid=poseValid[1];g_gun2Valid=poseValid[0];g_ovCount=0;
@@ -3203,7 +3206,7 @@ static int runVR(void)
                 }
             }
         }
-        if (!running) { g_shotFeedback[0].ready=g_shotFeedback[1].ready=0;Sleep(20);continue; }
+        if (!running) { g_shotFeedback[0].ready=g_shotFeedback[1].ready=0;vrMenuKeyboard();Sleep(20);continue; }
 
         pxrWaitFrame(session, &fwi, &fs);
         pxrBeginFrame(session, &fbi);
@@ -3355,7 +3358,10 @@ static int runVR(void)
             layers[0] = (const XrCompositionLayerBaseHeader *)&layer;
             fei.layerCount = 1;
             fei.layers = layers;
-        } else g_shotFeedback[0].ready=g_shotFeedback[1].ready=0;
+        } else {
+            g_shotFeedback[0].ready=g_shotFeedback[1].ready=0;
+            vrMenuKeyboard();
+        }
         fei.type = XR_TYPE_FRAME_END_INFO;
         fei.displayTime = fs.predictedDisplayTime;
         fei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
@@ -3416,11 +3422,7 @@ static LRESULT CALLBACK wp(HWND h, UINT m, WPARAM w, LPARAM l)
         return 0;
     case WM_MOUSEWHEEL: w_speed *= ((short)HIWORD(w) > 0) ? 1.4f : 0.71f; return 0;
     case WM_KEYDOWN: {
-        if(g_vrMenuEnabled && w==VK_F8) {
-            if(l&(1L<<30))return 0;
-            if(g_vrMenuOpen)vrMenuClose();else {g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=0;}
-            g_vrMenuDirty=1;g_vrMenuArmed=1;return 0;
-        }
+        if(g_vrMenuEnabled && w==VK_F8)return 0; /* Polled with controller input, once per frame. */
         if(g_vrMenuEnabled && g_vrMenuOpen)return 0;
         float cy = cosf(w_yaw), sy = sinf(w_yaw), s = w_speed;
         if (w == 'W') { w_x -= sy * s; w_z -= cy * s; }
@@ -3436,19 +3438,6 @@ static LRESULT CALLBACK wp(HWND h, UINT m, WPARAM w, LPARAM l)
     case WM_DESTROY: PostQuitMessage(0); return 0;
     }
     return DefWindowProcA(h, m, w, l);
-}
-
-static void vrMenuKeyboard(HWND hwnd)
-{
-    if(!g_vrMenuEnabled)return;
-    unsigned input=0;
-    if(GetForegroundWindow()==hwnd) {
-        const int keys[]={VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,VK_RETURN,VK_BACK,VK_ESCAPE};
-        const unsigned actions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_LEFT,VC2_BTN_RIGHT,VC2_BTN_START,VC2_BTN_BACK,VC2_BTN_PAUSE};
-        for(unsigned k=0;k<7;k++)if(GetAsyncKeyState(keys[k])&0x8000)input|=actions[k];
-    }
-    int owned=vrMenuControl(input);
-    if(owned){pushAim(320,240,0);pushAim2(320,240,0);}
 }
 
 static int runWindow(void)
@@ -3526,7 +3515,7 @@ static int runWindow(void)
             DispatchMessageA(&msg);
         }
         pullFrame();
-        vrMenuKeyboard(hwnd);
+        vrMenuKeyboard();
         pullScreen();
         g_scrVisible = screenVisible();
         scale = 1.0f / g_unitsPerMetre;
@@ -3698,7 +3687,7 @@ static int runStereo(void)
         pullScreen();
         g_scrVisible = screenVisible();
 
-        vrMenuKeyboard(hwnd);
+        vrMenuKeyboard();
         /* a head pose built the way a runtime would report one */
         cy2 = cosf(w_yaw * 0.5f); sy2 = sinf(w_yaw * 0.5f);
         cp2 = cosf(w_pitch * 0.5f); sp2 = sinf(w_pitch * 0.5f);
@@ -3893,11 +3882,13 @@ int main(int argc, char **argv)
             note("Desktop preview unavailable; headset continues.\n");
         runVR();
     } else if(g_cfgWindow)runWindow();
-    else while(!gameExited()) { pushCheats();Sleep(10); }
+    else while(!gameExited()) { vrMenuKeyboard();pushCheats();Sleep(10); }
     closeDesktopPreview(&preview);
     if(g_vrMenuEnabled)vrMenuSave();
     g_cheatFlags=0;
     pushCheats();
+    g_vrMenuOwnsInput=0;
+    if(!g_previewOnly){g_vrMenuOpen=0;vrMenuNativePublish();}
     if(rendering){pushAim(320, 240, 0); pushAim2(320, 240, 0);}
     if(!g_previewOnly)g_frame->cheat_tick=GetTickCount()-500; /* Release overrides on normal exit. */
     if (g_gameProc) CloseHandle(g_gameProc);

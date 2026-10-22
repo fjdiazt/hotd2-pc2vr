@@ -17,7 +17,7 @@ import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-SIZE = 87385060
+SIZE = 88614072
 EXPECTED = 'c6b4116788b7f68c56860fb9cc8a94bf984e620907031e4bc3db43623dbe579a'
 VR_NAMES = {'vrserver.exe', 'vrcompositor.exe', 'vrmonitor.exe', 'vrwebhelper.exe', 'vrdashboard.exe', 'vrstartup.exe'}
 
@@ -193,7 +193,7 @@ def run_case(mode, stage, game, runtime):
                 if mapping:
                     kernel.CloseHandle(mapping)
                     memory = mmap.mmap(-1, SIZE, tagname=r'Local\HOTD2_PC2VR_Frame', access=mmap.ACCESS_WRITE)
-                    if struct.unpack_from('<2I', memory, 4) != (0x32544F48, 21) or struct.unpack_from('<I', memory, 124)[0] != pid:
+                    if struct.unpack_from('<2I', memory, 4) != (0x32544F48, 24) or struct.unpack_from('<I', memory, 124)[0] != pid:
                         raise RuntimeError('Unexpected bridge owner/protocol')
             if memory is not None:
                 stage_scene = struct.unpack_from('<2I', memory, 87385044)
@@ -215,7 +215,7 @@ def run_case(mode, stage, game, runtime):
             # External desktop capture only; never call the game's D3D device or pause renderer.
             ImageGrab.grab(window=game_windows[0]).save(folder / 'native-frame.png')
         raw = (folder / 'BatBotFrame.bin').read_bytes()
-        if len(raw) != SIZE or struct.unpack_from('<2I', raw, 4) != (0x32544F48, 21):
+        if len(raw) != SIZE or struct.unpack_from('<2I', raw, 4) != (0x32544F48, 24):
             raise ValueError('Incomplete or incompatible frame snapshot')
         width, height = struct.unpack_from('<2I', raw, 88)
         if mode == 'converted':

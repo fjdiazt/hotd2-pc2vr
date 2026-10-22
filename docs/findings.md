@@ -543,3 +543,108 @@ The hook validates all seven original bytes (`83 3D 98 8E 9C 00 06`) before inst
 ## Diagnostic logging defaults
 
 The older render-state sampler and per-shot/reload logging are now explicitly opt-in with `[bridge] trace_render_states=1` and `trace_input=1`; both default off and require a game restart. Disabled render-state tracing performs zero diagnostic D3D queries; the enabled sampler retains its every-30-frame/32-distinct-state bounds. Input tracing does not change gun/reload handling. Regressions exercise disabled/enabled D3D query counts and actual trigger/reload callbacks with captured logs. Ordinary startup, error and periodic health logs remain. Bat capture retains its independent default-off `trace_bats` flag, and autoplay/full-frame dumps require the separate diagnostic build. The sparse template omits all three trace keys; their built-in defaults keep tracing off. No wing cause or correction is claimed.
+
+
+The following feature-branch evidence predates the protocol-24 merge; protocol
+22/23 references describe those historical builds.
+
+## Runtime stage and scene selection
+
+Stage select follows Load game in the existing VR Settings root. It opens six
+named chapters, then a paginated list of native scene IDs. Selecting a chapter
+only browses; confirming a scene requests its restart. Back returns to chapters,
+then the root. Chapter 3 defaults to its native entrance, scene 7. Other chapters
+default to their entrance when available. Missing catalog data reports no scenes.
+Companion previews can browse but cannot start a selected scene.
+
+Protocol 22 appends request stage/scene at 87,385,060/64 and six immutable
+256-bit native scene catalogs at 87,385,068; frame size is 87,385,260. Old offsets
+remain unchanged. The bridge enumerates scripts once at injection using the
+same bounded event-file reader as destination validation. The installed game's
+catalogs contain 15, 36, 12, 24, 8 and 13 Arcade script scenes respectively;
+these counts are observations, not hardcoded limits. Missing/invalid script
+pointers are omitted. Tests include sparse IDs and the scene-255 boundary.
+
+SELECT action 3 carries an explicit destination. It validates stage/scene ranges
+and re-reads the actual destination scripts before queuing the existing native
+mode/task/resource restart. It overrides startup selection and shares Load's
+bootstrap, player joining, pause handling, progress, acknowledgment and timeout.
+No INI selection key or additional save slot is introduced. Browsing never saves;
+with Autosave off, a jump preserves the save. Normal Autosave can record the new
+scene when enabled. Existing scene/route prerequisites remain experimental.
+
+Full build/offline checks and WARP rendering pass. Menu/controller tests cover
+root ordering, stage-to-scene navigation, held Trigger, native entrance defaults,
+sparse IDs, pagination, Back, missing catalogs, read-only previews and serialized
+requests. Native desktop smoke tests passed SELECT to chapter 1 scene 4 and
+chapter 2 scene 0, rejected stage 20 and unavailable scene 255, and preserved the
+save with Autosave off. Save/Load/New, pause and live Autosave regression checks
+also passed. Both native runtime sessions were closed; no VR launch occurred.
+Headset menu acceptance and full scene prerequisite coverage remain unverified.
+
+## Keyboard control of VR Settings
+
+F8 now uses the same edge/arming path as left-stick click, in desktop preview
+and headset modes. Keyboard input is accepted only while the viewer or connected
+native game's process has foreground focus. Arrows navigate/change values;
+Enter/Right Ctrl confirm/back, matching native P1 bindings. Tab/Left Ctrl are P2
+aliases; Backspace/Escape also back out. Keyboard Back closes at the root;
+controller B/Y keeps its prior behavior. A simultaneous read-only companion
+preview accepts keyboard input only with its own window focused.
+
+VR combines keyboard and controllers before advancing menu edges once per frame,
+including a keyboard fallback when action sync/tracking is unavailable. The
+existing input heartbeat carries VC2_BTN_MENU while the panel owns input and
+until closing keys release. The bridge masks those physical menu keys before
+tracking native Start/Cancel; unrelated keys remain native. Input expiry releases
+ownership through the existing 500 ms watchdog. No frame layout or INI changes.
+
+Bridge/viewer builds and all offline/WARP checks passed. Added tests cover held
+toggle/navigation/back, foreground gating, native P1/P2 key aliases, mixed VR
+keyboard/controller input, failed action sync, immediate close-release publication,
+native keyboard suppression and watchdog restoration. No game or VR session was
+launched for that keyboard change; another session remained untouched. Native-window
+rendering was added subsequently, as described below.
+
+## Native-window settings panel
+
+The viewer publishes the existing 640x480 straight-alpha menu canvas to an
+independent sequence/heartbeat in protocol 23. Earlier offsets stay unchanged;
+menu sequence starts at 87,385,260, pixels at 87,385,272, total frame size
+88,614,072. Primary viewer only; companion previews never write the canvas.
+Canvas updates and D3D11 texture updates have separate dirty state, so native
+publication cannot consume either headset eye's texture upload. Unchanged menu
+frames refresh only their heartbeat, not the 1.2 MB canvas.
+
+The existing native presentation hook captures the game first, then starts a
+separate D3D7 scene and composites a managed 32-bit texture as one alpha-blended
+quad. No native menu geometry enters reconstruction or framebuffer capture.
+The texture uploads only when its stable sequence changes, restores after loss,
+and is recreated on device replacement. The compositor restores all changed
+device state and viewport, then calls normal presentation even after failure.
+Closed, torn or older-than-500-ms menu data is not drawn. Native pause replay
+stays ahead of capture/composition. The game's EXE and assets are unchanged.
+
+Native-only mode polls the same keyboard/settings path with desktop preview and
+headset outputs both disabled. It still runs the viewer helper, without graphics
+device or OpenXR initialization. Menu display/rendering rows retain their existing
+effects on converted output; audio, cheats and saves use the same bridge actions.
+
+Added real offscreen D3D7 checks cover alpha/color conversion, viewport and
+texture/render-state restoration, native presentation order, capture exclusion,
+stable/torn canvas sequences and closed/stale ownership. Viewer checks cover
+publication, unchanged-frame reuse, separate texture dirtiness and read-only
+preview guards. Full build/offline/WARP checks passed, including the real D3D7
+compositor test. Live native-window/headset acceptance remains unverified; another
+game session was active and was left untouched. Original EXE SHA256 is unchanged.
+
+
+## Stage-select integration with current main
+
+Merged the scene catalog/selection, native keyboard ownership and native-window
+menu compositor with the reorganized settings and short per-option help. Resolved
+the command-3 collision by retaining Return to Title as 3 and assigning Stage
+select 4. Protocol 24 rejects both old main and protocol-23 feature binaries.
+No protocol-23 canvas/catalog fields were reordered; no installed game files or
+active runtime binaries are modified by the source merge. Combined live native
+window and headset validation remains pending.

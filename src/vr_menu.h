@@ -1,6 +1,8 @@
 /* Viewer settings use extracted native glyphs without changing native resource ownership. */
 static int g_vrMenuOpen,g_vrMenuPage=-1,g_vrMenuRow;
 static int g_vrMenuDirty=1,g_vrMenuArmed=1,g_vrMenuBlock,g_vrMenuResetPending;
+static int g_vrMenuTextureDirty=1,g_vrMenuPublishedOpen=-1;
+static unsigned g_vrMenuRevision,g_vrMenuPublishedRevision;
 static unsigned g_vrMenuPrevious;
 static BYTE g_vrMenuFont[128][32][32][4];
 static DWORD g_vrMenuPixels[480][640];
@@ -12,14 +14,16 @@ static const char *const vrMenuGroups[]={"GAME SETTINGS","DISPLAY","RENDERING","
 static const char *const vrMenuGroupHelp[]={"GAME STARTUP AND SAVING","OUTPUTS AND PICTURE SETTINGS",
     "WORLD SCALE AND GRAPHICS QUALITY","GAME MUSIC AND EFFECTS VOLUME",
     "GUNS AIMING AND CONTROLLER FEEDBACK","OPTIONAL GAMEPLAY ASSISTS"};
-enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_NEW_GAME,MENU_GROUP_FIRST,MENU_RESET=MENU_GROUP_FIRST+MENU_GROUP_COUNT,MENU_TITLE,MENU_QUIT };
-static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","NEW GAME","GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","RESET DEFAULTS","RETURN TO TITLE","QUIT GAME"};
+enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_STAGE_SELECT,MENU_NEW_GAME,MENU_GROUP_FIRST,MENU_RESET=MENU_GROUP_FIRST+MENU_GROUP_COUNT,MENU_TITLE,MENU_QUIT };
+static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","STAGE SELECT","NEW GAME","GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","RESET DEFAULTS","RETURN TO TITLE","QUIT GAME"};
+enum { MENU_STAGES=MENU_GROUP_COUNT,MENU_SCENES };
 static const unsigned vrMenuRootCount=sizeof(vrMenuRootLabels)/sizeof(vrMenuRootLabels[0]);
 static unsigned g_vrMenuRequest,g_vrMenuAction;
 static DWORD g_vrMenuRequestTick;
 static char g_vrMenuStatus[96];
 static char g_vrMenuDestination[96];
 static const char *const vrMenuChapters[]={"A PRELUDE","MUDDY","DARKNESS","DESPAIR","DAWN","ORIGINAL SIN"};
+static unsigned g_vrMenuStage=1,g_vrMenuScenes[256],g_vrMenuSceneCount;
 enum { MENU_INT,MENU_UNSIGNED,MENU_SCALE,MENU_CHEAT,MENU_BRIDGE };
 enum { MENU_RESTART_VIEWER=1,MENU_RESTART_GAME=2,MENU_SHADER=4,MENU_POWER2=8,MENU_CAPTURE=16 };
 typedef struct {
@@ -77,6 +81,22 @@ static const unsigned vrMenuCounts[]={2,7,11,3,8,7};
 static const char *g_vrMenuError;
 static int vrMenuClose(void);
 #define MENU_TOGGLE 0x80000000u
+#define MENU_KEY_BACK 0x40000000u
+
+static unsigned vrMenuKeyboardInput(void)
+{
+    if(!g_vrMenuEnabled)return 0;
+    DWORD owner=0;
+    HWND foreground=GetForegroundWindow();
+    if(!foreground || !GetWindowThreadProcessId(foreground,&owner) || !owner)return 0;
+    if(owner!=GetCurrentProcessId() && (g_previewOnly || !g_frame || owner!=g_frame->game_pid))return 0;
+    const int keys[]={VK_F8,VK_UP,VK_DOWN,VK_LEFT,VK_RIGHT,VK_RETURN,VK_TAB,VK_RCONTROL,VK_LCONTROL,VK_BACK,VK_ESCAPE};
+    const unsigned actions[]={MENU_TOGGLE,VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_LEFT,VC2_BTN_RIGHT,
+        VC2_BTN_START,VC2_BTN_START,MENU_KEY_BACK,MENU_KEY_BACK,MENU_KEY_BACK,MENU_KEY_BACK};
+    unsigned input=0;
+    for(unsigned k=0;k<sizeof(keys)/sizeof(keys[0]);k++)if(GetAsyncKeyState(keys[k])&0x8000)input|=actions[k];
+    return input;
+}
 
 static void vrMenuInit(void)
 {
@@ -112,13 +132,13 @@ static void vrMenuCheckpointPoll(void)
                 g_vrMenuAction==HOTD_CHECKPOINT_SAVE?"SAVED":g_vrMenuAction==HOTD_CHECKPOINT_NEW?"STARTED":"LOADED",vrMenuChapters[stage-1],scene);
         else lstrcpyA(g_vrMenuStatus,result==HOTD_SAVE_UNAVAILABLE?"UNAVAILABLE   ACTIVE ARCADE GAME REQUIRED":
             result==HOTD_SAVE_IO_ERROR?"SAVE FAILED   PREVIOUS SAVE KEPT":
-            result==HOTD_SAVE_INVALID?"NO VALID SAVED GAME":"LOAD FAILED   TRY AGAIN");
+            result==HOTD_SAVE_INVALID?(g_vrMenuAction==HOTD_CHECKPOINT_SELECT?"INVALID STAGE OR SCENE":"NO VALID SAVED GAME"):"LOAD FAILED   TRY AGAIN");
         g_vrMenuRequest=0;g_vrMenuDirty=1;
     } else if((DWORD)(GetTickCount()-g_vrMenuRequestTick)>45000) {
         lstrcpyA(g_vrMenuStatus,"GAME NOT RESPONDING   RESULT UNKNOWN");g_vrMenuRequest=0;g_vrMenuDirty=1;
     }
 }
-static void vrMenuCheckpoint(unsigned action)
+static void vrMenuCheckpoint(unsigned action,unsigned stage,unsigned scene)
 {
     if(g_previewOnly){g_vrMenuError="READ ONLY PREVIEW";return;}
     if(!g_frame){g_vrMenuError="GAME UNAVAILABLE";return;}
@@ -128,7 +148,8 @@ static void vrMenuCheckpoint(unsigned action)
     g_vrMenuRequest=g_frame->checkpoint_request+1;if(!g_vrMenuRequest)g_vrMenuRequest=1;
     g_vrMenuAction=action;g_vrMenuRequestTick=GetTickCount();g_vrMenuError=NULL;
     lstrcpyA(g_vrMenuStatus,action==HOTD_CHECKPOINT_SAVE?"SAVING GAME":action==HOTD_CHECKPOINT_NEW?"STARTING NEW GAME":
-        action==HOTD_CHECKPOINT_TITLE?"RETURNING TO TITLE":"LOADING GAME");
+        action==HOTD_CHECKPOINT_TITLE?"RETURNING TO TITLE":action==HOTD_CHECKPOINT_SELECT?"STARTING SELECTED SCENE":"LOADING GAME");
+    g_frame->checkpoint_target_stage=stage;g_frame->checkpoint_target_scene=scene;
     g_frame->checkpoint_action=action;MemoryBarrier();
     InterlockedExchange((volatile LONG *)&g_frame->checkpoint_request,g_vrMenuRequest);
     g_vrMenuDirty=1;
@@ -295,6 +316,25 @@ static int vrMenuLoadFont(void)
 }
 
 /* Menu owns input only while open or waiting for the closing press to release. */
+static unsigned vrMenuCount(void)
+{
+    return g_vrMenuPage<0?vrMenuRootCount:g_vrMenuPage==MENU_STAGES?6:
+        g_vrMenuPage==MENU_SCENES?g_vrMenuSceneCount:vrMenuCounts[g_vrMenuPage];
+}
+static void vrMenuOpenScenes(unsigned stage)
+{
+    uint32_t scenes[8];
+    if(!g_frame){g_vrMenuError="WAITING FOR GAME SCENES";return;}
+    /* Catalog is immutable after DLL initialization; frame publication cannot tear it. */
+    memcpy(scenes,g_frame->checkpoint_stage_scenes[stage-1],sizeof(scenes));
+    g_vrMenuSceneCount=0;
+    for(unsigned scene=0;scene<256;scene++)if(scenes[scene/32]&(1u<<(scene%32)))
+        g_vrMenuScenes[g_vrMenuSceneCount++]=scene;
+    if(!g_vrMenuSceneCount){g_vrMenuError="NO AVAILABLE SCENES";return;}
+    g_vrMenuStage=stage;g_vrMenuPage=MENU_SCENES;g_vrMenuRow=0;g_vrMenuError=NULL;
+    for(unsigned row=0;row<g_vrMenuSceneCount;row++)
+        if(g_vrMenuScenes[row]==(unsigned)hotd_checkpoint_first_scene(stage))g_vrMenuRow=(int)row;
+}
 static int vrMenuControl(unsigned input)
 {
     if(!g_vrMenuEnabled)return 0;
@@ -308,23 +348,35 @@ static int vrMenuControl(unsigned input)
     }
     if(!g_vrMenuOpen)return 0;
     if(g_vrMenuArmed){if(!input)g_vrMenuArmed=0;return 1;}
-    if(!g_vrMenuRequest && (pressed&(VC2_BTN_UP|VC2_BTN_DOWN|VC2_BTN_LEFT|VC2_BTN_RIGHT|VC2_BTN_BACK)))
+    if(!g_vrMenuRequest && (pressed&(VC2_BTN_UP|VC2_BTN_DOWN|VC2_BTN_LEFT|VC2_BTN_RIGHT|VC2_BTN_BACK|MENU_KEY_BACK)))
         g_vrMenuStatus[0]=0;
-    if(pressed&VC2_BTN_BACK) {
-        if(g_vrMenuPage>=0){g_vrMenuRow=g_vrMenuPage+MENU_GROUP_FIRST;g_vrMenuPage=-1;}
+    if(pressed&(VC2_BTN_BACK|MENU_KEY_BACK)) {
+        if(g_vrMenuPage==MENU_SCENES){g_vrMenuRow=(int)g_vrMenuStage-1;g_vrMenuPage=MENU_STAGES;g_vrMenuError=NULL;}
+        else if(g_vrMenuPage==MENU_STAGES){g_vrMenuRow=MENU_STAGE_SELECT;g_vrMenuPage=-1;g_vrMenuError=NULL;}
+        else if(g_vrMenuPage>=0){g_vrMenuRow=g_vrMenuPage+MENU_GROUP_FIRST;g_vrMenuPage=-1;}
+        else if(pressed&MENU_KEY_BACK)vrMenuClose();
         g_vrMenuDirty=1;return 1;
     }
-    unsigned count=g_vrMenuPage<0?vrMenuRootCount:vrMenuCounts[g_vrMenuPage];
+    unsigned count=vrMenuCount();if(!count)return 1;
     if(pressed&VC2_BTN_UP)g_vrMenuRow=(g_vrMenuRow+(int)count-1)%(int)count;
     if(pressed&VC2_BTN_DOWN)g_vrMenuRow=(g_vrMenuRow+1)%(int)count;
     if((pressed&VC2_BTN_START) && g_vrMenuPage<0) {
-        if(g_vrMenuRow==MENU_SAVE_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_SAVE);
-        else if(g_vrMenuRow==MENU_LOAD_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_LOAD);
-        else if(g_vrMenuRow==MENU_NEW_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_NEW);
+        if(g_vrMenuRow==MENU_SAVE_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_SAVE,0,0);
+        else if(g_vrMenuRow==MENU_LOAD_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_LOAD,0,0);
+        else if(g_vrMenuRow==MENU_STAGE_SELECT) {
+            g_vrMenuPage=MENU_STAGES;g_vrMenuRow=0;g_vrMenuError=NULL;
+            if(g_frame && g_frame->checkpoint_current_stage>=1 && g_frame->checkpoint_current_stage<=6)
+                g_vrMenuRow=(int)g_frame->checkpoint_current_stage-1;
+        }
+        else if(g_vrMenuRow==MENU_NEW_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_NEW,0,0);
         else if(g_vrMenuRow==MENU_RESET)vrMenuResetDefaults();
-        else if(g_vrMenuRow==MENU_TITLE){if(vrMenuSave())vrMenuCheckpoint(HOTD_CHECKPOINT_TITLE);}
+        else if(g_vrMenuRow==MENU_TITLE){if(vrMenuSave())vrMenuCheckpoint(HOTD_CHECKPOINT_TITLE,0,0);}
         else if(g_vrMenuRow==MENU_QUIT)vrMenuQuitGame();
         else {g_vrMenuPage=g_vrMenuRow-MENU_GROUP_FIRST;g_vrMenuRow=0;}
+    } else if(g_vrMenuPage==MENU_STAGES) {
+        if(pressed&VC2_BTN_START)vrMenuOpenScenes((unsigned)g_vrMenuRow+1);
+    } else if(g_vrMenuPage==MENU_SCENES) {
+        if(pressed&VC2_BTN_START)vrMenuCheckpoint(HOTD_CHECKPOINT_SELECT,g_vrMenuStage,g_vrMenuScenes[g_vrMenuRow]);
     } else if(g_vrMenuPage>=0 && (pressed&(VC2_BTN_START|VC2_BTN_LEFT|VC2_BTN_RIGHT))) {
         VrMenuItem *item=&vrMenuItems[g_vrMenuPage][g_vrMenuRow];
         vrMenuChange(item,(pressed&VC2_BTN_LEFT)?-1:1);
@@ -386,32 +438,45 @@ static void vrMenuCanvas(void)
     vrMenuRect(0,0,640,480,0x8017191D); /* 50% panel opacity; text keeps its own coverage. */
     vrMenuRect(18,16,4,448,0xFF2424A4);
     vrMenuText(42,24,"VR SETTINGS",1.4f,white);
-    vrMenuText(44,67,g_vrMenuPage<0?"THE HOUSE OF THE DEAD 2":vrMenuGroups[g_vrMenuPage],.7f,grey);
+    char heading[64];
+    if(g_vrMenuPage==MENU_SCENES)snprintf(heading,sizeof(heading),"STAGE %u %s",g_vrMenuStage,vrMenuChapters[g_vrMenuStage-1]);
+    vrMenuText(44,67,g_vrMenuPage<0?"THE HOUSE OF THE DEAD 2":g_vrMenuPage==MENU_STAGES?"CHOOSE STAGE":
+        g_vrMenuPage==MENU_SCENES?heading:vrMenuGroups[g_vrMenuPage],.7f,grey);
     vrMenuRect(42,99,552,2,0xFF303077);
-    unsigned count=g_vrMenuPage<0?vrMenuRootCount:vrMenuCounts[g_vrMenuPage];
+    unsigned count=vrMenuCount();
     unsigned perPage=g_vrMenuPage<0?8:6,first=(unsigned)g_vrMenuRow/perPage*perPage;
     for(unsigned row=first;row<count && row<first+perPage;row++) {
         int y=112+(int)(row-first)*(g_vrMenuPage<0?32:43),selected=(int)row==g_vrMenuRow;
         if(selected){vrMenuRect(34,y+(g_vrMenuPage<0?7:11),4,23,red);vrMenuRect(44,y+(g_vrMenuPage<0?3:6),552,g_vrMenuPage<0?30:35,0x8020202B);}
-        vrMenuText(52,y,g_vrMenuPage<0?vrMenuRootLabels[row]:vrMenuItems[g_vrMenuPage][row].label,
+        char label[64];
+        if(g_vrMenuPage==MENU_STAGES)snprintf(label,sizeof(label),"STAGE %u %s",row+1,vrMenuChapters[row]);
+        if(g_vrMenuPage==MENU_SCENES)snprintf(label,sizeof(label),"SCENE %u",g_vrMenuScenes[row]);
+        vrMenuText(52,y,g_vrMenuPage<0?vrMenuRootLabels[row]:g_vrMenuPage>=MENU_STAGES?label:vrMenuItems[g_vrMenuPage][row].label,
             g_vrMenuPage<0?.9f:.85f,selected?red:white);
-        if(g_vrMenuPage>=0) {
+        if(g_vrMenuPage>=0 && g_vrMenuPage<MENU_STAGES) {
             VrMenuItem *item=&vrMenuItems[g_vrMenuPage][row];char value[24];
             if(item->max==1)lstrcpyA(value,item->value?"ON":"OFF");
             else snprintf(value,sizeof(value),"%d",item->value);
             vrMenuText(500,y,value,.85f,selected?red:white);
         }
     }
-    const char *hint=g_vrMenuPage>=0?vrMenuItems[g_vrMenuPage][g_vrMenuRow].help:
+    const char *hint=g_vrMenuPage>=0 && g_vrMenuPage<MENU_GROUP_COUNT?vrMenuItems[g_vrMenuPage][g_vrMenuRow].help:
         g_vrMenuRow>=MENU_GROUP_FIRST && g_vrMenuRow<MENU_RESET?vrMenuGroupHelp[g_vrMenuRow-MENU_GROUP_FIRST]:"";
     if(g_vrMenuPage<0 && (g_vrMenuRow==MENU_SAVE_GAME || g_vrMenuRow==MENU_LOAD_GAME))hint=g_vrMenuDestination;
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_NEW_GAME)hint="RESTART ARCADE AT FIRST SCENE";
+    if(g_vrMenuPage<0 && g_vrMenuRow==MENU_STAGE_SELECT)hint="CHOOSE STAGE THEN SCENE";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_RESET)
         hint=g_vrMenuResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_QUIT)hint="SAVE OPTIONS AND QUIT GAME";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_TITLE)hint="END CURRENT GAME AND RETURN TO TITLE";
+    char target[96];
+    if(g_vrMenuPage==MENU_STAGES)hint="SELECT STAGE TO CHOOSE ITS SCENE";
+    if(g_vrMenuPage==MENU_SCENES && count) {
+        snprintf(target,sizeof(target),"START STAGE %u %s SCENE %u",g_vrMenuStage,vrMenuChapters[g_vrMenuStage-1],g_vrMenuScenes[g_vrMenuRow]);
+        hint=target;
+    }
     const char *notice=NULL;
-    if(g_vrMenuPage>=0) {
+    if(g_vrMenuPage>=0 && g_vrMenuPage<MENU_GROUP_COUNT) {
         int flags=vrMenuItems[g_vrMenuPage][g_vrMenuRow].flags;
         if(flags&MENU_RESTART_VIEWER)notice="RESTART VIEWER TO APPLY";
         if(flags&MENU_RESTART_GAME)notice="RESTART GAME TO APPLY";
@@ -423,8 +488,34 @@ static void vrMenuCanvas(void)
     if(count>perPage){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/perPage+1,(count+perPage-1)/perPage);
         vrMenuText(440,72,page,.6f,grey);vrMenuText(440,356,page,.6f,grey);}
     vrMenuRect(42,418,552,1,0xFF303077);
-    vrMenuText(44,427,"STICK NAVIGATE   TRIGGER SELECT   B BACK",.65f,white);
-    vrMenuText(44,451,"LEFT STICK CLICK OPEN CLOSE   A PAUSE RESUME",.6f,grey);
+    vrMenuText(44,427,"ARROWS MOVE   ENTER SELECT   CTRL BACK",.65f,white);
+    vrMenuText(44,451,"F8 LEFT CLICK TOGGLE   STICK TRIGGER B IN VR",.6f,grey);
+    g_vrMenuRevision++;g_vrMenuDirty=0;g_vrMenuTextureDirty=1;
+}
+static void vrMenuNativePublish(void)
+{
+    if(!g_frame || g_previewOnly)return;
+    int open=g_vrMenuEnabled && g_vrMenuOpen;
+    if(open){vrMenuDestination();if(g_vrMenuDirty)vrMenuCanvas();}
+    if(open!=g_vrMenuPublishedOpen || (open && g_vrMenuRevision!=g_vrMenuPublishedRevision)) {
+        g_frame->menu_seq++;MemoryBarrier();
+        g_frame->menu_open=open;
+        if(open)memcpy(g_frame->menu_pixels,g_vrMenuPixels,sizeof(g_vrMenuPixels));
+        MemoryBarrier();g_frame->menu_seq++;
+        g_vrMenuPublishedOpen=open;g_vrMenuPublishedRevision=g_vrMenuRevision;
+    }
+    MemoryBarrier();g_frame->menu_tick=GetTickCount();
+}
+static int vrMenuInput(unsigned input)
+{
+    g_vrMenuOwnsInput=vrMenuControl(input);
+    vrMenuNativePublish();return g_vrMenuOwnsInput;
+}
+static void vrMenuKeyboard(void)
+{
+    int previous=g_vrMenuOwnsInput;
+    int owned=vrMenuInput(vrMenuKeyboardInput());
+    if(owned || previous){pushAim(320,240,0);pushAim2(320,240,0);}
 }
 static void vrMenuDraw(void)
 {
@@ -437,7 +528,7 @@ static void vrMenuDraw(void)
         if(FAILED(ID3D11Device_CreateTexture2D(g_dev,&desc,NULL,&g_vrMenuTexture)) ||
            FAILED(ID3D11Device_CreateShaderResourceView(g_dev,(ID3D11Resource *)g_vrMenuTexture,NULL,&g_vrMenuSRV)))
             die("menu texture");
-        g_vrMenuDirty=1;
+        g_vrMenuTextureDirty=1;
     }
     if(!g_vrMenuBlend) {
         D3D11_BLEND_DESC blend={0};
@@ -452,11 +543,11 @@ static void vrMenuDraw(void)
         if(FAILED(ID3D11Device_CreateBlendState(g_dev,&blend,&g_vrMenuBlend)))die("menu blend state");
     }
     D3D11_MAPPED_SUBRESOURCE mapped;
-    if(g_vrMenuDirty) {
-        vrMenuCanvas();
+    if(g_vrMenuDirty)vrMenuCanvas();
+    if(g_vrMenuTextureDirty) {
         if(FAILED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0,D3D11_MAP_WRITE_DISCARD,0,&mapped)))return;
         for(unsigned y=0;y<480;y++)memcpy((BYTE *)mapped.pData+y*mapped.RowPitch,g_vrMenuPixels[y],640*4);
-        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0);g_vrMenuDirty=0;
+        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_vrMenuTexture,0);g_vrMenuTextureDirty=0;
     }
     if(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_cbRes,0,D3D11_MAP_WRITE_DISCARD,0,&mapped))) {
         const float res[4]={640,480,0,0};memcpy(mapped.pData,res,sizeof(res));

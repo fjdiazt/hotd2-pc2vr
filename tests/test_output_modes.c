@@ -51,7 +51,7 @@ int main(int argc,char **argv)
     assert(g_frame);g_frame->aim_seq=17;g_frame->aim2_seq=19;g_frame->cheat_tick=23;
     DWORD old;assert(VirtualProtect(g_frame,sizeof(*g_frame),PAGE_READONLY,&old));
     g_previewOnly=1;
-    pushCheats();pushAim(1,2,VC2_BTN_FIRE);pushAim2(3,4,VC2_BTN_FIRE);
+    pushCheats();pushAim(1,2,VC2_BTN_FIRE);pushAim2(3,4,VC2_BTN_FIRE);vrMenuNativePublish();
     assert(g_frame->aim_seq==17 && g_frame->aim2_seq==19 && g_frame->cheat_tick==23);
     assert(VirtualFree(g_frame,0,MEM_RELEASE));g_frame=NULL;g_previewOnly=0;
 

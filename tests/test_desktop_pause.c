@@ -61,6 +61,61 @@ static void render(void)
     assert(SUCCEEDED(IDirect3DDevice7_GetTexture(device,0,&surface)) && surface==test_texture);
     IDirectDrawSurface7_Release(surface);
 }
+static unsigned presented;
+static HRESULT WINAPI present_probe(void *self,DWORD flags)
+{
+    (void)self;assert(flags==17);presented++;
+    DWORD pixel=sample(32,32);
+    if(hotd_native_menu_visible(frame)) {
+        assert(abs((int)((pixel>>16)&255)-128)<=1 && !(pixel&0xFF00) && abs((int)(pixel&255)-127)<=1);
+        assert(frame->screen_w==64 && frame->screen_h==64);
+        assert((frame->screen[32*64+32]&0xFFFFFF)==0x0000FF); /* Captured blue stays menu-free BGRA. */
+    } else assert(pixel==0x0000FF);
+    return 19;
+}
+static void check_native_menu(void)
+{
+    D3DVIEWPORT7 before={.dwX=3,.dwY=4,.dwWidth=20,.dwHeight=24,.dvMaxZ=1},after;
+    DWORD value;
+    active_device=device;original_begin=device->lpVtbl->BeginScene;original_present=present_probe;
+    frame->menu_open=1;frame->menu_tick=GetTickCount();frame->menu_seq=2;
+    for(unsigned y=0;y<480;y++)for(unsigned x=0;x<640;x++)frame->menu_pixels[y][x]=0x800000FF;
+    assert(SUCCEEDED(IDirect3DDevice7_SetViewport(device,&before)));
+    assert(SUCCEEDED(IDirect3DDevice7_SetRenderState(device,D3DRENDERSTATE_ALPHABLENDENABLE,FALSE)));
+    assert(SUCCEEDED(IDirect3DDevice7_SetTextureStageState(device,0,D3DTSS_ADDRESSU,D3DTADDRESS_MIRROR)));
+    assert(SUCCEEDED(IDirect3DDevice7_SetTexture(device,0,test_texture)));
+    count=hud_count=0; /* Overlay must never add captured geometry. */
+    assert(SUCCEEDED(IDirect3DDevice7_Clear(device,0,NULL,D3DCLEAR_TARGET,0x0000FF,1,0)));
+    assert(native_present(NULL,17)==19 && presented==1 && !count && !hud_count && !frame->vertex_count);
+    assert(native_menu.sequence==2 && native_menu.texture);
+    assert(SUCCEEDED(IDirect3DDevice7_GetViewport(device,&after)) && !memcmp(&before,&after,sizeof(before)));
+    assert(SUCCEEDED(IDirect3DDevice7_GetRenderState(device,D3DRENDERSTATE_ALPHABLENDENABLE,&value)) && !value);
+    assert(SUCCEEDED(IDirect3DDevice7_GetTextureStageState(device,0,D3DTSS_ADDRESSU,&value)) && value==D3DTADDRESS_MIRROR);
+    IDirectDrawSurface7 *bound=NULL;
+    assert(SUCCEEDED(IDirect3DDevice7_GetTexture(device,0,&bound)) && bound==test_texture);IDirectDrawSurface7_Release(bound);
+    D3DVIEWPORT7 full={.dwWidth=64,.dwHeight=64,.dvMaxZ=1};
+    assert(SUCCEEDED(IDirect3DDevice7_SetViewport(device,&full)));
+    assert(SUCCEEDED(IDirect3DDevice7_Clear(device,0,NULL,D3DCLEAR_TARGET,0x0000FF,1,0)));
+    assert(SUCCEEDED(IDirect3DDevice7_SetViewport(device,&before)));
+    *(short *)(game_base+0x5A1A00)=1;
+    unsigned captured=frame->screen_frame;
+    assert(native_present(NULL,17)==19 && frame->screen_frame==captured); /* Pause still draws menu above retained capture. */
+    *(short *)(game_base+0x5A1A00)=0;
+    /* Unchanged pixels retain the uploaded texture; torn writes never replace it. */
+    assert(SUCCEEDED(IDirect3DDevice7_BeginScene(device)));
+    frame->menu_seq=3;assert(hotd_native_menu_draw(device,frame,&native_menu)==S_FALSE && native_menu.sequence==2);
+    frame->menu_seq=4;frame->menu_pixels[0][0]=0xFF00FF00;
+    assert(SUCCEEDED(hotd_native_menu_draw(device,frame,&native_menu)) && native_menu.sequence==4);
+    assert(SUCCEEDED(IDirect3DDevice7_EndScene(device)));
+    for(unsigned mode=0;mode<2;mode++) {
+        frame->menu_open=mode?1:0;frame->menu_tick=GetTickCount()-501;
+        assert(SUCCEEDED(IDirect3DDevice7_SetViewport(device,&full)));
+        assert(SUCCEEDED(IDirect3DDevice7_Clear(device,0,NULL,D3DCLEAR_TARGET,0x0000FF,1,0)));
+        assert(SUCCEEDED(IDirect3DDevice7_SetViewport(device,&before)));
+        assert(native_present(NULL,17)==19);
+    }
+    hotd_native_menu_release(&native_menu);assert(!native_menu.texture && !native_menu.device);
+}
 int main(void)
 {
     HWND window=CreateWindowA("STATIC","HOTD2 desktop pause test",WS_OVERLAPPEDWINDOW,0,0,80,80,NULL,NULL,NULL,NULL);
@@ -137,10 +192,11 @@ int main(void)
     assert(SUCCEEDED(IDirect3DDevice7_Clear(device,0,NULL,D3DCLEAR_TARGET,0x0000FF,1,0)));
     assert(SUCCEEDED(IDirect3DDevice7_BeginScene(device)));assert(SUCCEEDED(end_scene(device)));
     assert(sample(32,32)==0x0000FF);
+    check_native_menu();
     IDirect3DDevice7_Release(device);IDirect3D7_Release(d3d);
     IDirectDrawSurface7_Release(test_texture);IDirectDrawSurface7_Release(zbuffer);
     IDirectDrawSurface7_Release(target);IDirectDraw7_Release(ddraw);DestroyWindow(window);
     free(frame);free(game_base);
-    puts("Desktop pause: real D3D7 geometry, depth, HUD, textures, fog/specular, state restoration and pause/resume gating passed.");
+    puts("Desktop pause/menu: real D3D7 replay and alpha composition, restored state, pause, capture isolation and stale/torn menu checks passed.");
     return 0;
 }

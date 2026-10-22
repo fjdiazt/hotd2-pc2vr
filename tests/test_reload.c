@@ -19,6 +19,10 @@ static HRESULT WINAPI poll_keyboard(void *self,DWORD size,void *out)
         if(physical_keys&2)keys[DIK_TAB]=0x80;
         if(physical_keys&4)keys[DIK_RCONTROL]=0x80;
         if(physical_keys&8)keys[DIK_LCONTROL]=0x80;
+        if(physical_keys&16) {
+            const unsigned held[]={DIK_UP,DIK_DOWN,DIK_LEFT,DIK_RIGHT,DIK_F8,DIK_BACK,DIK_ESCAPE,DIK_SPACE};
+            for(unsigned k=0;k<sizeof(held)/sizeof(held[0]);k++)keys[held[k]]=0x80;
+        }
     }
     return DI_OK;
 }
@@ -101,6 +105,22 @@ static void check_reload_input(void)
     aim_tick=GetTickCount()-501;native_input();
     assert(reload_input==polled_input); /* Stale viewer stops masking native input. */
     polled_input=0x100;tick(0,0);
+}
+static void check_menu_keyboard(void)
+{
+    BYTE keys[256];
+    physical_keys=31;frame->aim_buttons=VC2_BTN_MENU;frame->aim2_buttons=0;frame->aim_seq++;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && !physical_start_keys && !physical_back_keys);
+    const unsigned blocked[]={DIK_RETURN,DIK_TAB,DIK_RCONTROL,DIK_LCONTROL,DIK_UP,DIK_DOWN,
+        DIK_LEFT,DIK_RIGHT,DIK_F8,DIK_BACK,DIK_ESCAPE};
+    for(unsigned k=0;k<sizeof(blocked)/sizeof(blocked[0]);k++)assert(!keys[blocked[k]]);
+    assert(keys[DIK_SPACE]); /* Unrelated native keys remain untouched. */
+    aim_tick=GetTickCount()-501;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && physical_start_keys==3 && physical_back_keys==3);
+    for(unsigned k=0;k<sizeof(blocked)/sizeof(blocked[0]);k++)assert(keys[blocked[k]]);
+    frame->aim_buttons=0;frame->aim_seq++;
+    assert(SUCCEEDED(keyboard_state(NULL,256,keys)) && keys[DIK_RETURN] && keys[DIK_DOWN]);
+    physical_keys=0;assert(SUCCEEDED(keyboard_state(NULL,256,keys)));
 }
 int main(void)
 {
@@ -305,6 +325,7 @@ int main(void)
     assert(fread(messages,1,sizeof(messages)-1,logfile)<sizeof(messages)-1);
     assert(strstr(messages,"native trigger P1") && strstr(messages,"native reload P1"));
     assert(!fclose(logfile) && DeleteFileA(path));logfile=NULL;trace_input=0;
+    check_menu_keyboard();
     free(game_base);free(frame);
     puts("Input/cheats: separate pause edges, preserved Start, reload, rapid fire and watchdogs passed.");
     return 0;

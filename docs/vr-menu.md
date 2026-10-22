@@ -21,7 +21,7 @@ it does not depend on native Options font residency or initialization.
 | Main-menu entry | Mode-select task `0x496960` uses bitmap entries; its existing Options branch at `0x496B0F` requests native mode 12. Adding a row is more involved than extending a text list. |
 | Existing Options | Mode 12 entry `0x4869E0`, cursor `0x486C10`, list `0x486DA0`, native row table `0x5696E0`. Initialization resets tasks/resources. Do not invoke the full Options mode while a stage is paused. |
 | Pause | Native pause routine `0x40E500` and existing predicate hook `native_pause()` retain eligibility and ownership. Reuse those; do not set the pause flag directly. |
-| Capture | `capture_draw()` rejects paused draws; `publish_frame()` retains the entire previous scene/HUD; `end_scene()` replays that scene on desktop. The viewer menu refreshes separately above the retained scene; native desktop replay does not render it. |
+| Capture | `capture_draw()` rejects paused draws; `publish_frame()` retains the entire previous scene/HUD; `end_scene()` replays that scene on desktop. The viewer menu refreshes separately; the native menu composites after capture and before presentation. |
 
 The local HOTD2RE reconstruction confirms the text API and Options layout in
 `src/game/menu_text.*` and `src/game/world_modes_options.cpp`. Its port-only pause
@@ -37,7 +37,7 @@ an existing in-game VR menu.
 Left stick click opens/closes VR Settings. The panel starts closed and preserves
 native pause state. A/X retains native Start/Pause while the panel stays open;
 Trigger selects, stick directions navigate/change values and B/Y returns to groups.
-Right click recenters. Desktop F8 toggles the panel; companion previews are read-only.
+Right click recenters. F8 toggles the panel in the native window, headset or desktop preview, with either the native game or viewer focused. Arrows navigate/change values; Enter/Right Ctrl confirm/back, with native P2 Tab/Left Ctrl and Backspace/Escape aliases. Keyboard Back closes from the root; controller B/Y keeps its existing root behavior. Menu-owned keyboard keys are masked in the bridge until closing keys release, with the existing 500 ms input watchdog releasing ownership if the viewer disconnects. Other applications do not control the panel. Native-only mode (`--no-window --no-vrwindow`) keeps the viewer helper active for input/settings; no preview or headset is required. Companion previews remain read-only and listen only while their own window has focus.
 
 | Group | Existing settings |
 | --- | --- |
@@ -127,7 +127,7 @@ menu or pause integration. The panel starts closed. Left stick click (left
 trackpad click on Vive) opens/closes it; desktop F8 does the same. Native pause
 and resume never open/close the panel; stick-click toggles never pause/resume the game.
 A/X retains native Start/Pause while the panel stays open or closed. B/Y backs
-out to the group list without closing. Only stick click toggles the VR panel.
+out to the group list without closing. Stick click or keyboard F8 toggles the VR panel.
 The original native Options entry remains unchanged. Gun model selection stays in the INI;
 diagnostic flags and the menu's own enable switch are not editable panel rows.
 The launcher generates the native font before starting a game when absent.
@@ -249,3 +249,49 @@ paused-capture application notices, errors, preview restrictions and action resu
 use a separate line beneath the explanation. Existing native glyphs and the same panel
 are reused. Offline checks exercise every setting's rendered help, width, row order,
 both restart types, paused capture, errors, action status and read-only preview.
+
+
+## Stage select
+
+Stage select immediately follows Load game. Select one of six named stages,
+then a native scene/checkpoint ID, then Trigger/Enter to start that scene.
+Stage 3 initially highlights scene 7; other stages highlight their entrance
+when present. Lists retain native zero-based scene IDs and page six rows.
+B/Backspace returns from scenes to stages, then to the root without changing
+the game. Browsing also works in read-only previews; starting does not.
+
+The bridge enumerates available Arcade scripts from bounded, relocated event
+files once at injection. No scene counts are hardcoded. Invalid script entries
+are omitted, missing stage data shows No available scenes. Confirmation uses
+the existing task/resource restart with a fresh disk validation; changed or
+invalid targets are rejected before unloading the current scene. Acknowledgment
+and progress/error captions follow Load game. Autosave off preserves the current
+save slot; Autosave on records the destination during normal gameplay.
+
+Protocol 22 appends destination stage/scene and six 256-bit scene catalogs.
+The scene list describes script availability, not proof of earlier script/route
+prerequisites. Native desktop selection and invalid-target tests pass; headset selection still needs confirmation.
+
+
+## Combined main integration
+
+Stage select follows Load game, ahead of New game and Game Settings. The current
+Controls order, Akimbo label, per-option help, Return to Title, HUD ownership and
+rescue-NPC protection remain intact. Stage select uses command 4; Return to Title
+retains command 3. Matching protocol-24 bridge/viewer builds are mandatory because
+older protocol-23 feature builds used command 3 for Stage select. The appended
+scene catalogs and native menu canvas retain their protocol-23 field layout.
+
+F8 and native keyboard navigation work with the original game window as well as
+the viewer. Native input is masked only while the panel owns it, with watchdog
+release. The viewer publishes the same menu canvas for native D3D7 composition
+and headset upload; each tracks dirty state separately. The bridge skips stale,
+closed or torn canvases and restores D3D7 state after alpha composition.
+
+Integration checks are offline; fresh native-window and headset acceptance of
+the combined build remain pending.
+
+The main branch's graphics-free services mode remains unchanged: disabling both
+outputs (or using NoGraphicsHooks) disables the menu and installs no graphics hooks.
+Native-window menu composition requires capture enabled by a desktop/headset output.
+The standalone native-window comparison launcher remains uninjected.

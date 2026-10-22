@@ -21,6 +21,7 @@
 #include "player_hud.h"
 #include "audio_control.h"
 #include "desktop_pause.h"
+#include "native_menu.h"
 #include "checkpoint.h"
 #ifdef HOTD_BAT_BOT
 #include "../tools/bat_bot.h"
@@ -375,7 +376,7 @@ static void checkpoint_manual(unsigned active)
     if(request==frame->checkpoint_response)return;
     MemoryBarrier();
     if(frame->checkpoint_action==HOTD_CHECKPOINT_LOAD || frame->checkpoint_action==HOTD_CHECKPOINT_NEW ||
-       frame->checkpoint_action==HOTD_CHECKPOINT_TITLE) {
+       frame->checkpoint_action==HOTD_CHECKPOINT_TITLE || frame->checkpoint_action==HOTD_CHECKPOINT_SELECT) {
         unsigned phase=*(DWORD *)(game_base+0x5C8E98);
         if(!checkpoint_ready || phase<3 || phase>12 ||
            (phase==6 && *(DWORD *)(game_base+0x5C90A4)!=2) ||
@@ -392,6 +393,12 @@ static void checkpoint_manual(unsigned active)
             result=HOTD_SAVE_INVALID;
         else {
             if(frame->checkpoint_action==HOTD_CHECKPOINT_NEW)point=(HotdCheckpoint){1,0};
+            else if(frame->checkpoint_action==HOTD_CHECKPOINT_SELECT) {
+                if(frame->checkpoint_target_stage<1 || frame->checkpoint_target_stage>6 || frame->checkpoint_target_scene>255) {
+                    checkpoint_reply(request,HOTD_SAVE_INVALID,(HotdCheckpoint){0});return;
+                }
+                point=(HotdCheckpoint){(int)frame->checkpoint_target_stage,(int)frame->checkpoint_target_scene};
+            }
             if(!hotd_checkpoint_file_scene(checkpoint_game_directory,point))result=HOTD_SAVE_INVALID;
             else {
                 checkpoint_target=point;checkpoint_pending=request;
@@ -473,6 +480,8 @@ static int install_checkpoints(void)
     jump=(DWORD)((BYTE *)checkpoint_event-(game_base+0x60710+5));memcpy(patch+1,&jump,4);
     if(!write_code(game_base+0x60710,patch,sizeof(patch)))return 0;
     checkpoint_ready=1;
+    if(frame)for(unsigned stage=1;stage<=6;stage++)
+        hotd_checkpoint_file_scenes(checkpoint_game_directory,stage,frame->checkpoint_stage_scenes[stage-1]);
     logline("checkpoint controls: ready; autosave=%d explicit_stage=%d scene=%d file=%s",checkpoint_continue,checkpoint_stage,checkpoint_scene,checkpoint_path);
     return 1;
 }
@@ -698,12 +707,18 @@ static GetDeviceState original_keyboard_state;
 static HRESULT WINAPI keyboard_state(void *self,DWORD size,void *out)
 {
     HRESULT hr = original_keyboard_state(self,size,out);
+    update_input();
+    if(SUCCEEDED(hr) && size==256 && (buttons[0]&VC2_BTN_MENU)) {
+        BYTE *keys=out;
+        const unsigned menu_keys[]={DIK_F8,DIK_UP,DIK_DOWN,DIK_LEFT,DIK_RIGHT,DIK_RETURN,DIK_TAB,
+            DIK_RCONTROL,DIK_LCONTROL,DIK_BACK,DIK_ESCAPE};
+        for(unsigned k=0;k<sizeof(menu_keys)/sizeof(menu_keys[0]);k++)keys[menu_keys[k]]=0;
+    }
     if(size==256) {
         BYTE *keys=out;
         physical_start_keys=SUCCEEDED(hr) ? ((keys[DIK_RETURN]&0x80?1u:0u)|(keys[DIK_TAB]&0x80?2u:0u)):0;
         physical_back_keys=SUCCEEDED(hr) ? ((keys[DIK_RCONTROL]&0x80?1u:0u)|(keys[DIK_LCONTROL]&0x80?2u:0u)):0;
     }
-    update_input();
     if(FAILED(hr) && size==256 && active_input()) {
         memset(out,0,size);hr=DI_OK;
     }
@@ -1538,14 +1553,24 @@ static int install_crosshair_capture(int profile_valid)
 }
 
 static HRESULT (WINAPI *original_present)(void *,DWORD);
+static HRESULT (WINAPI *original_begin)(IDirect3DDevice7 *);
+static HRESULT (WINAPI *original_end)(IDirect3DDevice7 *);
+static HotdNativeMenu native_menu;
 static HRESULT WINAPI native_present(void *self,DWORD flags)
 {
     publish_frame();
+    if(active_device && hotd_native_menu_visible(frame)) {
+        HRESULT hr=original_begin(active_device);
+        if(SUCCEEDED(hr)) {
+            hr=hotd_native_menu_draw(active_device,frame,&native_menu);
+            HRESULT ended=original_end(active_device);if(SUCCEEDED(hr))hr=ended;
+        }
+        static int reported;
+        if(FAILED(hr) && !reported){reported=1;logline("native menu render failed: %08lx",(unsigned long)hr);}
+    }
     return original_present(self,flags);
 }
 
-static HRESULT (WINAPI *original_begin)(IDirect3DDevice7 *);
-static HRESULT (WINAPI *original_end)(IDirect3DDevice7 *);
 static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
 {
     if(!visibility_flags_latched) {
