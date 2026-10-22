@@ -45,7 +45,7 @@ This panel controls the VR mod. The original game's **Options** menu is separate
 
 ![VR Settings main page with Save game, Load game and settings groups](docs/screenshots/vr-settings.png)
 
-- **Up/down:** select an item. Keep moving down to reach the next page.
+- **Up/down:** select an item. Keep moving down to reach the next page. Matching **PAGE X OF Y** counters at the top and bottom show when other pages are available.
 - **Left/right:** change the selected setting.
 - **Trigger:** open the selected group or activate the selected action.
 - **B/Y:** return to the list of groups.
@@ -53,9 +53,13 @@ This panel controls the VR mod. The original game's **Options** menu is separate
 
 **Opening Settings does not pause the game.** Press **A/X** first if you want to stop the action while changing options; press it again to resume. On a desktop-only preview, **F8** opens/closes Settings, the arrow keys navigate, **Enter** selects, and **Backspace** goes back. A companion preview beside a headset session is read-only.
 
-Changed settings save automatically when you close the panel. If a setting says a restart is needed, choose **Quit game**, then start the mod again. You can leave everything at its default and play without changing any settings.
+Changed settings save automatically when you close the panel. The INI stores overrides: missing keys use built-in defaults, and changing an option back to its default removes its key. Existing unedited keys are preserved. If a setting says a restart is needed, choose **Quit game**, then start the mod again. You can leave everything at its default and play without changing any settings.
+
+The selected option shows a short explanation below the list. For example, **Akimbo** says **Play with two guns**. Restart requirements and status/error messages appear on a separate line below that explanation.
 
 ## Settings explained
+
+Groups appear after Save game, Load game and New game in this order: **Game Settings**, **Display**, **Rendering**, **Audio**, **Controls**, **Cheats**.
 
 The names below match the menu. **On/off** options show `1` for on and `0` for off. Defaults describe a fresh installation; your saved settings may differ.
 
@@ -66,32 +70,44 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 | **Save game** | Saves the current Arcade chapter and scene. Works during play or pause. This is a scene checkpoint: loading restarts that scene, rather than restoring the exact moment, enemy positions or player state. |
 | **Load game** | Restarts the saved Arcade scene. Also works from the title/menu. There is one save slot, shared with Autosave. The destination appears below the selected row. |
 | **New game** | Starts chapter 1, scene 0. Keeps the existing save, although Autosave can replace it when enabled. |
-| **Reset defaults** | Restores the menu settings to their shipped values, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
+| **Reset defaults** | Restores the menu settings to their built-in defaults, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
+| **Return to title** | Ends the current run and returns to the startup title/attract sequence after the publisher logos. Saves changed settings first and keeps the checkpoint file. |
 | **Quit game** | Saves your changed settings, closes the game normally, and ends the VR viewer. |
+
+### Game Settings
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| **Skip startup logos** | On | Skips the SEGA/Empire boot logos. Restart required. |
+| **Autosave** | Off | Records the latest Arcade chapter/scene and resumes it on the next new Arcade start. Shares the single slot used by Save game. Saves scene progress, not an exact game state. |
 
 ### Display
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| **World scale percent** | 125% | Changes how large the world feels around you. 100% is the original scale; 125% makes it 25% larger. Range: 10–1000%. |
-| **Brightness percent** | 90% | Lightens or darkens the game scene. 100% is neutral. It does not change the HUD or guns. Range: 25–400%. |
+| **Brightness percent** | 90% | Lightens or darkens the game scene and guns. 100% is neutral. It does not change the HUD. Range: 25–400%. |
 | **Gamma percent** | 220% | Corrects the headset's picture tones. 100% disables this correction; 220% is the default. Try Brightness first if you only want a lighter or darker scene. Range: 0–300%. |
-| **Laser** | On | Shows a beam from each gun to help you aim. Turning it off does not affect shooting. |
-| **Crosshair** | On | Shows an aiming marker where your gun points. Independent of the laser. |
-| **Sharp HUD** | On | Makes on-screen text and counters look sharper. Turn it off for softer filtering. |
-| **Swap player HUD** | On | Places Player 1's ammo/lives on the right and Player 2's on the left, matching the gun hands. Off keeps the original game's arrangement. |
+| **Swap player HUD** | On | Places Player 1's ammo, lives and gameplay join/credit row on the right and Player 2's on the left, matching the gun hands. Off keeps the original game's arrangement. |
+| **Desktop preview** | Off | Opens a separate desktop view of the reconstructed scene. The original game window remains available either way. Restart the game/mod to change it. |
+| **Headset output** | On | Sends the game to the headset. Turning it off allows desktop use without VR output. Restart the game/mod to change it. |
+| **Native windowed** | On | Runs the original game in a desktop window instead of full screen. Restart required. |
+| **Focus game** | On | Brings the native game window to the front at startup. Restart required. |
 
 ### Rendering
 
 | Option | Default | What it does |
 | --- | --- | --- |
+| **World scale percent** | 125% | Changes how large the world feels around you. 100% is the original scale; 125% makes it 25% larger. Range: 10–1000%. |
+| **Units per metre** | 10 | Base conversion from the old game's units to VR metres. Leave this at 10 for normal play; use World scale percent to change how large the world feels. Restart required. |
+| **Resolution percent** | 100% | Changes rendering resolution. Higher looks sharper and costs more performance; lower can help a struggling PC. Range: 50–250%. Restart required. |
+| **MSAA** | 4 | Smooths jagged edges. Choices: 1, 2, 4 or 8; 1 disables it. Higher values cost more GPU work. Restart required. |
+| **Sharp HUD** | Off | Enables crisper filtering of HUD sprites. Off uses normal, softer filtering. |
 | **Native lighting** | On | Reproduces the game's lights, shading, shiny highlights and fog. Off uses simpler lighting. |
 | **Expand meshes** | On | Helps keep character/body parts visible when they extend beyond the original flat-screen view. Off restores the original rejection of those parts. |
 | **Expand world** | On | Tries to show more loaded scenery beside and behind you. Experimental: it can add visual glitches and extra work for the PC, and cannot fill scenery the game never loaded. |
-| **MSAA** | 4 | Smooths jagged edges. Choices: 1, 2, 4 or 8; 1 disables it. Higher values cost more GPU work. Restart required. |
-| **Resolution percent** | 100% | Changes rendering resolution. Higher looks sharper and costs more performance; lower can help a struggling PC. Range: 50–250%. Restart required. |
 | **Depth mode** | 2 | Controls which surfaces appear in front of others. 2 uses real 3D depth and is the normal choice; 0 draws in submission order; 1 uses the game's sorting values. Restart required. |
 | **Depth bias** | 0 | Adds a small separation between overlapping layers. Leave at 0 unless investigating overlapping/flickering surfaces. Range: 0–200. Restart required. |
+| **Background rendering** | On | Lets the game keep rendering when another app has focus. Restart required. |
 
 ### Audio
 
@@ -105,12 +121,20 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| **Two guns** | On | Shows both guns and joins both players together. Off lets the right and left hands join Player 1 and Player 2 separately. |
+| **Akimbo** | On | Shows both guns and joins both players together. Off lets the right and left hands join Player 1 and Player 2 separately. |
+| **Arcade gun colors** | Off | Untextured matte plastic: warm scarlet for P1/right hand, deep cobalt for P2/left hand, with face shading and soft highlights. Applies immediately; turning it off restores the original appearance. |
+| **Laser** | On | Shows a beam from each gun to help you aim. Turning it off does not affect shooting. |
+| **Crosshair** | On | Shows an aiming marker where your gun points. Independent of the laser. |
+| **Reload duration ms** | 180 | Length of the gun's reload animation, in milliseconds. Does not change the native game's ammunition/reload rules. Range: 60–1000 ms. |
 | **Haptics** | On | Controller vibration after confirmed shots. |
 | **Gun scale percent** | 100% | Size of the visible gun models. Does not change world scale. Range: 10–1000%. Restart required. |
-| **Reload duration ms** | 180 | Length of the gun's reload animation, in milliseconds. Does not change the native game's ammunition/reload rules. Range: 60–1000 ms. |
 | **Aim reach metres** | 6 | Fallback aiming distance when your gun points at empty space. It does not limit shots that hit real scene geometry. Range: 1–100 metres. |
-| **Focus game** | On | Brings the native game window to the front at startup. Restart required. |
+
+Both gun appearances follow the viewer's Brightness and Gamma settings. Arcade
+plastic uses restrained fill and highlights; it stays untextured. Lasers and
+crosshairs use their player's shell palette: scarlet for P1, cobalt for P2, including
+brighter firing feedback, with Arcade gun colors off or on. Gun lighting remains local to
+the model; it does not sample level lighting or shadows.
 
 ### Cheats
 
@@ -124,18 +148,6 @@ All cheats start **off**. They apply to both players.
 | **Infinite continues** | Off | Enables free play, so joining/continuing does not require credits. If you die, you still need to confirm Continue. |
 | **Rapid fire** | Off | Repeats shots while you hold the trigger. Reload gestures still take priority. |
 | **Shots per second** | 4 | Requested firing rate with Rapid fire on. Range: 1–30; the game's own weapon timing can make it slower. Changing this alone does not enable Rapid fire. |
-
-### Advanced
-
-| Option | Default | What it does |
-| --- | --- | --- |
-| **Desktop preview** | Off | Opens a separate desktop view of the reconstructed scene. The original game window remains available either way. Restart the game/mod to change it. |
-| **Headset output** | On | Sends the game to the headset. Turning it off allows desktop use without VR output. Restart the game/mod to change it. |
-| **Skip startup logos** | On | Skips the SEGA/Empire boot logos. Restart required. |
-| **Native windowed** | On | Runs the original game in a desktop window instead of full screen. Restart required. |
-| **Background rendering** | On | Lets the game keep rendering when another app has focus. Restart required. |
-| **Units per metre** | 10 | Base conversion from the old game's units to VR metres. Leave this at 10 for normal play; use World scale percent to change how large the world feels. Restart required. |
-| **Autosave** | Off | Records the latest Arcade chapter/scene and resumes it on the next new Arcade start. Shares the single slot used by Save game. Saves scene progress, not an exact game state. |
 
 
 ## Technical details
@@ -265,11 +277,11 @@ Reload direction is measured from each tracked gun relative to the current heads
 
 #### Player HUD placement
 
-`[vr] swap_player_hud=1` (default) moves converted gameplay ammo and lives rows to match the fixed gun assignments: P1 on the right, P2 on the left. Player labels, Original-mode weapon counts and reload messages/hints move with their row. Text, digit order, artwork, animation and HUD depth stay intact. Each row is aligned to the opposite side using its complete bounds; its width can vary with ammo/lives or messages.
+`[vr] swap_player_hud=1` (default) moves converted gameplay ammo, lives and join/credit rows to match the fixed gun assignments: P1 on the right, P2 on the left. Player labels, Original-mode weapon counts and reload messages/hints move with their row. The inactive player's PRESS START/INSERT COIN prompt and CREDIT/FREE PLAY indicator follow that player's side. Text, digit order, artwork, animation and HUD depth stay intact. Each row is aligned to the opposite side using its complete bounds; its width can vary with ammo/lives or messages.
 
 Set `swap_player_hud=0`, use viewer `--no-swap-player-hud`, or launcher `-NoSwapPlayerHud` to retain the native layout. `--swap-player-hud` / `-SwapPlayerHud` enable it. Last direct CLI switch wins; the launcher rejects opposing switches. The flag works independently of `akimbo` and never changes controller/player assignments.
 
-Ownership comes from the native player ammo/lives draw routines, including deferred sprite copies. Shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 21 bridge/viewer builds are required. Akimbo headset placement is user-confirmed; non-akimbo placement still needs runtime confirmation.
+Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol 21 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
 
 #### Experimental Save game and scene selection
 
@@ -279,13 +291,13 @@ Enable `[vr] continue_game=1` to record the latest Arcade stage/scene and resume
 
 VR Settings starts with **Save game**, **Load game**, then **New game**. Save writes the current Arcade stage/scene during active or paused gameplay. Load restarts the last saved scene, including from the title/menu, with Autosave off or on. New game starts chapter 1, scene 0 and retains the save file; enabled Autosave can subsequently replace it. Load and New game override startup stage/scene options and rebuild through native mode/task/resource initialization, resuming native pause when necessary. Existing active players remain joined; menu loads start P1 (both with akimbo on). Companion desktop previews remain read-only.
 
-**Advanced > Autosave** controls `continue_game` live and saves its edited value to the active INI on settings close. The effective startup/CLI value is shown when connecting. Before selection, Save shows the current stage, chapter name and scene; Load shows the saved destination, for example `SAVE STAGE 3 DARKNESS SCENE 7` and `LOAD STAGE 2 MUDDY SCENE 8`. Missing saves and unavailable gameplay are labeled explicitly. Locations update while the menu stays open, including during pause. Save/Load captions then report progress and the acknowledged chapter name and scene, for example `SAVED A PRELUDE SCENE 4` or `LOADED MUDDY SCENE 8`. Status clears on navigation. Invalid/missing saves leave the running game intact. Initialization failure reports failure instead of success. There is one save slot, shared by manual saves and Autosave; both manual actions work with Autosave off.
+**Game Settings > Autosave** controls `continue_game` live and saves its edited value to the active INI on settings close. The effective startup/CLI value is shown when connecting. Before selection, Save shows the current stage, chapter name and scene; Load shows the saved destination, for example `SAVE STAGE 3 DARKNESS SCENE 7` and `LOAD STAGE 2 MUDDY SCENE 8`. Missing saves and unavailable gameplay are labeled explicitly. Locations update while the menu stays open, including during pause. Save/Load captions then report progress and the acknowledged chapter name and scene, for example `SAVED A PRELUDE SCENE 4` or `LOADED MUDDY SCENE 8`. Status clears on navigation. Invalid/missing saves leave the running game intact. Initialization failure reports failure instead of success. There is one save slot, shared by manual saves and Autosave; both manual actions work with Autosave off.
 
 The bridge hook uses the writable shared frame: set `checkpoint_action` (`HOTD_CHECKPOINT_SAVE`, `HOTD_CHECKPOINT_LOAD` or `HOTD_CHECKPOINT_NEW`), publish an incremented nonzero `checkpoint_request` with a memory barrier, then wait for the same ID in `checkpoint_response` before reading `checkpoint_result`, `checkpoint_stage` and `checkpoint_scene`. Serialize callers; never write through the companion preview's read-only mapping. The game thread performs writes and transitions; the viewer polls without blocking rendering. Load acknowledgment waits for destination root/scene activation, with a 30-second bridge timeout. The viewer's 45-second timeout reports an unknown result and retains outstanding bridge ownership. `checkpoint_autosave` is heartbeat-owned (`0` inherits launch configuration, `1` off, `2` on); disconnect restores launch configuration. Save outside Arcade gameplay reports unavailable; write failures preserve the old file. No save CLI or arbitrary live scene-jump command is exposed.
 
 The bridge stores `[checkpoint] version=1`, `stage=1..6` and `scene=0..255` in `HOTD2VR.checkpoint.ini` beside its DLL, separate from both configuration and native game saves. It writes only when the location changes during active Arcade gameplay, using a flushed temporary file and atomic replacement. No player health, score, inventory, enemy state, route history or exact script position is saved. Resume restarts the selected scene. Disabling the feature retains the file; deleting it starts normally until another checkpoint is recorded.
 
-Direct launcher equivalents are `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. These startup options belong to `HOTD2Launch.exe`, not the viewer; `--native-window` cannot be combined with an explicit checkpoint request because it skips bridge injection. Stage/scene selection is CLI-only; only the recording/resume toggle is in the INI. The existing VR settings menu provides Save, Load, New game and Autosave; stage/scene selection remains CLI-only.
+Direct launcher equivalents are `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. These startup options belong to `HOTD2Launch.exe`, not the viewer; `--native-window` cannot be combined with an explicit checkpoint request because it skips bridge injection. Stage/scene selection is CLI-only; only the recording/resume toggle is in the INI. The existing VR settings menu provides Save, Load and New game, with Autosave under Game Settings; stage/scene selection remains CLI-only.
 
 Invalid numeric arguments report `Invalid stage 20` or `Invalid scene 256` before starting a process. A missing direct-launcher value reports `Invalid stage` or `Invalid scene`.
 
@@ -303,11 +315,13 @@ Only left thumbstick click opens/closes the native-font settings panel. It start
 
 The menu background is 50% opaque, with fully visible text and selection accents over the game scene.
 
-Display, Rendering, Audio, Controls, Cheats and Advanced group the settings by purpose. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale and focus changes require a viewer restart; output and bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
+Game Settings, Display, Rendering, Audio, Controls and Cheats group the settings by purpose. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale and focus changes require a viewer restart; output and bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
 
-**Reset defaults**, after Advanced, restores the menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
+**Reset defaults**, after Cheats, restores the menu settings to built-in defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to remove overrides for all menu settings, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, hidden INI overrides, unknown INI keys and native game options are preserved.
 
-**Quit game** is the final root row, after Reset defaults. It saves pending options, then sends the connected native game window its normal close request. The existing bridge handles the native quit confirmation, and the viewer exits when the game closes. A missing/mismatched window or failed INI save keeps the menu open; read-only companion previews cannot quit the game.
+**Return to title** follows Reset defaults, immediately above **Quit game**. It queues the same native mode 3 used by Skip startup logos. Native game code tears down the previous scene and initializes the title; paused games resume through the existing native pause path. The panel closes after the bridge confirms the title is initialized. Saved checkpoints are retained.
+
+**Quit game** is the final root row, after Return to title. It saves pending options, then sends the connected native game window its normal close request. The existing bridge handles the native quit confirmation, and the viewer exits when the game closes. A missing/mismatched window or failed INI save keeps the menu open; read-only companion previews cannot quit the game.
 
 Closing the panel saves only edited keys to `HOTD2VR.ini` beside that viewer. Normal viewer exit also saves pending edits. Each save stages a copy and atomically replaces the INI, keeping a timestamped `.menu-*.bak` backup. Untouched keys, comments and launch overrides remain unchanged. A failed close/save keeps the menu open for retry; changes already applied live remain active. Viewer exit attempts a save and logs failures. Opening or closing without edits writes nothing. Cheats start from INI/explicit launch flags; the menu enables none automatically.
 
@@ -404,7 +418,7 @@ Use `-NativeLighting` or `--native-lighting` to force it on. Last direct CLI swi
 
 Lighting adds CPU work; actual VR frame-time cost remains unmeasured. Disabling it skips those calculations but retains the same transport format. MSAA, supersampling, gamma, depth and sharp HUD filtering are already available; see the settings table below.
 
-Scene brightness is separate from gamma: `[vr] brightness=100` is neutral; integer values 25–400 darken or brighten the converted scene. Brightness defaults to **90%**. Missing or invalid INI values use 90. Gain applies after fog/specular and before sRGB gamma compensation, with native lighting on or off. HUD, gun/aim graphics, the captured-screen panel and native desktop game stay unchanged.
+Scene brightness is separate from gamma: `[vr] brightness=100` is neutral; integer values 25–400 darken or brighten the converted scene and gun models. Brightness defaults to **90%**. Missing or invalid INI values use 90. Gain applies after fog/specular and before sRGB gamma compensation, with native lighting on or off. HUD, aim graphics, the captured-screen panel and native desktop game stay unchanged.
 
 For 80% scene brightness, without changing the INI:
 
@@ -427,7 +441,7 @@ expand_world=1
 
 `expand_meshes=1` preserves the existing normal-model screen-edge expansion, helping retain offscreen body parts. Set it to `0` to restore native normal-model mesh rejection. Alternative-model draws retain their native visibility checks by default.
 
-`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. The shipped INI enables world expansion for new players; existing INIs stay unchanged, and a missing key still falls back to off. Earlier headset testing captured rear scenery but showed jerkiness and artifacts. Full rear coverage and forward-wall parity remain unverified.
+`expand_world=1` enables experimental capture of loaded static stage scenery beyond the original camera, including behind it. It follows stage submissions through their deferred pass and relaxes original-camera near/far rejection only for those stage meshes. Custom clip planes, face culling and the viewer's depth buffer remain active. This is not a scenery cache: unloaded sections, other object-level omissions and surfaces the game never supplied can still leave gaps. Extra submissions can increase CPU work and geometry/texture pressure. World expansion defaults to on when its key is absent; an explicit `expand_world=0` retains native stage visibility. Earlier headset testing captured rear scenery but showed jerkiness and artifacts. Full rear coverage and forward-wall parity remain unverified.
 
 Session overrides, without changing the INI:
 
@@ -440,25 +454,26 @@ Use `-ExpandMeshes` / `-NoExpandMeshes` and `-ExpandWorld` / `-NoExpandWorld`, o
 
 #### Other shipped settings
 
-These are the values in the shipped INI; an existing active file can differ.
+These are the built-in defaults used when keys are absent; explicit INI overrides can differ.
 
 | Section/key | Value | Purpose |
 | --- | --- | --- |
 | `[vr] akimbo` | `1` | Paired joining; `0` uses independent player joining |
+| `[vr] arcade_gun_colors` | `0` | Shaded arcade plastic instead of gun textures; live Controls toggle |
 | `[vr] gunmodel` / `gunscale` | `gun.obj` / `100` | Gun asset and its size in percent |
 | `[vr] depth` / `depthbias` | `2` / `0` | Reconstructed depth buffer and optional sort bias |
 | `[vr] expand_meshes` / `expand_world` | `1` / `1` | Normal-model side expansion; experimental loaded-stage rear capture |
 | `[vr] msaa` | `4` | Antialiasing samples: 1, 2, 4 or 8 |
 | `[vr] supersample` | `100` | Eye-buffer resolution in percent; separate from world size |
 | `[vr] gamma` | `220` | sRGB eye-buffer compensation in percent; `100` disables it |
-| `[vr] brightness` | `90` | Converted-scene brightness in percent, 25–400; HUD and guns unchanged |
+| `[vr] brightness` | `90` | Converted-scene and gun brightness in percent, 25–400; HUD unchanged |
 | `[vr] master_volume` / `music_volume` / `effects_volume` | `100` / `100` / `100` | Game audio percentages, 0–100; effects include voices |
-| `[vr] hudsharp` | `1` (if absent) | Sharp HUD texture filtering |
+| `[vr] hudsharp` | `0` (if absent) | Sharp HUD texture filtering; explicit `1` enables it |
 | `[vr] haptic` / `focusgame` | `1` / `1` | Shot feedback and initial native-window focus |
 | `[bridge] windowed` / `background` | `1` / `1` | Native windowed mode and rendering while another window has focus |
 | `[bridge] units_per_metre` | `10` | Initial native-unit conversion; headset calibration remains necessary |
 
-See the commented [default INI](HOTD2VR.ini) for the complete shipped configuration. Relative gun-model paths resolve beside the viewer.
+The [shipped INI](HOTD2VR.ini) contains no overrides; absent keys use the defaults above. Relative gun-model paths resolve beside the viewer.
 
 #### Startup splashes and native window
 

@@ -80,13 +80,13 @@ static void check_menu_layout(void)
     const char *groups[]={"GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS"};
     const char *keys[6][11]={
         {"skip_splash","continue_game"},
-        {"brightness","gamma","swap_player_hud","window","vrwindow","windowed"},
+        {"brightness","gamma","swap_player_hud","window","vrwindow","windowed","focusgame"},
         {"worldscale","units_per_metre","supersample","msaa","hudsharp","native_lighting","expand_meshes","expand_world","depth","depthbias","background"},
         {"master_volume","music_volume","effects_volume"},
-        {"akimbo","haptic","arcade_gun_colors","laser","crosshair","gunscale","reloadms","aimreach","focusgame"},
+        {"akimbo","arcade_gun_colors","laser","crosshair","reloadms","haptic","gunscale","aimreach"},
         {"infinite_ammo","infinite_lives","invincibility","protect_rescue_npcs","infinite_continues","rapid_fire","rapid_fire_rate"}
     };
-    const unsigned counts[]={2,6,11,3,9,7};
+    const unsigned counts[]={2,7,11,3,8,7};
     assert(vrMenuRootCount==12);
     g_vrMenuEnabled=g_vrMenuOpen=1;g_vrMenuArmed=g_vrMenuBlock=g_vrMenuPrevious=0;
     for(unsigned g=0;g<6;g++) {
@@ -117,9 +117,45 @@ static void check_menu_layout(void)
     memcpy(g_vrMenuFont['M'],glyphs[0],sizeof(glyphs[0]));memcpy(g_vrMenuFont['P'],glyphs[1],sizeof(glyphs[1]));
     g_vrMenuPage=-1;g_vrMenuRow=g_vrMenuOpen=g_vrMenuPrevious=0;
 }
+static void check_footer(const char *help,const char *notice)
+{
+    DWORD actual[40][546];vrMenuCanvas();
+    for(unsigned y=0;y<40;y++)memcpy(actual[y],g_vrMenuPixels[378+y]+48,sizeof(actual[y]));
+    vrMenuRect(48,378,546,40,0x8017191D);
+    vrMenuText(48,378,help,.65f,0xFF989898);
+    if(notice)vrMenuText(48,400,notice,.5f,0xFF989898);
+    for(unsigned y=0;y<40;y++)assert(!memcmp(actual[y],g_vrMenuPixels[378+y]+48,sizeof(actual[y])));
+}
+static void check_menu_help(void)
+{
+    /* Distinct deterministic glyphs keep footer checks independent of game assets. */
+    memset(g_vrMenuFont,0,sizeof(g_vrMenuFont));
+    for(unsigned c=33;c<127;c++)for(unsigned y=0;y<24;y++)for(unsigned x=0;x<16;x++)
+        if(c&(1u<<(x%7)))memset(g_vrMenuFont[c][y][x],255,4);
+    g_vrMenuError=NULL;g_vrMenuStatus[0]=0;g_nativePaused=g_previewOnly=0;
+    for(unsigned g=0;g<MENU_GROUP_COUNT;g++) {
+        g_vrMenuPage=-1;g_vrMenuRow=MENU_GROUP_FIRST+g;check_footer(vrMenuGroupHelp[g],NULL);
+        for(unsigned r=0;r<vrMenuCounts[g];r++) {
+            VrMenuItem *item=&vrMenuItems[g][r];
+            assert(item->help && item->help[0] && strlen(item->help)*10+20<=546);
+            assert(!strstr(item->help,"APPLIES LIVE") && !strstr(item->help,"SAVES ON CLOSE"));
+            g_vrMenuPage=g;g_vrMenuRow=r;
+            check_footer(item->help,item->flags&MENU_RESTART_GAME?"RESTART GAME TO APPLY":
+                item->flags&MENU_RESTART_VIEWER?"RESTART VIEWER TO APPLY":NULL);
+        }
+    }
+    assert(!strcmp(vrMenuItems[MENU_CONTROLS][0].label,"Akimbo"));
+    g_vrMenuPage=MENU_CONTROLS;g_vrMenuRow=0;check_footer("PLAY WITH TWO GUNS",NULL);
+    g_vrMenuError="SAVE FAILED";check_footer("PLAY WITH TWO GUNS","SAVE FAILED");g_vrMenuError=NULL;
+    g_previewOnly=1;check_footer("PLAY WITH TWO GUNS","READ ONLY PREVIEW");g_previewOnly=0;
+    lstrcpyA(g_vrMenuStatus,"SAVED A PRELUDE SCENE 4");check_footer("PLAY WITH TWO GUNS",g_vrMenuStatus);
+    g_vrMenuStatus[0]=0;g_vrMenuPage=MENU_RENDERING;g_vrMenuRow=5;g_nativePaused=1;
+    check_footer("USE GAME LIGHTS AND FOG","APPLIES WHEN GAME RESUMES");
+    g_nativePaused=0;g_vrMenuPage=-1;g_vrMenuRow=0;memset(g_vrMenuFont,0,sizeof(g_vrMenuFont));
+}
 int main(void)
 {
-    check_menu_layout();check_config_defaults();
+    check_menu_layout();check_config_defaults();check_menu_help();
     char temp[MAX_PATH],directory[MAX_PATH],pattern[MAX_PATH],file[MAX_PATH];
     assert(GetTempPathA(sizeof(temp),temp));
     assert(GetTempFileNameA(temp,"h2t",0,directory));
@@ -138,7 +174,7 @@ int main(void)
     assert(vrMenuSave() && GetPrivateProfileIntA("vr","protect_rescue_npcs",0,g_vrIniPath)==1);
     assert(vrMenuSet(rescue,0) && !g_cheatFlags && !g_frame->cheat_flags && vrMenuSave());
     assert(GetPrivateProfileIntA("vr","protect_rescue_npcs",-1,g_vrIniPath)==-1);
-    VrMenuItem *arcade=&vrMenuItems[MENU_CONTROLS][2];
+    VrMenuItem *arcade=&vrMenuItems[MENU_CONTROLS][1];
     assert(!strcmp(arcade->label,"Arcade gun colors") && !arcade->flags && !g_cfgArcadeGunColors);
     assert(vrMenuSet(arcade,1) && g_cfgArcadeGunColors && vrMenuSave());
     assert(GetPrivateProfileIntA("vr","arcade_gun_colors",0,g_vrIniPath)==1);

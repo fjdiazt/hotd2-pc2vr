@@ -9,6 +9,9 @@ static ID3D11ShaderResourceView *g_vrMenuSRV;
 static ID3D11BlendState *g_vrMenuBlend;
 enum { MENU_GAME_SETTINGS,MENU_DISPLAY,MENU_RENDERING,MENU_AUDIO,MENU_CONTROLS,MENU_CHEATS,MENU_GROUP_COUNT };
 static const char *const vrMenuGroups[]={"GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS"};
+static const char *const vrMenuGroupHelp[]={"GAME STARTUP AND SAVING","OUTPUTS AND PICTURE SETTINGS",
+    "WORLD SCALE AND GRAPHICS QUALITY","GAME MUSIC AND EFFECTS VOLUME",
+    "GUNS AIMING AND CONTROLLER FEEDBACK","OPTIONAL GAMEPLAY ASSISTS"};
 enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_NEW_GAME,MENU_GROUP_FIRST,MENU_RESET=MENU_GROUP_FIRST+MENU_GROUP_COUNT,MENU_TITLE,MENU_QUIT };
 static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","NEW GAME","GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","RESET DEFAULTS","RETURN TO TITLE","QUIT GAME"};
 static const unsigned vrMenuRootCount=sizeof(vrMenuRootLabels)/sizeof(vrMenuRootLabels[0]);
@@ -20,53 +23,57 @@ static const char *const vrMenuChapters[]={"A PRELUDE","MUDDY","DARKNESS","DESPA
 enum { MENU_INT,MENU_UNSIGNED,MENU_SCALE,MENU_CHEAT,MENU_BRIDGE };
 enum { MENU_RESTART_VIEWER=1,MENU_RESTART_GAME=2,MENU_SHADER=4,MENU_POWER2=8,MENU_CAPTURE=16 };
 typedef struct {
-    const char *label,*key;void *target;int min,max,step,kind,flags;
+    const char *label,*key,*help;void *target;int min,max,step,kind,flags;
     unsigned mask;int value,initial,defaults;
 } VrMenuItem;
 /* Built-in defaults; absent INI keys use the matching loadCfg defaults. */
-#define MI(label,key,target,lo,hi,step,kind,flags,def) {label,key,target,lo,hi,step,kind,flags,0,0,0,def}
-#define MB(label,key,target,def) MI(label,key,target,0,1,1,MENU_INT,0,def)
-#define MC(label,key,mask) {label,key,NULL,0,1,1,MENU_CHEAT,0,mask,0,0,0}
+#define MI(label,key,help,target,lo,hi,step,kind,flags,def) {label,key,help,target,lo,hi,step,kind,flags,0,0,0,def}
+#define MB(label,key,help,target,def) MI(label,key,help,target,0,1,1,MENU_INT,0,def)
+#define MC(label,key,help,mask) {label,key,help,NULL,0,1,1,MENU_CHEAT,0,mask,0,0,0}
 static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][11]={
-    {MI("Skip startup logos","skip_splash",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
-     MB("Autosave","continue_game",&g_cfgContinueGame,0)},
-    {MI("Brightness percent","brightness",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
-     MI("Gamma percent","gamma",&g_cfgGamma,0,300,5,MENU_INT,MENU_SHADER,220),
-     MB("Swap player HUD","swap_player_hud",&g_cfgSwapPlayerHud,1),
-     MI("Desktop preview","window",&g_cfgWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,0),
-     MI("Headset output","vrwindow",&g_cfgVrWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,1),
-     MI("Native windowed","windowed",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1)},
-    {MI("World scale percent","worldscale",&g_cfgWorldScale,10,1000,5,MENU_SCALE,0,125),
-     MI("Units per metre","units_per_metre",NULL,1,100000,1,MENU_BRIDGE,MENU_RESTART_GAME,10),
-     MI("Resolution percent","supersample",&g_cfgSuper,50,250,10,MENU_INT,MENU_RESTART_VIEWER,100),
-     MI("MSAA","msaa",&g_cfgMsaa,1,8,1,MENU_INT,MENU_RESTART_VIEWER|MENU_POWER2,4),
-     MB("Sharp HUD","hudsharp",&g_cfgHudSharp,0),
-     MI("Native lighting","native_lighting",&g_cfgNativeLighting,0,1,1,MENU_INT,MENU_CAPTURE,1),
-     MI("Expand meshes","expand_meshes",&g_cfgExpandMeshes,0,1,1,MENU_INT,MENU_CAPTURE,1),
-     MI("Expand world","expand_world",&g_cfgExpandWorld,0,1,1,MENU_INT,MENU_CAPTURE,1),
-     MI("Depth mode","depth",&g_cfgDepth,0,2,1,MENU_INT,MENU_RESTART_VIEWER,2),
-     MI("Depth bias","depthbias",&g_cfgDepthBias,0,200,1,MENU_INT,MENU_RESTART_VIEWER,0),
-     MI("Background rendering","background",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1)},
-    {MI("Master volume","master_volume",&g_cfgMasterVolume,0,100,5,MENU_UNSIGNED,0,100),
-     MI("Music volume","music_volume",&g_cfgMusicVolume,0,100,5,MENU_UNSIGNED,0,100),
-     MI("Effects volume","effects_volume",&g_cfgEffectsVolume,0,100,5,MENU_UNSIGNED,0,100)},
-    {MB("Two guns","akimbo",&g_cfgAkimbo,1),MB("Haptics","haptic",&g_cfgHaptic,1),
-     MB("Arcade gun colors","arcade_gun_colors",&g_cfgArcadeGunColors,0),
-     MB("Laser","laser",&g_cfgLaser,1),MB("Crosshair","crosshair",&g_cfgCrosshair,1),
-     MI("Gun scale percent","gunscale",&g_cfgGunScale,10,1000,5,MENU_INT,MENU_RESTART_VIEWER,100),
-     MI("Reload duration ms","reloadms",&g_cfgReloadMs,60,1000,20,MENU_INT,0,180),
-     MI("Aim reach metres","aimreach",&g_cfgReach,1,100,1,MENU_INT,0,6),
-     MI("Focus game","focusgame",&g_cfgFocus,0,1,1,MENU_INT,MENU_RESTART_VIEWER,1)},
-    {MC("Infinite ammo","infinite_ammo",HOTD_CHEAT_AMMO),MC("Infinite lives","infinite_lives",HOTD_CHEAT_LIVES),
-     MC("Invincibility","invincibility",HOTD_CHEAT_INVINCIBILITY),
-     MC("Protect rescue NPCs","protect_rescue_npcs",HOTD_CHEAT_RESCUE_NPCS),
-     MC("Infinite continues","infinite_continues",HOTD_CHEAT_CONTINUES),MC("Rapid fire","rapid_fire",HOTD_CHEAT_RAPID),
-     MI("Shots per second","rapid_fire_rate",&g_cfgRapidRate,1,30,1,MENU_UNSIGNED,0,4)}
+    {MI("Skip startup logos","skip_splash","SKIP SEGA AND EMPIRE LOGOS",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
+     MB("Autosave","continue_game","SAVE AND RESUME SCENES",&g_cfgContinueGame,0)},
+    {MI("Brightness percent","brightness","ADJUST SCENE AND GUN BRIGHTNESS",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
+     MI("Gamma percent","gamma","ADJUST PICTURE TONES",&g_cfgGamma,0,300,5,MENU_INT,MENU_SHADER,220),
+     MB("Swap player HUD","swap_player_hud","P1 HUD RIGHT   P2 HUD LEFT",&g_cfgSwapPlayerHud,1),
+     MI("Desktop preview","window","SHOW A DESKTOP VR PREVIEW",&g_cfgWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,0),
+     MI("Headset output","vrwindow","SHOW THE GAME IN YOUR HEADSET",&g_cfgVrWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,1),
+     MI("Native windowed","windowed","RUN THE ORIGINAL GAME IN A WINDOW",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
+     MI("Focus game","focusgame","FOCUS GAME WINDOW AT STARTUP",&g_cfgFocus,0,1,1,MENU_INT,MENU_RESTART_VIEWER,1)},
+    {MI("World scale percent","worldscale","CHANGE HOW LARGE THE WORLD FEELS",&g_cfgWorldScale,10,1000,5,MENU_SCALE,0,125),
+     MI("Units per metre","units_per_metre","BASE GAME UNITS PER VR METRE",NULL,1,100000,1,MENU_BRIDGE,MENU_RESTART_GAME,10),
+     MI("Resolution percent","supersample","CHANGE HEADSET IMAGE RESOLUTION",&g_cfgSuper,50,250,10,MENU_INT,MENU_RESTART_VIEWER,100),
+     MI("MSAA","msaa","SMOOTH JAGGED EDGES",&g_cfgMsaa,1,8,1,MENU_INT,MENU_RESTART_VIEWER|MENU_POWER2,4),
+     MB("Sharp HUD","hudsharp","MAKE HUD ICONS CRISPER",&g_cfgHudSharp,0),
+     MI("Native lighting","native_lighting","USE GAME LIGHTS AND FOG",&g_cfgNativeLighting,0,1,1,MENU_INT,MENU_CAPTURE,1),
+     MI("Expand meshes","expand_meshes","KEEP ACTORS VISIBLE AT VIEW EDGES",&g_cfgExpandMeshes,0,1,1,MENU_INT,MENU_CAPTURE,1),
+     MI("Expand world","expand_world","EXPERIMENTAL WIDER SCENERY",&g_cfgExpandWorld,0,1,1,MENU_INT,MENU_CAPTURE,1),
+     MI("Depth mode","depth","CONTROL WHICH SURFACES SHOW IN FRONT",&g_cfgDepth,0,2,1,MENU_INT,MENU_RESTART_VIEWER,2),
+     MI("Depth bias","depthbias","SEPARATE OVERLAPPING SURFACES",&g_cfgDepthBias,0,200,1,MENU_INT,MENU_RESTART_VIEWER,0),
+     MI("Background rendering","background","KEEP DRAWING WHEN GAME LOSES FOCUS",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1)},
+    {MI("Master volume","master_volume","SET OVERALL GAME VOLUME",&g_cfgMasterVolume,0,100,5,MENU_UNSIGNED,0,100),
+     MI("Music volume","music_volume","SET MUSIC VOLUME",&g_cfgMusicVolume,0,100,5,MENU_UNSIGNED,0,100),
+     MI("Effects volume","effects_volume","SET EFFECTS AND VOICE VOLUME",&g_cfgEffectsVolume,0,100,5,MENU_UNSIGNED,0,100)},
+    {MB("Akimbo","akimbo","PLAY WITH TWO GUNS",&g_cfgAkimbo,1),
+     MB("Arcade gun colors","arcade_gun_colors","USE RED AND BLUE GUN SHELLS",&g_cfgArcadeGunColors,0),
+     MB("Laser","laser","SHOW AIMING BEAMS",&g_cfgLaser,1),
+     MB("Crosshair","crosshair","SHOW AIM POINT MARKERS",&g_cfgCrosshair,1),
+     MI("Reload duration ms","reloadms","RELOAD ANIMATION TIME",&g_cfgReloadMs,60,1000,20,MENU_INT,0,180),
+     MB("Haptics","haptic","VIBRATE WHEN SHOTS FIRE",&g_cfgHaptic,1),
+     MI("Gun scale percent","gunscale","RESIZE GUN MODELS",&g_cfgGunScale,10,1000,5,MENU_INT,MENU_RESTART_VIEWER,100),
+     MI("Aim reach metres","aimreach","AIM DISTANCE OVER EMPTY SPACE",&g_cfgReach,1,100,1,MENU_INT,0,6)},
+    {MC("Infinite ammo","infinite_ammo","SHOOT WITHOUT USING AMMO",HOTD_CHEAT_AMMO),
+     MC("Infinite lives","infinite_lives","PREVENT LIFE LOSS",HOTD_CHEAT_LIVES),
+     MC("Invincibility","invincibility","BLOCK DAMAGE AND HIT REACTIONS",HOTD_CHEAT_INVINCIBILITY),
+     MC("Protect rescue NPCs","protect_rescue_npcs","BLOCK PLAYER DAMAGE TO RESCUE NPCS",HOTD_CHEAT_RESCUE_NPCS),
+     MC("Infinite continues","infinite_continues","JOIN AND CONTINUE WITHOUT CREDITS",HOTD_CHEAT_CONTINUES),
+     MC("Rapid fire","rapid_fire","REPEAT SHOTS WHILE HOLDING TRIGGER",HOTD_CHEAT_RAPID),
+     MI("Shots per second","rapid_fire_rate","REQUESTED RAPID FIRE RATE",&g_cfgRapidRate,1,30,1,MENU_UNSIGNED,0,4)}
 };
 #undef MI
 #undef MB
 #undef MC
-static const unsigned vrMenuCounts[]={2,6,11,3,9,7};
+static const unsigned vrMenuCounts[]={2,7,11,3,8,7};
 static const char *g_vrMenuError;
 static int vrMenuClose(void);
 #define MENU_TOGGLE 0x80000000u
@@ -395,20 +402,24 @@ static void vrMenuCanvas(void)
             vrMenuText(500,y,value,.85f,selected?red:white);
         }
     }
-    const char *hint="APPLIES LIVE   SAVES ON CLOSE";
+    const char *hint=g_vrMenuPage>=0?vrMenuItems[g_vrMenuPage][g_vrMenuRow].help:
+        g_vrMenuRow>=MENU_GROUP_FIRST && g_vrMenuRow<MENU_RESET?vrMenuGroupHelp[g_vrMenuRow-MENU_GROUP_FIRST]:"";
     if(g_vrMenuPage<0 && (g_vrMenuRow==MENU_SAVE_GAME || g_vrMenuRow==MENU_LOAD_GAME))hint=g_vrMenuDestination;
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_NEW_GAME)hint="RESTART ARCADE AT FIRST SCENE";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_RESET)
         hint=g_vrMenuResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_QUIT)hint="SAVE OPTIONS AND QUIT GAME";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_TITLE)hint="END CURRENT GAME AND RETURN TO TITLE";
+    const char *notice=NULL;
     if(g_vrMenuPage>=0) {
         int flags=vrMenuItems[g_vrMenuPage][g_vrMenuRow].flags;
-        if(flags&MENU_RESTART_VIEWER)hint="RESTART VIEWER TO APPLY";
-        if(flags&MENU_RESTART_GAME)hint="RESTART GAME TO APPLY";
-        if((flags&MENU_CAPTURE) && g_nativePaused)hint="APPLIES WHEN GAME RESUMES";
+        if(flags&MENU_RESTART_VIEWER)notice="RESTART VIEWER TO APPLY";
+        if(flags&MENU_RESTART_GAME)notice="RESTART GAME TO APPLY";
+        if((flags&MENU_CAPTURE) && g_nativePaused)notice="APPLIES WHEN GAME RESUMES";
     }
-    vrMenuText(48,380,g_vrMenuError?g_vrMenuError:g_previewOnly?"READ ONLY PREVIEW":g_vrMenuStatus[0]?g_vrMenuStatus:hint,.65f,grey);
+    vrMenuText(48,378,hint,.65f,grey);
+    notice=g_vrMenuError?g_vrMenuError:g_previewOnly?"READ ONLY PREVIEW":g_vrMenuStatus[0]?g_vrMenuStatus:notice;
+    if(notice)vrMenuText(48,400,notice,.5f,grey);
     if(count>perPage){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/perPage+1,(count+perPage-1)/perPage);
         vrMenuText(440,72,page,.6f,grey);vrMenuText(440,356,page,.6f,grey);}
     vrMenuRect(42,418,552,1,0xFF303077);

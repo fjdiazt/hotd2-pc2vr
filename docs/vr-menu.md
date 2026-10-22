@@ -42,10 +42,10 @@ Right click recenters. Desktop F8 toggles the panel; companion previews are read
 | Group | Existing settings |
 | --- | --- |
 | Game Settings | Skip startup logos and live Autosave. This is the first group after New game. |
-| Display | Brightness, gamma, player-HUD swap, desktop/headset outputs and native windowed mode. |
+| Display | Brightness, gamma, player-HUD swap, desktop/headset outputs, native windowed mode and initial game focus. |
 | Rendering | World scale, units per metre, resolution, MSAA, Sharp HUD, native lighting, mesh/world expansion, depth mode/bias and background rendering, in that order. |
 | Audio | Master, music and effects volumes. |
-| Controls | Akimbo, haptics, arcade gun colors, laser/crosshair, gun scale, reload duration, aiming reach and initial game focus. |
+| Controls | Akimbo, arcade gun colors, laser, crosshair, reload duration, haptics, gun scale and aiming reach, in that order. |
 | Cheats | Infinite ammo/lives/continues, invincibility, rescue NPC protection, rapid fire and its rate. |
 
 The option table follows existing parsing, ranges and shipped defaults.
@@ -239,4 +239,13 @@ World scale and Units per metre are adjacent at the start of Rendering. Sharp HU
 follows resolution/MSAA and defaults off in both the configuration loader and Reset
 Defaults. Missing `hudsharp` uses 0; explicit overrides, including `hudsharp=1`, are
 retained. Moving these options does not change their live/restart requirements.
-Display contains six rows on one page; Rendering contains eleven rows on two pages.
+Display contains seven rows on two pages; Rendering contains eleven and Controls eight, each on two pages.
+
+Every setting carries a short explanation beside its existing label/key/defaults.
+The footer displays that explanation, including **Akimbo: PLAY WITH TWO GUNS**;
+root groups have short category descriptions, while Save/Load retain their location
+previews. Generic APPLIES LIVE / SAVES ON CLOSE text is removed. Restart requirements,
+paused-capture application notices, errors, preview restrictions and action results
+use a separate line beneath the explanation. Existing native glyphs and the same panel
+are reused. Offline checks exercise every setting's rendered help, width, row order,
+both restart types, paused capture, errors, action status and read-only preview.
