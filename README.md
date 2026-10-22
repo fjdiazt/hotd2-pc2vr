@@ -66,7 +66,7 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 | **Save game** | Saves the current Arcade chapter and scene. Works during play or pause. This is a scene checkpoint: loading restarts that scene, rather than restoring the exact moment, enemy positions or player state. |
 | **Load game** | Restarts the saved Arcade scene. Also works from the title/menu. There is one save slot, shared with Autosave. The destination appears below the selected row. |
 | **New game** | Starts chapter 1, scene 0. Keeps the existing save, although Autosave can replace it when enabled. |
-| **Reset defaults** | Restores all 47 menu settings to their shipped values, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
+| **Reset defaults** | Restores the menu settings to their shipped values, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
 | **Quit game** | Saves your changed settings, closes the game normally, and ends the VR viewer. |
 
 ### Display
@@ -79,7 +79,6 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 | **Laser** | On | Shows a beam from each gun to help you aim. Turning it off does not affect shooting. |
 | **Crosshair** | On | Shows an aiming marker where your gun points. Independent of the laser. |
 | **Sharp HUD** | On | Makes on-screen text and counters look sharper. Turn it off for softer filtering. |
-| **Zoom HUD** | Off | Makes the HUD grow with the scene during zoom. Off keeps the HUD at its normal size. |
 | **Swap player HUD** | On | Places Player 1's ammo/lives on the right and Player 2's on the left, matching the gun hands. Off keeps the original game's arrangement. |
 
 ### Rendering
@@ -108,19 +107,9 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 | --- | --- | --- |
 | **Two guns** | On | Shows both guns and joins both players together. Off lets the right and left hands join Player 1 and Player 2 separately. |
 | **Haptics** | On | Controller vibration after confirmed shots. |
-| **Auto zoom** | Off | Magnifies the view during the original game's zoom moments. Enables the zoom/scope options below. |
-| **Scope** | Off | Shows zoom through a scope instead of magnifying the whole view. Used when zoom is active. |
 | **Gun scale percent** | 100% | Size of the visible gun models. Does not change world scale. Range: 10–1000%. Restart required. |
 | **Reload duration ms** | 180 | Length of the gun's reload animation, in milliseconds. Does not change the native game's ammunition/reload rules. Range: 60–1000 ms. |
 | **Aim reach metres** | 6 | Fallback aiming distance when your gun points at empty space. It does not limit shots that hit real scene geometry. Range: 1–100 metres. |
-| **Zoom percent** | 400% | Maximum zoom magnification: 400% means 4×. Range: 110–1200%. |
-| **Zoom speed** | 4 | How quickly zoom eases in and out. Higher values change faster. Range: 1–50. |
-| **Auto zoom threshold** | 30 | How much the original camera must zoom before Auto zoom starts. Higher values require a stronger zoom moment. Range: 5–200%. |
-| **Zoom smoothing** | 55 | Reduces wobble during whole-view zoom. 0 disables smoothing; higher values damp more movement. Range: 0–90%. |
-| **Scope size degrees** | 12 | Angular size of the floating scope when Scope on gun is off. Range: 3–40 degrees. |
-| **Scope distance** | 25 | Distance of that floating scope, in metres. Used when Scope on gun is off. Range: 2–200 metres. |
-| **Scope on gun** | On | Attaches the scope glass to your gun. Off places the scope in front of your head instead. Requires Scope and active zoom. |
-| **Scope glass mm** | 26 | Radius of the gun-mounted scope glass, in millimetres. Used with Scope on gun. Range: 8–120 mm. |
 | **Focus game** | On | Brings the native game window to the front at startup. Restart required. |
 
 ### Cheats
@@ -314,9 +303,9 @@ Only left thumbstick click opens/closes the native-font settings panel. It start
 
 The menu background is 50% opaque, with fully visible text and selection accents over the game scene.
 
-Display, Rendering, Audio, Controls, Cheats and Advanced expose 47 numeric/boolean settings. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale and focus changes require a viewer restart; output and bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
+Display, Rendering, Audio, Controls, Cheats and Advanced group the settings by purpose. Runtime settings apply immediately through the viewer and existing bridge heartbeat, including audio and cheats. Brightness/gamma replace their shaders together. MSAA, resolution, depth settings, gun scale and focus changes require a viewer restart; output and bridge startup/window/background/unit changes require a game restart. Each selected row shows its requirement. The gun model path remains an INI setting.
 
-**Reset defaults**, after Advanced, restores all 47 menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
+**Reset defaults**, after Advanced, restores the menu settings to shipped defaults, with cheats off. Live settings apply immediately; restart settings queue for the next restart. Close the panel to save all reset values, including values previously overridden only on the command line. The panel stays open and native pause state stays unchanged. Gun model paths, unknown INI keys and native game options are preserved.
 
 **Quit game** is the final root row, after Reset defaults. It saves pending options, then sends the connected native game window its normal close request. The existing bridge handles the native quit confirmation, and the viewer exits when the game closes. A missing/mismatched window or failed INI save keeps the menu open; read-only companion previews cannot quit the game.
 
@@ -466,7 +455,6 @@ These are the values in the shipped INI; an existing active file can differ.
 | `[vr] master_volume` / `music_volume` / `effects_volume` | `100` / `100` / `100` | Game audio percentages, 0–100; effects include voices |
 | `[vr] hudsharp` | `1` (if absent) | Sharp HUD texture filtering |
 | `[vr] haptic` / `focusgame` | `1` / `1` | Shot feedback and initial native-window focus |
-| `[vr] autozoom` | `0` | Automatic cinematic zoom disabled in the shipped configuration |
 | `[bridge] windowed` / `background` | `1` / `1` | Native windowed mode and rendering while another window has focus |
 | `[bridge] units_per_metre` | `10` | Initial native-unit conversion; headset calibration remains necessary |
 
