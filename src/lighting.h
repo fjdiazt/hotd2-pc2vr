@@ -146,7 +146,7 @@ static inline void hotd_light_vertex(const HotdLighting *s,const float *position
             if(s->specular_enable && ndl>0) {
                 float half[3]={direction[0]+eye[0],direction[1]+eye[1],direction[2]+eye[2]},nh;
                 hotd_light_normalize(half);nh=hotd_light_dot(n,half);
-                shine=powf(nh>0 ? nh : 0,s->material.power);
+                shine=powf(hotd_light_clamp(nh),s->material.power);
             }
             for(k=0;k<3;k++) {
                 out->diffuse[k]+=atten*spot*(ma[k]*((const float *)&l->dcvAmbient)[k]+md[k]*((const float *)&l->dcvDiffuse)[k]*(ndl>0 ? ndl : 0));

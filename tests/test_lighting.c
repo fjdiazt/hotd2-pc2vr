@@ -59,6 +59,14 @@ int main(void)
     /* The normal length is retained unless NORMALIZENORMALS requests normalization. */
     s=state();s.world._33=2;hotd_lighting_prepare(&s);
     hotd_light_vertex(&s,p,front,0,0,fvf,&v);near_value(v.diffuse[0],.3f);
+    /* D3D7 caps N dot H before the power, even with unnormalized scaled normals. */
+    s=state();s.world._11=s.world._22=s.world._33=.7f;s.specular_enable=1;
+    s.material.specular=rgba(.29f,.29f,.31f,1);s.material.power=8;
+    s.lights[0].dcvSpecular=rgba(.84f,.84f,.84f,1);hotd_lighting_prepare(&s);
+    hotd_light_vertex(&s,p,front,0,0,fvf,&v);
+    near_value(v.specular[0],.29f*.84f);near_value(v.specular[2],.31f*.84f);
+    near_value(v.diffuse[0],.6f/.7f);
+    s=state();s.world._33=2;hotd_lighting_prepare(&s);
     s.normalize_normals=1;hotd_lighting_prepare(&s);
     hotd_light_vertex(&s,p,front,0,0,fvf,&v);near_value(v.diffuse[0],.6f);
     s.world._33=0;hotd_lighting_prepare(&s);
