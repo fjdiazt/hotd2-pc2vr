@@ -196,6 +196,21 @@ static void check_controller_modes(void)
     assert((g_frame->aim2_buttons&VC2_BTN_START) && !(g_frame->aim_buttons&VC2_BTN_START));
     g_activePlayers=2;controller_tick(); /* Native P2 accepted. */
     assert(!g_gunValid && g_gun2Valid && g_gun2Pose.position.x<0 && !(g_frame->aim2_buttons&VC2_BTN_FIRE));
+    for(unsigned player=0;player<2;player++)for(unsigned palette=0;palette<2;palette++)for(unsigned firing=0;firing<2;firing++)for(unsigned laser=0;laser<2;laser++) {
+        g_activePlayers=1u<<player;
+        g_cfgArcadeGunColors=palette;
+        g_cfgLaser=laser;g_cfgCrosshair=!laser;controller_fires=firing<<(1-player);controller_tick();
+        assert(g_ovCount);
+        if(laser && !firing)assert(g_ovVerts[0].colour==(player?0x808F4B1Du:0x802B24DEu));
+        for(unsigned i=0;i<g_ovCount;i++) {
+            DWORD color=g_ovVerts[i].colour;
+            unsigned r=color&255,g=(color>>8)&255,b=(color>>16)&255;
+            assert((color>>24)==0x80);
+            if(player)assert(b>g && g>=r);
+            else assert(r>b && b>=g && b*2<r);
+        }
+    }
+    g_activePlayers=2;g_cfgArcadeGunColors=0;g_cfgLaser=g_cfgCrosshair=1;controller_fires=0;controller_tick();
     controller_fires=0;controller_tick();
     controller_fires=1;controller_tick();assert(g_frame->aim2_buttons&VC2_BTN_FIRE);
     controller_fires=2;controller_tick();assert(!g_gunValid && g_gun2Valid && !(g_frame->aim_buttons&VC2_BTN_FIRE));
@@ -271,26 +286,26 @@ static void snapshot_copy(void *dst,const void *src,size_t bytes)
 static void check_swapped_player_hud(void)
 {
     float scale=g_cfgWorldScale;int akimbo=g_cfgAkimbo,swap=g_cfgSwapPlayerHud;
-    const float x[12]={-8,-6,6,8,-8,-5,5,8,-2,-4,-6,-7};
+    const float x[16]={-8,-6,6,8,-8,-5,5,8,-9,-3,3,9,-2,-4,-6,-7};
     for(unsigned sc=0;sc<3;sc++)for(unsigned enabled=0;enabled<2;enabled++)for(unsigned two=0;two<2;two++) {
         g_cfgWorldScale=sc==0?1:sc==1?1.25f:2;g_cfgSwapPlayerHud=enabled;g_cfgAkimbo=two;
-        g_frame->vertex_count=12;g_frame->reserved[0]=0;g_frame->reserved[2]=1;g_frame->units_per_metre=10;
-        for(unsigned i=0;i<12;i++)g_frame->verts[i]=(Vc2Vertex){.x=x[i],.y=-5,.z=-20,.depth=1,
-            .address=i<8?((i/2)+1)<<HOTD_PLAYER_HUD_SHIFT:0,.colour=0xFFAC1234,.u=.25f,.v=.75f};
-        g_frame->verts[9].style=HOTD_WORLD;g_frame->verts[9].address=1<<HOTD_PLAYER_HUD_SHIFT;
-        g_frame->verts[10].address=HOTD_GFILE;g_frame->verts[11].address=7<<HOTD_PLAYER_HUD_SHIFT;
+        g_frame->vertex_count=16;g_frame->reserved[0]=0;g_frame->reserved[2]=1;g_frame->units_per_metre=10;
+        for(unsigned i=0;i<16;i++)g_frame->verts[i]=(Vc2Vertex){.x=x[i],.y=-5,.z=-20,.depth=1,
+            .address=i<12?((i/2)+1)<<HOTD_PLAYER_HUD_SHIFT:0,.colour=0xFFAC1234,.u=.25f,.v=.75f};
+        g_frame->verts[13].style=HOTD_WORLD;g_frame->verts[13].address=1<<HOTD_PLAYER_HUD_SHIFT;
+        g_frame->verts[14].address=HOTD_GFILE;g_frame->verts[15].address=7<<HOTD_PLAYER_HUD_SHIFT;
         for(unsigned repeat=0;repeat<2;repeat++) {
             g_frame->seq+=2;assert(pullFrame());
-            const float changed[8]={6,8,-8,-6,5,8,-8,-5};float units=g_unitsPerMetre/10;
-            for(unsigned i=0;i<8;i++) {
+            const float changed[12]={6,8,-8,-6,5,8,-8,-5,3,9,-9,-3};float units=g_unitsPerMetre/10;
+            for(unsigned i=0;i<12;i++) {
                 assert(fabsf(g_local[i].x-(enabled?changed[i]:x[i])*units)<.0001f);
                 assert(g_local[i].u==.25f && g_local[i].v==.75f && g_local[i].colour==0xFFAC1234);
                 assert(g_local[i].address==g_frame->verts[i].address && g_frame->verts[i].x==x[i]);
                 assert(g_local[i].y==-5*units && g_local[i].z==-20*units && g_local[i].depth==1);
             }
-            assert(fabsf(g_local[8].x-x[8]*units)<.0001f); /* Caption/menu untagged. */
-            assert(fabsf(g_local[9].x-x[9]*units)<.0001f); /* World, even if tag is corrupt. */
-            assert(fabsf(g_local[11].x-x[11]*units)<.0001f); /* Unknown group retained. */
+            assert(fabsf(g_local[12].x-x[12]*units)<.0001f); /* Attract caption/menu untagged. */
+            assert(fabsf(g_local[13].x-x[13]*units)<.0001f); /* World, even if tag is corrupt. */
+            assert(fabsf(g_local[15].x-x[15]*units)<.0001f); /* Unknown group retained. */
         }
     }
     g_cfgWorldScale=scale;g_cfgAkimbo=akimbo;g_cfgSwapPlayerHud=swap;
@@ -346,9 +361,9 @@ int main(void)
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
     g_cheatFlags=HOTD_CHEAT_MASK;pushCheats();
     assert(g_frame->cheat_flags==HOTD_CHEAT_MASK && !g_frame->aim_seq && !g_frame->aim_buttons);
-    assert(g_frame->rapid_fire_rate==4 && !g_frame->render_flags);
-    g_cfgNativeLighting=0;pushCheats();assert(g_frame->render_flags==HOTD_RENDER_UNLIT);
-    g_cfgNativeLighting=1;pushCheats();assert(!g_frame->render_flags);
+    assert(g_frame->rapid_fire_rate==4 && g_frame->render_flags==HOTD_RENDER_EXPAND_WORLD);
+    g_cfgNativeLighting=0;pushCheats();assert(g_frame->render_flags==(HOTD_RENDER_UNLIT|HOTD_RENDER_EXPAND_WORLD));
+    g_cfgNativeLighting=1;pushCheats();assert(g_frame->render_flags==HOTD_RENDER_EXPAND_WORLD);
     g_cfgExpandMeshes=0;g_cfgExpandWorld=1;pushCheats();
     assert(g_frame->render_flags==(HOTD_RENDER_NATIVE_MESH_CULLING|HOTD_RENDER_EXPAND_WORLD));
     g_cfgNativeLighting=0;pushCheats();
@@ -419,9 +434,9 @@ int main(void)
     controller_fires=controller_pauses=controller_backs=controller_reloads=0;controller_tick();
     controller_fires=3;controller_tick();
     assert(g_vrMenuPage==0 && !g_frame->aim_buttons && !g_frame->aim2_buttons);
-    controller_fires=0;controller_tick();g_vrMenuPage=4;g_vrMenuRow=0;
+    controller_fires=0;controller_tick();g_vrMenuPage=MENU_CHEATS;g_vrMenuRow=0;
     controller_fires=2;controller_tick();
-    assert(vrMenuItems[4][0].value==1 && g_cheatFlags==HOTD_CHEAT_AMMO);
+    assert(vrMenuItems[MENU_CHEATS][0].value==1 && g_cheatFlags==HOTD_CHEAT_AMMO);
     assert(g_frame->cheat_flags==HOTD_CHEAT_AMMO);
     assert(!g_frame->aim_buttons && !g_frame->aim2_buttons); /* UI Trigger cannot join/fire behind the page. */
     controller_fires=0;g_cheatFlags=0;vrMenuInit();

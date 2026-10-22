@@ -37,7 +37,7 @@ static DWORD checkpoint_preview_tick;
 static DWORD checkpoint_retry;
 static unsigned checkpoint_pending;
 static DWORD checkpoint_deadline;
-static int checkpoint_entered,checkpoint_unpause;
+static int checkpoint_entered,checkpoint_unpause,checkpoint_returning;
 static int capture_enabled=1;
 static int trace_render_states,trace_input;
 static void publish_bridge_state(void);
@@ -65,13 +65,14 @@ static HotdStageRecords stage_records;
 static HotdStageRecords gfile_records;
 static const BYTE *gfile_immediate;
 static int gfile_ready,capture_gfile;
-static HotdSpriteRecords crosshair_records,player_hud_records[4];
+static HotdSpriteRecords crosshair_records,player_hud_records[HOTD_PLAYER_HUD_GROUPS];
 static unsigned player_hud_owner,capture_player_hud;
 static int player_hud_ready;
 static const BYTE *player_hud_immediate;
 static unsigned player_hud_immediate_group;
 static void (__cdecl *native_hud_ammo_original)(const BYTE *);
 static DWORD (__cdecl *native_hud_lives_original)(const BYTE *);
+static void (__cdecl *native_hud_credits_original)(int);
 static int crosshair_ready;
 static const BYTE *crosshair_definition,*crosshair_immediate;
 static unsigned crosshair_draw_depth,crosshair_draw_base_skip;
@@ -285,7 +286,7 @@ static void __cdecl checkpoint_event(void)
         } else logline("checkpoint scene setup unavailable; native gameplay entry retained");
     }
     checkpoint_bootstrap=0;
-    if(checkpoint_pending && *(DWORD *)(game_base+0x5C8E98)==6 &&
+    if(checkpoint_pending && !checkpoint_returning && *(DWORD *)(game_base+0x5C8E98)==6 &&
        *(short *)(game_base+0x5A1A08)==checkpoint_target.stage-1 &&
        *(short *)(game_base+0x5A2BC0)==checkpoint_target.scene)checkpoint_entered=1;
 }
@@ -295,7 +296,7 @@ static void __cdecl checkpoint_load(void)
     checkpoint_bootstrap=0;
     /* Only fresh Arcade starts; demos, Original, Training and Boss modes stay native. */
     if(*(DWORD *)(game_base+0x5CA08C)==0) {
-        if(checkpoint_pending)checkpoint_armed=1;
+        if(checkpoint_pending)checkpoint_armed=!checkpoint_returning;
         else if(checkpoint_stage) {
             checkpoint_target=(HotdCheckpoint){checkpoint_stage,checkpoint_scene>=0?
                 checkpoint_scene:hotd_checkpoint_first_scene(checkpoint_stage)};
@@ -356,23 +357,36 @@ static void checkpoint_manual(unsigned active)
 {
     HotdCheckpoint point={0};unsigned request=frame->checkpoint_request,result;
     if(checkpoint_pending) {
-        if(checkpoint_entered && checkpoint_current(active,&point) &&
-           point.stage==checkpoint_target.stage && point.scene==checkpoint_target.scene) {
+        int title_ready=checkpoint_returning && *(DWORD *)(game_base+0x5C8E98)==3 &&
+            *(DWORD *)(game_base+0x5C90A4)==1 && *(int *)(game_base+0x3C17A0)<0 &&
+            !*(short *)(game_base+0x5A1A00);
+        if(title_ready || (!checkpoint_returning && checkpoint_entered && checkpoint_current(active,&point) &&
+           point.stage==checkpoint_target.stage && point.scene==checkpoint_target.scene)) {
             checkpoint_reply(checkpoint_pending,HOTD_SAVE_OK,point);
-            logline("checkpoint loaded: stage=%d scene=%d",point.stage,point.scene);
-            checkpoint_pending=0;
+            if(checkpoint_returning)logline("returned to title");
+            else logline("checkpoint loaded: stage=%d scene=%d",point.stage,point.scene);
+            checkpoint_pending=0;checkpoint_returning=0;
         } else if((LONG)(GetTickCount()-checkpoint_deadline)>=0) {
-            checkpoint_reply(checkpoint_pending,HOTD_SAVE_LOAD_FAILED,(HotdCheckpoint){0});checkpoint_pending=0;
+            checkpoint_reply(checkpoint_pending,HOTD_SAVE_LOAD_FAILED,(HotdCheckpoint){0});checkpoint_pending=0;checkpoint_returning=0;
         }
         return;
     }
     if(request==frame->checkpoint_response)return;
     MemoryBarrier();
-    if(frame->checkpoint_action==HOTD_CHECKPOINT_LOAD || frame->checkpoint_action==HOTD_CHECKPOINT_NEW) {
+    if(frame->checkpoint_action==HOTD_CHECKPOINT_LOAD || frame->checkpoint_action==HOTD_CHECKPOINT_NEW ||
+       frame->checkpoint_action==HOTD_CHECKPOINT_TITLE) {
         unsigned phase=*(DWORD *)(game_base+0x5C8E98);
         if(!checkpoint_ready || phase<3 || phase>12 ||
            (phase==6 && *(DWORD *)(game_base+0x5C90A4)!=2) ||
            *(int *)(game_base+0x3C17A0)>=0)result=HOTD_SAVE_UNAVAILABLE;
+        else if(frame->checkpoint_action==HOTD_CHECKPOINT_TITLE) {
+            checkpoint_pending=request;checkpoint_returning=1;checkpoint_deadline=GetTickCount()+30000;
+            checkpoint_armed=checkpoint_bootstrap=checkpoint_entered=0;
+            checkpoint_unpause=*(short *)(game_base+0x5A1A00)!=0;
+            /* Same destination as skip_splash; native Game_ApplyState owns teardown and player reset. */
+            *(int *)(game_base+0x3C17A0)=3;
+            logline("return to title queued");return;
+        }
         else if(frame->checkpoint_action==HOTD_CHECKPOINT_LOAD && !hotd_checkpoint_read(checkpoint_path,&point))
             result=HOTD_SAVE_INVALID;
         else {
@@ -1290,7 +1304,7 @@ static void __cdecl native_sprite_draw(const BYTE *record)
     capture_player_hud=0;
     if(player_hud_ready) {
         if(player_hud_immediate==record)capture_player_hud=player_hud_immediate_group;
-        for(unsigned g=0;g<4;g++)if(hotd_take_sprite(player_hud_records+g,record))
+        for(unsigned g=0;g<HOTD_PLAYER_HUD_GROUPS;g++)if(hotd_take_sprite(player_hud_records+g,record))
             capture_player_hud=(g+1)<<HOTD_PLAYER_HUD_SHIFT;
     }
     int owned=0;
@@ -1319,6 +1333,13 @@ static DWORD __cdecl native_hud_lives(const BYTE *task)
     unsigned previous=player_hud_owner;
     player_hud_owner=player_hud_ready?hotd_player_hud_group(task,1):0;
     DWORD result=native_hud_lives_original(task);player_hud_owner=previous;return result;
+}
+static void __cdecl native_hud_credits(int player)
+{
+    unsigned previous=player_hud_owner;
+    player_hud_owner=player_hud_ready && *(DWORD *)(game_base+0x5C8E98)==6 ?
+        hotd_player_hud_owner((unsigned)player,2):0;
+    native_hud_credits_original(player);player_hud_owner=previous;
 }
 static int native_stage_visibility(int visible,float radius,uintptr_t caller)
 {
@@ -1477,9 +1498,11 @@ static int install_player_hud(void)
 {
     static const BYTE ammo[]={0x83,0xEC,0x14,0x8B,0x44,0x24,0x18};
     static const BYTE lives[]={0x8B,0x44,0x24,0x04,0x56,0x57};
+    static const BYTE credits[]={0x83,0x3D,0x98,0x8E,0x9C,0x00,0x06};
     return crosshair_ready && hotd_player_hud_profile(game_base) &&
         detour(0x177D0,ammo,sizeof(ammo),native_hud_ammo,(void **)&native_hud_ammo_original) &&
-        detour(0x174A0,lives,sizeof(lives),native_hud_lives,(void **)&native_hud_lives_original);
+        detour(0x174A0,lives,sizeof(lives),native_hud_lives,(void **)&native_hud_lives_original) &&
+        detour(0x6CE0,credits,sizeof(credits),native_hud_credits,(void **)&native_hud_credits_original);
 }
 
 static int install_crosshair_capture(int profile_valid)
@@ -1731,7 +1754,7 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
         audio_ini_volume("music_volume"),audio_ini_volume("effects_volume"));
     frame->render_flags=GetPrivateProfileIntA("vr","native_lighting",1,ini_path)?0:HOTD_RENDER_UNLIT;
     if(!GetPrivateProfileIntA("vr","expand_meshes",1,ini_path))frame->render_flags|=HOTD_RENDER_NATIVE_MESH_CULLING;
-    if(GetPrivateProfileIntA("vr","expand_world",0,ini_path))frame->render_flags|=HOTD_RENDER_EXPAND_WORLD;
+    if(GetPrivateProfileIntA("vr","expand_world",1,ini_path))frame->render_flags|=HOTD_RENDER_EXPAND_WORLD;
     logline("native lighting: %s",frame->render_flags&HOTD_RENDER_UNLIT?"off":"on");
     frame->units_per_metre=(float)GetPrivateProfileIntA("bridge","units_per_metre",10,ini_path);
     if(frame->units_per_metre<1 || frame->units_per_metre>100000)frame->units_per_metre=10;

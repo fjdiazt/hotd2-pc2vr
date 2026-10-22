@@ -69,18 +69,24 @@ static void __cdecl hud_ammo(const BYTE *task)
 {hud_task_seen=task;native_sprite_submit(request);}
 static DWORD __cdecl hud_lives(const BYTE *task)
 {hud_task_seen=task;native_sprite_submit(request);return 37;}
+static int hud_player_seen;
+static void __cdecl hud_credits(int player)
+{hud_player_seen=player;native_sprite_submit(request);native_sprite_submit(request);}
 static void test_player_hud(void)
 {
     const BYTE ammo[]={0x83,0xEC,0x14,0x8B,0x44,0x24,0x18},lives[]={0x8B,0x44,0x24,4,0x56,0x57};
+    const BYTE credits[]={0x83,0x3D,0x98,0x8E,0x9C,0,6};
     BYTE task[0x38]={0},alias[HOTD_SPRITE_RECORD_SIZE],saved[HOTD_SPRITE_RECORD_SIZE];
     assert(!hotd_player_hud_profile(game_base));
     memcpy(game_base+0x177D0,ammo,sizeof(ammo));memcpy(game_base+0x174A0,lives,sizeof(lives));
+    assert(!hotd_player_hud_profile(game_base));memcpy(game_base+0x6CE0,credits,sizeof(credits));
     assert(hotd_player_hud_profile(game_base));
-    const unsigned addresses[]={0x177D0,0x174A0},sizes[]={7,6};
-    for(unsigned h=0;h<2;h++)for(unsigned b=0;b<sizes[h];b++) {
+    const unsigned addresses[]={0x177D0,0x174A0,0x6CE0},sizes[]={7,6,7};
+    for(unsigned h=0;h<3;h++)for(unsigned b=0;b<sizes[h];b++) {
         game_base[addresses[h]+b]^=1;assert(!hotd_player_hud_profile(game_base));game_base[addresses[h]+b]^=1;
     }
     native_hud_ammo_original=hud_ammo;native_hud_lives_original=hud_lives;
+    native_hud_credits_original=hud_credits;
     for(unsigned kind=0;kind<2;kind++)for(unsigned p=0;p<2;p++)for(unsigned deferred=0;deferred<2;deferred++) {
         reset();player_hud_ready=1;*(DWORD *)(task+0x34)=p;*(DWORD *)request=deferred?0x80000000:0;
         if(kind)assert(native_hud_lives(task)==37);else native_hud_ammo(task);
@@ -90,6 +96,28 @@ static void test_player_hud(void)
         for(unsigned v=0;v<6;v++)assert((hud_vertices[v].address&HOTD_PLAYER_HUD_MASK)==((kind*2+p+1)<<HOTD_PLAYER_HUD_SHIFT));
         native_sprite_draw(other);assert(!(hud_vertices[6].address&HOTD_PLAYER_HUD_MASK));
     }
+    /* Join prompt and credit digits share the player row, immediate or queued. */
+    for(int p=0;p<2;p++)for(unsigned deferred=0;deferred<2;deferred++) {
+        reset();player_hud_ready=1;*(DWORD *)(game_base+0x5C8E98)=6;
+        *(DWORD *)request=deferred?0x80000000:0;native_hud_credits(p);
+        assert(hud_player_seen==p && !player_hud_owner && !capture_player_hud);
+        if(deferred){native_sprite_draw(queued(0));native_sprite_draw(queued(1));}
+        assert(native_submits==2 && native_sprites==2 && hud_count==12 && !suppressed);
+        for(unsigned v=0;v<12;v++)assert((hud_vertices[v].address&HOTD_PLAYER_HUD_MASK)==((p+5u)<<HOTD_PLAYER_HUD_SHIFT));
+        native_sprite_draw(other);assert(!(hud_vertices[12].address&HOTD_PLAYER_HUD_MASK));
+    }
+    for(unsigned mode=0;mode<12;mode++)if(mode!=6) {
+        reset();player_hud_ready=1;*(DWORD *)(game_base+0x5C8E98)=mode;native_hud_credits(1);
+        assert(hud_player_seen==1 && !(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
+    }
+    for(int p=-1;p<=2;p+=3) {
+        reset();player_hud_ready=1;*(DWORD *)(game_base+0x5C8E98)=6;native_hud_credits(p);
+        assert(hud_player_seen==p && !(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
+    }
+    reset();native_hud_credits(0);assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
+    reset();player_hud_ready=1;*(DWORD *)request=0x80000000;native_hud_credits(1);
+    BYTE *credit_copy=queued(0);publish_frame();native_sprite_draw(credit_copy);
+    assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));
     reset();player_hud_ready=1;*(DWORD *)(task+0x34)=0;*(DWORD *)request=0x80000000;
     native_hud_ammo(task);memcpy(alias,queued(0),sizeof(alias));memcpy(saved,queued(0),sizeof(saved));
     native_sprite_draw(alias);assert(!(hud_vertices[0].address&HOTD_PLAYER_HUD_MASK));

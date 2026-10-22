@@ -7,9 +7,10 @@ static DWORD g_vrMenuPixels[480][640];
 static ID3D11Texture2D *g_vrMenuTexture;
 static ID3D11ShaderResourceView *g_vrMenuSRV;
 static ID3D11BlendState *g_vrMenuBlend;
-static const char *const vrMenuGroups[]={"DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","ADVANCED","RESET DEFAULTS","QUIT GAME"};
-enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_NEW_GAME,MENU_GROUP_FIRST,MENU_RESET=9,MENU_QUIT=10 };
-static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","NEW GAME","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","ADVANCED","RESET DEFAULTS","QUIT GAME"};
+enum { MENU_GAME_SETTINGS,MENU_DISPLAY,MENU_RENDERING,MENU_AUDIO,MENU_CONTROLS,MENU_CHEATS,MENU_GROUP_COUNT };
+static const char *const vrMenuGroups[]={"GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS"};
+enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_NEW_GAME,MENU_GROUP_FIRST,MENU_RESET=MENU_GROUP_FIRST+MENU_GROUP_COUNT,MENU_TITLE,MENU_QUIT };
+static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","NEW GAME","GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","RESET DEFAULTS","RETURN TO TITLE","QUIT GAME"};
 static const unsigned vrMenuRootCount=sizeof(vrMenuRootLabels)/sizeof(vrMenuRootLabels[0]);
 static unsigned g_vrMenuRequest,g_vrMenuAction;
 static DWORD g_vrMenuRequestTick;
@@ -22,71 +23,64 @@ typedef struct {
     const char *label,*key;void *target;int min,max,step,kind,flags;
     unsigned mask;int value,initial,defaults;
 } VrMenuItem;
-/* Shipped INI defaults; absent keys use loadCfg defaults. */
+/* Built-in defaults; absent INI keys use the matching loadCfg defaults. */
 #define MI(label,key,target,lo,hi,step,kind,flags,def) {label,key,target,lo,hi,step,kind,flags,0,0,0,def}
 #define MB(label,key,target,def) MI(label,key,target,0,1,1,MENU_INT,0,def)
 #define MC(label,key,mask) {label,key,NULL,0,1,1,MENU_CHEAT,0,mask,0,0,0}
-static VrMenuItem vrMenuItems[6][16]={
-    {MI("World scale percent","worldscale",&g_cfgWorldScale,10,1000,5,MENU_SCALE,0,125),
-     MI("Brightness percent","brightness",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
+static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][11]={
+    {MI("Skip startup logos","skip_splash",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
+     MB("Autosave","continue_game",&g_cfgContinueGame,0)},
+    {MI("Brightness percent","brightness",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
      MI("Gamma percent","gamma",&g_cfgGamma,0,300,5,MENU_INT,MENU_SHADER,220),
-     MB("Laser","laser",&g_cfgLaser,1),MB("Crosshair","crosshair",&g_cfgCrosshair,1),
-     MB("Sharp HUD","hudsharp",&g_cfgHudSharp,1),MB("Zoom HUD","hudzoom",&g_cfgHudZoom,0),
-     MB("Swap player HUD","swap_player_hud",&g_cfgSwapPlayerHud,1)},
-    {MI("Native lighting","native_lighting",&g_cfgNativeLighting,0,1,1,MENU_INT,MENU_CAPTURE,1),
+     MB("Swap player HUD","swap_player_hud",&g_cfgSwapPlayerHud,1),
+     MI("Desktop preview","window",&g_cfgWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,0),
+     MI("Headset output","vrwindow",&g_cfgVrWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,1),
+     MI("Native windowed","windowed",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1)},
+    {MI("World scale percent","worldscale",&g_cfgWorldScale,10,1000,5,MENU_SCALE,0,125),
+     MI("Units per metre","units_per_metre",NULL,1,100000,1,MENU_BRIDGE,MENU_RESTART_GAME,10),
+     MI("Resolution percent","supersample",&g_cfgSuper,50,250,10,MENU_INT,MENU_RESTART_VIEWER,100),
+     MI("MSAA","msaa",&g_cfgMsaa,1,8,1,MENU_INT,MENU_RESTART_VIEWER|MENU_POWER2,4),
+     MB("Sharp HUD","hudsharp",&g_cfgHudSharp,0),
+     MI("Native lighting","native_lighting",&g_cfgNativeLighting,0,1,1,MENU_INT,MENU_CAPTURE,1),
      MI("Expand meshes","expand_meshes",&g_cfgExpandMeshes,0,1,1,MENU_INT,MENU_CAPTURE,1),
      MI("Expand world","expand_world",&g_cfgExpandWorld,0,1,1,MENU_INT,MENU_CAPTURE,1),
-     MI("MSAA","msaa",&g_cfgMsaa,1,8,1,MENU_INT,MENU_RESTART_VIEWER|MENU_POWER2,4),
-     MI("Resolution percent","supersample",&g_cfgSuper,50,250,10,MENU_INT,MENU_RESTART_VIEWER,100),
      MI("Depth mode","depth",&g_cfgDepth,0,2,1,MENU_INT,MENU_RESTART_VIEWER,2),
-     MI("Depth bias","depthbias",&g_cfgDepthBias,0,200,1,MENU_INT,MENU_RESTART_VIEWER,0)},
+     MI("Depth bias","depthbias",&g_cfgDepthBias,0,200,1,MENU_INT,MENU_RESTART_VIEWER,0),
+     MI("Background rendering","background",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1)},
     {MI("Master volume","master_volume",&g_cfgMasterVolume,0,100,5,MENU_UNSIGNED,0,100),
      MI("Music volume","music_volume",&g_cfgMusicVolume,0,100,5,MENU_UNSIGNED,0,100),
      MI("Effects volume","effects_volume",&g_cfgEffectsVolume,0,100,5,MENU_UNSIGNED,0,100)},
     {MB("Two guns","akimbo",&g_cfgAkimbo,1),MB("Haptics","haptic",&g_cfgHaptic,1),
-     MB("Auto zoom","autozoom",&g_cfgAutoZoom,0),MB("Scope","scope",&g_cfgScope,0),
+     MB("Arcade gun colors","arcade_gun_colors",&g_cfgArcadeGunColors,0),
+     MB("Laser","laser",&g_cfgLaser,1),MB("Crosshair","crosshair",&g_cfgCrosshair,1),
      MI("Gun scale percent","gunscale",&g_cfgGunScale,10,1000,5,MENU_INT,MENU_RESTART_VIEWER,100),
      MI("Reload duration ms","reloadms",&g_cfgReloadMs,60,1000,20,MENU_INT,0,180),
      MI("Aim reach metres","aimreach",&g_cfgReach,1,100,1,MENU_INT,0,6),
-     MI("Zoom percent","zoom",&g_cfgZoomX,110,1200,10,MENU_INT,0,400),
-     MI("Zoom speed","zoomspeed",&g_cfgZoomSpd,1,50,1,MENU_INT,0,4),
-     MI("Auto zoom threshold","autozoomat",&g_cfgAutoAt,5,200,5,MENU_INT,0,30),
-     MI("Zoom smoothing","zoomsmooth",&g_cfgZoomSmooth,0,90,5,MENU_INT,0,55),
-     MI("Scope size degrees","scopesize",&g_cfgScopeDeg,3,40,1,MENU_INT,0,12),
-     MI("Scope distance","scopedist",&g_cfgScopeDist,2,200,1,MENU_INT,0,25),
-     MB("Scope on gun","scopemount",&g_cfgScopeMount,1),
-     MI("Scope glass mm","scopeglass",&g_cfgScopeGlass,8,120,1,MENU_INT,0,26),
      MI("Focus game","focusgame",&g_cfgFocus,0,1,1,MENU_INT,MENU_RESTART_VIEWER,1)},
     {MC("Infinite ammo","infinite_ammo",HOTD_CHEAT_AMMO),MC("Infinite lives","infinite_lives",HOTD_CHEAT_LIVES),
      MC("Invincibility","invincibility",HOTD_CHEAT_INVINCIBILITY),
      MC("Infinite continues","infinite_continues",HOTD_CHEAT_CONTINUES),MC("Rapid fire","rapid_fire",HOTD_CHEAT_RAPID),
-     MI("Shots per second","rapid_fire_rate",&g_cfgRapidRate,1,30,1,MENU_UNSIGNED,0,4)},
-    {MI("Desktop preview","window",&g_cfgWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,0),
-     MI("Headset output","vrwindow",&g_cfgVrWindow,0,1,1,MENU_INT,MENU_RESTART_GAME,1),
-     MI("Skip startup logos","skip_splash",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
-     MI("Native windowed","windowed",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
-     MI("Background rendering","background",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
-     MI("Units per metre","units_per_metre",NULL,1,100000,1,MENU_BRIDGE,MENU_RESTART_GAME,10),
-     MB("Autosave","continue_game",&g_cfgContinueGame,0)}
+     MI("Shots per second","rapid_fire_rate",&g_cfgRapidRate,1,30,1,MENU_UNSIGNED,0,4)}
 };
 #undef MI
 #undef MB
 #undef MC
-static const unsigned vrMenuCounts[]={8,7,3,16,6,7};
+static const unsigned vrMenuCounts[]={2,6,11,3,9,6};
 static const char *g_vrMenuError;
+static int vrMenuClose(void);
 #define MENU_TOGGLE 0x80000000u
 
 static void vrMenuInit(void)
 {
     if(g_frame && !g_cfgContinueEdited && (g_frame->checkpoint_autosave==1 || g_frame->checkpoint_autosave==2))
         g_cfgContinueGame=g_frame->checkpoint_autosave==2;
-    for(unsigned group=0;group<6;group++)for(unsigned row=0;row<vrMenuCounts[group];row++) {
+    for(unsigned group=0;group<MENU_GROUP_COUNT;group++)for(unsigned row=0;row<vrMenuCounts[group];row++) {
         VrMenuItem *item=&vrMenuItems[group][row];int value;
         switch(item->kind) {
         case MENU_SCALE:value=(int)lroundf(*(float *)item->target*100);break;
         case MENU_UNSIGNED:value=(int)*(unsigned *)item->target;break;
         case MENU_CHEAT:value=!!(g_cheatFlags&item->mask);break;
-        case MENU_BRIDGE:value=(int)GetPrivateProfileIntA("bridge",item->key,row==5?10:1,g_vrIniPath);break;
+        case MENU_BRIDGE:value=(int)GetPrivateProfileIntA("bridge",item->key,item->defaults,g_vrIniPath);break;
         default:value=*(int *)item->target;break;
         }
         item->value=item->initial=value;
@@ -101,7 +95,11 @@ static void vrMenuCheckpointPoll(void)
         MemoryBarrier();
         g_vrMenuError=NULL;
         unsigned result=g_frame->checkpoint_result,stage=g_frame->checkpoint_stage,scene=g_frame->checkpoint_scene;
-        if(result==HOTD_SAVE_OK && stage>=1 && stage<=6 && scene<=255)
+        if(g_vrMenuAction==HOTD_CHECKPOINT_TITLE) {
+            lstrcpyA(g_vrMenuStatus,result==HOTD_SAVE_OK?"RETURNED TO TITLE":
+                result==HOTD_SAVE_UNAVAILABLE?"RETURN UNAVAILABLE   TRY AGAIN":"RETURN FAILED   TRY AGAIN");
+            if(result==HOTD_SAVE_OK)vrMenuClose();
+        } else if(result==HOTD_SAVE_OK && stage>=1 && stage<=6 && scene<=255)
             snprintf(g_vrMenuStatus,sizeof(g_vrMenuStatus),"%s %s SCENE %u",
                 g_vrMenuAction==HOTD_CHECKPOINT_SAVE?"SAVED":g_vrMenuAction==HOTD_CHECKPOINT_NEW?"STARTED":"LOADED",vrMenuChapters[stage-1],scene);
         else lstrcpyA(g_vrMenuStatus,result==HOTD_SAVE_UNAVAILABLE?"UNAVAILABLE   ACTIVE ARCADE GAME REQUIRED":
@@ -121,7 +119,8 @@ static void vrMenuCheckpoint(unsigned action)
     }
     g_vrMenuRequest=g_frame->checkpoint_request+1;if(!g_vrMenuRequest)g_vrMenuRequest=1;
     g_vrMenuAction=action;g_vrMenuRequestTick=GetTickCount();g_vrMenuError=NULL;
-    lstrcpyA(g_vrMenuStatus,action==HOTD_CHECKPOINT_SAVE?"SAVING GAME":action==HOTD_CHECKPOINT_NEW?"STARTING NEW GAME":"LOADING GAME");
+    lstrcpyA(g_vrMenuStatus,action==HOTD_CHECKPOINT_SAVE?"SAVING GAME":action==HOTD_CHECKPOINT_NEW?"STARTING NEW GAME":
+        action==HOTD_CHECKPOINT_TITLE?"RETURNING TO TITLE":"LOADING GAME");
     g_frame->checkpoint_action=action;MemoryBarrier();
     InterlockedExchange((volatile LONG *)&g_frame->checkpoint_request,g_vrMenuRequest);
     g_vrMenuDirty=1;
@@ -187,7 +186,7 @@ static void vrMenuChange(VrMenuItem *item,int direction)
 static void vrMenuResetDefaults(void)
 {
     if(g_previewOnly){g_vrMenuError="READ ONLY PREVIEW";return;}
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
+    for(unsigned g=0;g<MENU_GROUP_COUNT;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
         VrMenuItem *item=&vrMenuItems[g][r];
         if(!vrMenuSet(item,item->defaults)) {
             g_vrMenuError="RESET INCOMPLETE   TRY AGAIN";return;
@@ -199,7 +198,7 @@ static void vrMenuResetDefaults(void)
 static int vrMenuSave(void)
 {
     int dirty=g_vrMenuResetPending;
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
+    for(unsigned g=0;g<MENU_GROUP_COUNT;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
         dirty|=vrMenuItems[g][r].value!=vrMenuItems[g][r].initial;
     if(!dirty){g_vrMenuError=NULL;return 1;}
     if(g_previewOnly)return 1;
@@ -213,12 +212,13 @@ static int vrMenuSave(void)
     slash[1]=0;
     if(!GetTempFileNameA(directory,"h2m",0,temporary))goto failed;
     if(exists && !CopyFileA(g_vrIniPath,temporary,FALSE))goto failed;
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
+    for(unsigned g=0;g<MENU_GROUP_COUNT;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
         VrMenuItem *item=&vrMenuItems[g][r];char value[32];
         if(item->value==item->initial && !g_vrMenuResetPending)continue;
         if(item->kind==MENU_SCALE)snprintf(value,sizeof(value),"%.2f",item->value/100.0);
         else snprintf(value,sizeof(value),"%d",item->value);
-        if(!WritePrivateProfileStringA(item->kind==MENU_BRIDGE?"bridge":"vr",item->key,value,temporary))goto failed;
+        if(!WritePrivateProfileStringA(item->kind==MENU_BRIDGE?"bridge":"vr",item->key,
+            item->value==item->defaults?NULL:value,temporary))goto failed;
     }
     WritePrivateProfileStringA(NULL,NULL,NULL,temporary); /* Cache flush returns zero even on success. */
     HANDLE staged=CreateFileA(temporary,GENERIC_WRITE,FILE_SHARE_READ,NULL,OPEN_EXISTING,0,NULL);
@@ -243,7 +243,7 @@ static int vrMenuSave(void)
         note("Menu saved: %s\n",g_vrIniPath);
     }
     WritePrivateProfileStringA(NULL,NULL,NULL,g_vrIniPath);
-    for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
+    for(unsigned g=0;g<MENU_GROUP_COUNT;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
         vrMenuItems[g][r].initial=vrMenuItems[g][r].value;
     g_vrMenuResetPending=0;g_vrMenuError=NULL;return 1;
 failed:
@@ -314,6 +314,7 @@ static int vrMenuControl(unsigned input)
         else if(g_vrMenuRow==MENU_LOAD_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_LOAD);
         else if(g_vrMenuRow==MENU_NEW_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_NEW);
         else if(g_vrMenuRow==MENU_RESET)vrMenuResetDefaults();
+        else if(g_vrMenuRow==MENU_TITLE){if(vrMenuSave())vrMenuCheckpoint(HOTD_CHECKPOINT_TITLE);}
         else if(g_vrMenuRow==MENU_QUIT)vrMenuQuitGame();
         else {g_vrMenuPage=g_vrMenuRow-MENU_GROUP_FIRST;g_vrMenuRow=0;}
     } else if(g_vrMenuPage>=0 && (pressed&(VC2_BTN_START|VC2_BTN_LEFT|VC2_BTN_RIGHT))) {
@@ -399,6 +400,7 @@ static void vrMenuCanvas(void)
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_RESET)
         hint=g_vrMenuResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_QUIT)hint="SAVE OPTIONS AND QUIT GAME";
+    if(g_vrMenuPage<0 && g_vrMenuRow==MENU_TITLE)hint="END CURRENT GAME AND RETURN TO TITLE";
     if(g_vrMenuPage>=0) {
         int flags=vrMenuItems[g_vrMenuPage][g_vrMenuRow].flags;
         if(flags&MENU_RESTART_VIEWER)hint="RESTART VIEWER TO APPLY";
@@ -407,7 +409,7 @@ static void vrMenuCanvas(void)
     }
     vrMenuText(48,380,g_vrMenuError?g_vrMenuError:g_previewOnly?"READ ONLY PREVIEW":g_vrMenuStatus[0]?g_vrMenuStatus:hint,.65f,grey);
     if(count>perPage){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/perPage+1,(count+perPage-1)/perPage);
-        vrMenuText(440,72,page,.6f,grey);}
+        vrMenuText(440,72,page,.6f,grey);vrMenuText(440,356,page,.6f,grey);}
     vrMenuRect(42,418,552,1,0xFF303077);
     vrMenuText(44,427,"STICK NAVIGATE   TRIGGER SELECT   B BACK",.65f,white);
     vrMenuText(44,451,"LEFT STICK CLICK OPEN CLOSE   A PAUSE RESUME",.6f,grey);

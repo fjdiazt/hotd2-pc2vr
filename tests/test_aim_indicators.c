@@ -27,8 +27,13 @@ int main(void)
     assert(readBrightness(ini,&brightness) && brightness==80);
     assert(WritePrivateProfileStringA("vr","brightness","bad",ini));
     assert(!readBrightness(ini,&brightness));
-    readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting && g_cfgExpandMeshes && !g_cfgExpandWorld && !g_cfgWindow && g_cfgVrWindow);
+    readGraphicsFlags(ini);assert(g_cfgLaser && g_cfgCrosshair && g_cfgNativeLighting && g_cfgExpandMeshes && g_cfgExpandWorld && !g_cfgWindow && g_cfgVrWindow);
     assert(g_cfgSwapPlayerHud);
+    assert(!g_cfgArcadeGunColors);
+    assert(WritePrivateProfileStringA("vr","arcade_gun_colors","1",ini));
+    readGraphicsFlags(ini);assert(g_cfgArcadeGunColors);
+    assert(WritePrivateProfileStringA("vr","arcade_gun_colors","0",ini));
+    readGraphicsFlags(ini);assert(!g_cfgArcadeGunColors);
     assert(WritePrivateProfileStringA("vr","swap_player_hud","0",ini));
     readGraphicsFlags(ini);assert(!g_cfgSwapPlayerHud);
     assert(WritePrivateProfileStringA("vr","swap_player_hud","1",ini));

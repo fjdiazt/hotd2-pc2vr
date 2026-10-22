@@ -14,6 +14,8 @@ static unsigned sample_address,sample_specular,sample_fog_colour;
 static float sample_fog=1,sample_depth;
 static int vary_fog;
 static int expected_rgb[3]={-1,-1,-1};
+static float srgb_encode(float value)
+{return value<=.0031308f?12.92f*value:1.055f*powf(value,1/2.4f)-.055f;}
 static void check_effect(DWORD colour,unsigned style,int textured,int expected,int sharp)
 {
     float matrix[16],clear[]={.4f,.4f,.4f,1};
@@ -85,6 +87,86 @@ static void check_menu_alpha(float x,float y,const int expected[3])
     g_vrMenuEnabled=g_vrMenuOpen=0;
 }
 
+static void check_arcade_guns(void)
+{
+    gunLoad();assert(g_gunVB && g_cbGunColor && g_vsGun && g_psGun && g_dssGun);
+    ID3D11Buffer_Release(g_gunVB);g_gunVB=NULL;
+    Vc2Vertex vertices[3]={0};
+    for(unsigned i=0;i<3;i++) {
+        vertices[i].x=i==2?3:-1;vertices[i].y=i==1?3:-1;vertices[i].z=.5f;
+        vertices[i].colour=0xFF804020;vertices[i].u=vertices[i].v=.5f/4096;
+    }
+    D3D11_BUFFER_DESC buffer={0};D3D11_SUBRESOURCE_DATA data={0};
+    buffer.ByteWidth=sizeof(vertices);buffer.Usage=D3D11_USAGE_DEFAULT;buffer.BindFlags=D3D11_BIND_VERTEX_BUFFER;
+    data.pSysMem=vertices;
+    assert(SUCCEEDED(ID3D11Device_CreateBuffer(g_dev,&buffer,&data,&g_gunVB)));g_gunCount=3;
+    g_gunPose.orientation.w=g_gun2Pose.orientation.w=1;
+    ID3D11DeviceContext_RSSetState(g_ctx,g_rs);
+    ID3D11DeviceContext_IASetPrimitiveTopology(g_ctx,D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    const BYTE expected[2][3]={{222,36,43},{29,75,143}},textured[]={32,64,128};
+    BYTE flat[2][2]={0};
+    float identity[16],clear[4]={0};mIdent(identity);
+    ID3D11Texture2D *srgbTarget=NULL;ID3D11RenderTargetView *srgbRtv=NULL;
+    D3D11_TEXTURE2D_DESC desc={0};desc.Width=desc.Height=8;desc.MipLevels=desc.ArraySize=1;
+    desc.Format=DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;desc.SampleDesc.Count=1;desc.BindFlags=D3D11_BIND_RENDER_TARGET;
+    assert(SUCCEEDED(ID3D11Device_CreateTexture2D(g_dev,&desc,NULL,&srgbTarget)));
+    assert(SUCCEEDED(ID3D11Device_CreateRenderTargetView(g_dev,(ID3D11Resource *)srgbTarget,NULL,&srgbRtv)));
+    for(unsigned output=0;output<2;output++)for(unsigned brightness=0;brightness<2;brightness++) {
+    g_cfgBrightness=brightness?50:100;
+    for(unsigned face=0;face<2;face++) {
+    for(unsigned i=0;i<3;i++)vertices[i].z=.5f-(face?.08f:0)*(vertices[i].x+vertices[i].y);
+    ID3D11DeviceContext_UpdateSubresource(g_ctx,(ID3D11Resource *)g_gunVB,0,NULL,vertices,0,0);
+    for(unsigned gamma=0;gamma<2;gamma++)for(unsigned player=0;player<2;player++)for(unsigned mode=0;mode<5;mode++) {
+        g_gammaOut=gamma?2.2f:1;
+        g_gunValid=!player;g_gun2Valid=player;
+        g_cfgArcadeGunColors=mode==1 || mode==2;
+        g_gunSRV=mode==2 || mode==4?NULL:g_atlSRV;
+        for(unsigned i=0;i<3;i++)vertices[i].u=mode==4?-1:.5f/4096;
+        ID3D11DeviceContext_UpdateSubresource(g_ctx,(ID3D11Resource *)g_gunVB,0,NULL,vertices,0,0);
+        ID3D11RenderTargetView *gunRtv=output?srgbRtv:rtv;
+        ID3D11DeviceContext_OMSetRenderTargets(g_ctx,1,&gunRtv,dsv);
+        ID3D11DeviceContext_OMSetBlendState(g_ctx,NULL,NULL,0xFFFFFFFFu);
+        D3D11_VIEWPORT viewport={0,0,8,8,0,1};ID3D11DeviceContext_RSSetViewports(g_ctx,1,&viewport);
+        ID3D11DeviceContext_ClearRenderTargetView(g_ctx,gunRtv,clear);
+        ID3D11DeviceContext_ClearDepthStencilView(g_ctx,dsv,D3D11_CLEAR_DEPTH,0,0);
+        drawGun(identity);
+        ID3D11ShaderResourceView *bound=NULL;ID3D11DeviceContext_PSGetShaderResources(g_ctx,0,1,&bound);
+        assert(bound==(g_cfgArcadeGunColors?NULL:g_gunSRV));if(bound)ID3D11ShaderResourceView_Release(bound);
+        ID3D11DeviceContext_CopyResource(g_ctx,(ID3D11Resource *)staging,(ID3D11Resource *)(output?srgbTarget:target));
+        D3D11_MAPPED_SUBRESOURCE mapped;
+        assert(SUCCEEDED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)staging,0,D3D11_MAP_READ,0,&mapped)));
+        for(unsigned y=2;y<6;y++)for(unsigned x=2;x<6;x++) {
+            const BYTE *pixel=(BYTE *)mapped.pData+y*mapped.RowPitch+x*4;
+            for(unsigned c=0;c<3;c++) {
+                if(g_cfgArcadeGunColors) {
+                    float base=expected[player][c]/255.0f;
+                    float low=powf(base*.4f*g_cfgBrightness/100,g_gammaOut);
+                    float high=powf((base*.75f+.005f)*g_cfgBrightness/100,g_gammaOut);
+                    if(output){low=srgb_encode(low);high=srgb_encode(high);}
+                    assert(pixel[c]>=low*255-1 && pixel[c]<=high*255+1);
+                } else {
+                    float value=powf(textured[c]/255.0f*g_cfgBrightness/100,g_gammaOut);
+                    if(output)value=srgb_encode(value);
+                    assert(abs(pixel[c]-(int)lroundf(value*255))<=1);
+                }
+            }
+            if(g_cfgArcadeGunColors) {
+                unsigned channel=player?2:0;
+                if(!face)flat[gamma][player]=pixel[channel];
+                else assert(pixel[channel]>flat[gamma][player]);
+            }
+            assert(pixel[3]==255);
+        }
+        ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)staging,0);
+    }
+    }
+    }
+    ID3D11RenderTargetView_Release(srgbRtv);ID3D11Texture2D_Release(srgbTarget);
+    g_cfgBrightness=100;
+    g_gunSRV=NULL;g_gunValid=g_gun2Valid=g_cfgArcadeGunColors=0;g_gammaOut=1;
+    puts("Guns: UNORM/sRGB gamma and live brightness, P1/P2 face contrast, texture bypass and restoration passed.");
+}
+
 int main(void)
 {
     D3D_FEATURE_LEVEL level;
@@ -107,6 +189,7 @@ int main(void)
     assert(SUCCEEDED(ID3D11Device_CreateTexture2D(g_dev,&desc,NULL,&staging)));
     g_atlPix[0]=g_atlPix[1]=g_atlPix[4096]=g_atlPix[4097]=0x80FFFFFF;
     g_atlFresh=1;uploadAtlasTex();
+    check_arcade_guns();
     for(int sharp=0;sharp<2;sharp++) {
         check_effect(0x80000000,hotd_style(1,5,6,1,1,0,8,0),0,51,sharp);
         check_effect(0x00FFFFFF,hotd_style(1,5,6,1,1,0,8,0),0,102,sharp);

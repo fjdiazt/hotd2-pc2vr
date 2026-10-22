@@ -40,6 +40,7 @@
 #define HOTD_CHECKPOINT_SAVE 0u
 #define HOTD_CHECKPOINT_LOAD 1u
 #define HOTD_CHECKPOINT_NEW 2u
+#define HOTD_CHECKPOINT_TITLE 3u
 
 #pragma pack(push, 4)
 typedef struct {

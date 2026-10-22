@@ -189,6 +189,37 @@ int main(void)
     assert(checkpoint_pending==8);checkpoint_deadline=GetTickCount()-1;checkpoint_manual(1);
     assert(*(short *)(game_base+0x5A5C62)==0 && *(short *)(game_base+0x5A5C62+0x130)==0);
     assert(!checkpoint_pending && frame->checkpoint_response==8 && frame->checkpoint_result==HOTD_SAVE_LOAD_FAILED);
+    /* Command 3 returns through native state application, never restarting or replacing the save. */
+    *(DWORD *)(game_base+0x5C8E98)=6;*(DWORD *)(game_base+0x5C90A4)=2;
+    *(int *)(game_base+0x3C17A0)=-1;*(short *)(game_base+0x5A1A00)=1;
+    checkpoint_armed=checkpoint_bootstrap=1;
+    frame->checkpoint_action=3;frame->checkpoint_request=9;
+    locked=CreateFileA(path,GENERIC_READ,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);assert(locked!=INVALID_HANDLE_VALUE);
+    checkpoint_manual(3);
+    assert(checkpoint_pending==9 && frame->checkpoint_response==8 && checkpoint_unpause);
+    assert(*(int *)(game_base+0x3C17A0)==3 && *(DWORD *)(game_base+0x5C8E98)==6);
+    assert(!checkpoint_armed && !checkpoint_bootstrap);
+    checkpoint_load();assert(!checkpoint_armed); /* A title request must not arm a saved/CLI Arcade start. */
+    checkpoint_manual(3);assert(frame->checkpoint_response==8);
+    assert(native_pause()==1 && !checkpoint_unpause);
+    *(short *)(game_base+0x5A1A00)=0;*(DWORD *)(game_base+0x5C8E98)=3;
+    *(int *)(game_base+0x3C17A0)=-1;*(DWORD *)(game_base+0x5C90A4)=0;
+    checkpoint_manual(0);assert(frame->checkpoint_response==8); /* Wait for title initialization. */
+    *(DWORD *)(game_base+0x5C90A4)=1;checkpoint_manual(0);
+    assert(!checkpoint_pending && frame->checkpoint_response==9 && frame->checkpoint_result==HOTD_SAVE_OK);
+    assert(!frame->checkpoint_stage && !frame->checkpoint_scene);
+    CloseHandle(locked);assert(hotd_checkpoint_read(path,&point) && point.stage==2 && point.scene==6);
+    *(int *)(game_base+0x3C17A0)=4;frame->checkpoint_request=10;checkpoint_manual(0);
+    assert(frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE && *(int *)(game_base+0x3C17A0)==4);
+    assert(!checkpoint_pending);
+    *(int *)(game_base+0x3C17A0)=-1;checkpoint_ready=0;frame->checkpoint_request=11;checkpoint_manual(0);
+    assert(frame->checkpoint_response==11 && frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE);
+    checkpoint_ready=1;*(DWORD *)(game_base+0x5C8E98)=6;*(DWORD *)(game_base+0x5C90A4)=2;
+    *(DWORD *)(game_base+0x5CA08C)=1;frame->checkpoint_request=12;checkpoint_manual(0);
+    assert(checkpoint_pending==12 && *(int *)(game_base+0x3C17A0)==3); /* Original mode also returns. */
+    checkpoint_deadline=GetTickCount()-1;checkpoint_manual(0);
+    assert(!checkpoint_pending && frame->checkpoint_response==12 && frame->checkpoint_result==HOTD_SAVE_LOAD_FAILED);
+    assert(hotd_checkpoint_read(path,&point) && point.stage==2 && point.scene==6);
     for(int i=0;i<3;i++) {
         if(i)snprintf(fixture,sizeof(fixture),"%s\\evt\\st%devtbl.bin",directory,i);
         else snprintf(fixture,sizeof(fixture),"%s\\evt\\comevtbl.bin",directory);
@@ -200,6 +231,7 @@ int main(void)
     checkpoint_pending=checkpoint_continue=checkpoint_ready=0;
     frame->checkpoint_request=frame->checkpoint_response;
     *(DWORD *)(game_base+0x5C8E98)=6;*(DWORD *)(game_base+0x5C90A4)=2;
+    *(DWORD *)(game_base+0x5CA08C)=0;*(short *)(game_base+0x5A1A00)=1;
     *(short *)(game_base+0x5A5C62)=5;*(short *)(game_base+0x5A5C62+0x130)=9;
     frame->seq=frame->frame=0;frame->vertex_count=12;frame->verts[0].x=123;
     native_input_original=fake_input;
@@ -259,6 +291,6 @@ int main(void)
     memcpy(before+0xCBB0,game_base+0xCBB0,9);
     assert(!memcmp(before,game_base,0x600000));
     free(before);free(game_base);assert(DeleteFileA(path));
-    puts("Checkpoints: stage/scene selection, Arcade guards, strict files, atomic replacement, autosave changes and fallback passed.");
+    puts("Checkpoints: stage/scene selection, Arcade guards, strict files, atomic replacement, autosave changes, deferred title return and fallback passed.");
     return 0;
 }

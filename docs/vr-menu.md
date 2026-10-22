@@ -41,14 +41,16 @@ Right click recenters. Desktop F8 toggles the panel; companion previews are read
 
 | Group | Existing settings |
 | --- | --- |
-| Display | World scale, brightness, gamma, laser/crosshair, HUD sharpness, HUD zoom and player-HUD swap. |
-| Rendering | Native lighting, mesh/world expansion, depth settings, MSAA and supersampling. |
+| Game Settings | Skip startup logos and live Autosave. This is the first group after New game. |
+| Display | Brightness, gamma, player-HUD swap, desktop/headset outputs and native windowed mode. |
+| Rendering | World scale, units per metre, resolution, MSAA, Sharp HUD, native lighting, mesh/world expansion, depth mode/bias and background rendering, in that order. |
 | Audio | Master, music and effects volumes. |
-| Controls | Akimbo, haptics, focus, gun/reload presentation, aiming reach, automatic zoom and scope controls. |
+| Controls | Akimbo, haptics, arcade gun colors, laser/crosshair, gun scale, reload duration, aiming reach and initial game focus. |
 | Cheats | Infinite ammo/lives/continues, invincibility, rapid fire and its rate. |
-| Advanced / startup | Desktop/headset outputs and bridge startup/window/background/unit settings. |
 
 The option table follows existing parsing, ranges and shipped defaults.
+Swap player HUD includes gameplay join prompts and credit indicators alongside ammo/lives;
+the global attract-screen prompt retains its native placement.
 Runtime-capable settings update existing viewer variables and the established render/audio/cheat
 heartbeat. GPU/resource/output initialization and bridge-startup settings must
 show **restart required** and save for the next appropriate restart. Do not
@@ -81,15 +83,39 @@ success does not establish headset readability or comfort.
 
 ## Settings wiring
 
-The viewer presents 47 numeric/boolean options
+The viewer presents 37 numeric/boolean options
 from its effective launch configuration, grouped and paginated. Live options
 update their existing variables/heartbeat; brightness/gamma swap their three
 affected pixel shaders as one successful set. Resource/startup settings stage
 their values without changing running initialization state and display the
 appropriate viewer/game restart label.
 
-Close saves edited keys only, including bridge keys in their own section, into
-the active viewer INI. Same-directory staging, checked writes/disk flush and
+**Controls > Arcade gun colors** is live and defaults off (`[vr] arcade_gun_colors=0`).
+It uses the existing gun mesh with an untextured matte-plastic material, bypassing
+textures and baked material colors. Geometry-derived face normals provide ambient
+fill, directional shading and a broad, restrained highlight. Lighting stays in gun
+local space, like the existing baked gun lighting. Base colors are P1/right hand
+scarlet `#DE242B` and P2/left hand cobalt `#1D4B8F`.
+These are photo-based approximations of Sega shells
+[2535-5408](https://www.gameroomguys.com/Gun-Cover-Set-Red) and
+[2535-5407](https://www.gameroomguys.com/Gun-Cover-Set-Blue-Sega), not measured factory paint values.
+Both gun appearances apply the same Brightness/Gamma output transform as the world,
+after shading. Arcade plastic has 25% ambient fill, 65% directional contribution
+and a restrained 1.2% highlight. Lasers and crosshairs share their player's shell
+palette: scarlet for P1, cobalt for P2, whether this option is off or on. Firing
+raises intensity while keeping that color. Turning the option off restores the textured/shaded material without
+reloading the model. Neither material samples level lighting or shadows.
+The flag also works with untextured/custom meshes and independent player joining.
+Offscreen D3D11 checks cover UNORM and sRGB targets, both player colors, face
+contrast, textured/untextured output, texture unbinding, live brightness/gamma,
+restoration, INI loading, persistence and reset. Controller checks verify both players'
+beam/crosshair colors at rest and while firing with the palette off and on. Headset color
+matching remains unverified.
+
+Close saves edited overrides only, including bridge keys in their own section, into
+the active viewer INI. Values equal to their built-in defaults remove the key instead
+of writing redundant defaults. The shipped INI contains no overrides; absent keys
+match the documented defaults. Existing unedited keys are preserved. Same-directory staging, checked writes/disk flush and
 atomic replacement preserve the current file and produce a timestamped backup.
 An unchanged panel never writes; unrelated CLI overrides never become INI edits.
 Save failure retains pending values and prevents an explicit close so
@@ -118,7 +144,7 @@ byte-for-byte. Cheat requests stayed zero and installed native files retained
 their hashes. Final controller checks cover left-click edges and A/X native
 pause passthrough for both hands while the settings panel stays open.
 
-Quit Game follows Reset Defaults as the final root action. It saves pending
+Return to Title follows Reset Defaults; Quit Game is the final root action. It saves pending
 options, validates the native window against the connected game PID, and posts
 WM_CLOSE. The existing quit-confirmation handler accepts the native prompt;
 no additional hook or process termination is involved. A live desktop test
@@ -130,9 +156,11 @@ Swap player HUD is available live in Display and included in Reset Defaults.
 
 ## Save and Load integration
 
-Root entries start with Save game, Load game and New game, followed by existing
-settings groups, Reset Defaults and Quit Game. Root pages eight entries; settings
-groups page six. Advanced adds live Autosave (`continue_game`), persisted on close
+Root entries start with Save game, Load game and New game, followed by Game Settings,
+Display, Rendering, Audio, Controls, Cheats, Reset Defaults, Return to Title and Quit Game. Root pages
+eight entries; settings groups page six. Matching PAGE X OF Y counters use the
+existing font, size and colour at the top and bottom of every multi-page list. Game Settings
+contains live Autosave (`continue_game`), persisted on close
 with existing atomic INI backups. Opening settings reflects the effective startup
 CLI value and never changes it.
 
@@ -181,3 +209,34 @@ Current-location previews are suppressed during a pending native transition.
 User confirmed both pre-selection destination captions in-headset at stage 3,
 scene 11. The combined protocol-21 bridge also passed native desktop Save/Load,
 Autosave, destination-metadata and scene-restart regression tests.
+
+Scope and zoom controls, including HUD zoom, are absent from the public menu.
+Their code and explicit INI overrides remain available; automatic zoom and scope
+are disabled when keys are absent. Menu save/reset does not alter these hidden
+overrides. Units per metre retains its game-restart requirement in Rendering.
+
+## Return to Title
+
+The root action above Quit Game saves pending settings, then sends the existing
+bridge command channel a return-to-title request. It shares native transition
+guards and acknowledgment with Load/New game, without reading or writing the save.
+Native Game_SetState at 0x0040E850 writes the pending mode at 0x007C17A0;
+Game_ApplyState at 0x0040E860 owns scene/task/resource teardown and player reset.
+Mode 3 is the same destination as the launcher's Skip startup logos path. The
+existing pause predicate resumes a paused run; success is acknowledged only after
+mode 3 reaches sub-state 1, with no pending transition or native pause. The viewer
+closes its panel on success and retains it on failure. The request cannot arm
+checkpoint/CLI stage loading. Existing save data, Autosave preference and native
+game files are preserved. Command 3 adds no shared-memory fields or native hooks;
+older bridges reject it as unavailable. Both updated binaries are needed.
+
+Offline tests cover deferred application, paused return, title initialization,
+transition/signature readiness guards, Original mode, timeouts, unchanged saves,
+preview and INI-save guards, and successful panel close. Native/headset acceptance
+requires a fresh run; these checks do not establish the live transition.
+
+World scale and Units per metre are adjacent at the start of Rendering. Sharp HUD
+follows resolution/MSAA and defaults off in both the configuration loader and Reset
+Defaults. Missing `hudsharp` uses 0; explicit overrides, including `hudsharp=1`, are
+retained. Moving these options does not change their live/restart requirements.
+Display contains six rows on one page; Rendering contains eleven rows on two pages.

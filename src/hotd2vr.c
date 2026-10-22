@@ -173,17 +173,19 @@ static int       g_atlFresh;
 static unsigned  g_scrW = 640, g_scrH = 480;    /* size of the last capture */
 
 /* HOTD2VR.ini next to the exe */
-static int g_cfgDepth;              /* [vr] depth: 0 painter, 1 engine keys, 2 true z-buffer */
-static int g_cfgDepthBias = 2;      /* [vr] depthbias: per-quad paint-order bias, 1e-6 units */
+static int g_cfgDepth = 2;         /* [vr] depth: 0 painter, 1 engine keys, 2 true z-buffer */
+static int g_cfgDepthBias;         /* [vr] depthbias: per-quad paint-order bias, 1e-6 units */
 static int g_cfgHaptic = 1;             /* [vr] haptic: buzz on every shot */
 static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
-static int g_cfgSuper = 140;      /* eye buffer scale in percent */
+static int g_cfgSuper = 100;      /* eye buffer scale in percent */
 static float g_cfgWorldScale = 1.25f; /* world size multiplier; 1 preserves the native unit conversion */
 static int g_cfgNativeLighting = 1;
 static int g_cfgExpandMeshes = 1;
-static int g_cfgExpandWorld;
+static int g_cfgExpandWorld = 1;
 static int g_cfgLaser = 1;
 static int g_cfgCrosshair = 1;
+static int g_cfgArcadeGunColors;
+static const DWORD g_arcadeGunColors[2]={0xFF2B24DEu,0xFF8F4B1Du}; /* sRGB, 0xAABBGGRR */
 static int g_cfgWindow, g_cfgVrWindow, g_previewOnly,g_vrMenuEnabled;
 static int g_cfgSwapPlayerHud=1;
 static int g_cfgContinueGame,g_cfgContinueEdited;
@@ -198,9 +200,9 @@ static float g_gammaOut = 1.0f;
 static int g_cfgZoomX = 400;      /* zoom magnification in percent (400 = 4x) */
 static int g_cfgZoomSpd = 4;      /* zoom glide, percent of the gap per frame */
 static int g_cfgReach = 6;        /* metres to the aim point when the ray misses */
-static int g_cfgAutoZoom = 1;     /* follow the game's own camera zoom */
+static int g_cfgAutoZoom;         /* follow the game's own camera zoom */
 static int g_cfgFocus = 1;        /* pull the game window to the front on start */
-static int g_cfgAkimbo = 0;       /* Show/join both together, or each player independently. */
+static int g_cfgAkimbo = 1;       /* Show/join both together, or each player independently. */
 static char g_vrIniPath[MAX_PATH];
 static int g_cfgScope;            /* 1 = optic on the gun, 0 = magnify the whole view */
 static int g_cfgScopeDeg = 12;    /* angular radius of the disc, degrees */
@@ -208,7 +210,7 @@ static int g_cfgScopeDist = 25;   /* how far out the head-locked disc hangs, m *
 static int g_cfgScopeMount = 1;   /* 1 = glass on the gun, 0 = disc on the head */
 static int g_cfgScopeGlass = 26;  /* gun sight glass radius, millimetres        */
 static int g_cfgHudZoom;          /* 1 = let the HUD magnify with the world     */
-static int g_cfgHudSharp = 1;     /* sharp-bilinear the overlay instead of soft */
+static int g_cfgHudSharp;         /* sharp-bilinear the overlay instead of soft */
 static int g_cfgAutoAt = 30;      /* autozoom engages past this % of extra zoom */
 static int g_cfgZoomSmooth = 55;  /* %% of the zoomed view's wobble to damp out    */
 static char g_cfgGun[MAX_PATH];   /* OBJ to draw in the gun hand; empty = none */
@@ -229,11 +231,12 @@ static void readGraphicsFlags(const char *path)
     g_cfgSwapPlayerHud=GetPrivateProfileIntA("vr","swap_player_hud",1,path)!=0;
     g_cfgLaser=GetPrivateProfileIntA("vr","laser",1,path)!=0;
     g_cfgCrosshair=GetPrivateProfileIntA("vr","crosshair",1,path)!=0;
+    g_cfgArcadeGunColors=GetPrivateProfileIntA("vr","arcade_gun_colors",0,path)!=0;
     g_cfgWindow=GetPrivateProfileIntA("vr","window",0,path)!=0;
     g_cfgVrWindow=GetPrivateProfileIntA("vr","vrwindow",1,path)!=0;
     g_cfgNativeLighting=GetPrivateProfileIntA("vr","native_lighting",1,path)!=0;
     g_cfgExpandMeshes=GetPrivateProfileIntA("vr","expand_meshes",1,path)!=0;
-    g_cfgExpandWorld=GetPrivateProfileIntA("vr","expand_world",0,path)!=0;
+    g_cfgExpandWorld=GetPrivateProfileIntA("vr","expand_world",1,path)!=0;
 }
 static int parseWorldScale(const char *text,float *scale)
 {
@@ -310,18 +313,18 @@ static void loadCfg(void)
         note("Invalid worldscale; using 1.25x (allowed 0.1..10).\n");g_cfgWorldScale=1.25f;
     }
     g_cfgMsaa  = (int)GetPrivateProfileIntA("vr", "msaa", 4, path);
-    g_cfgDepth = (int)GetPrivateProfileIntA("vr", "depth", 0, path);
-    g_cfgDepthBias = (int)GetPrivateProfileIntA("vr", "depthbias", 2, path);
+    g_cfgDepth = (int)GetPrivateProfileIntA("vr", "depth", 2, path);
+    g_cfgDepthBias = (int)GetPrivateProfileIntA("vr", "depthbias", 0, path);
     if (g_cfgDepthBias < 0)   g_cfgDepthBias = 0;
     if (g_cfgDepthBias > 200) g_cfgDepthBias = 200;
     g_cfgHaptic = (int)GetPrivateProfileIntA("vr", "haptic", 1, path);
-    g_cfgSuper = (int)GetPrivateProfileIntA("vr", "supersample", 140, path);
+    g_cfgSuper = (int)GetPrivateProfileIntA("vr", "supersample", 100, path);
     g_cfgGamma = (int)GetPrivateProfileIntA("vr", "gamma", 220, path);
     g_cfgZoomX   = (int)GetPrivateProfileIntA("vr", "zoom", 400, path);
     g_cfgZoomSpd = (int)GetPrivateProfileIntA("vr", "zoomspeed", 4, path);
     g_cfgReach   = (int)GetPrivateProfileIntA("vr", "aimreach", 6, path);
-    g_cfgAutoZoom  = (int)GetPrivateProfileIntA("vr", "autozoom", 1, path);
-    g_cfgAkimbo    = (int)GetPrivateProfileIntA("vr", "akimbo", 0, path);
+    g_cfgAutoZoom  = (int)GetPrivateProfileIntA("vr", "autozoom", 0, path);
+    g_cfgAkimbo    = (int)GetPrivateProfileIntA("vr", "akimbo", 1, path);
     g_cfgFocus     = (int)GetPrivateProfileIntA("vr", "focusgame", 1, path);
     g_cfgScope     = (int)GetPrivateProfileIntA("vr", "scope", 0, path);
     g_cfgScopeDeg  = (int)GetPrivateProfileIntA("vr", "scopesize", 12, path);
@@ -329,10 +332,10 @@ static void loadCfg(void)
     g_cfgScopeMount= (int)GetPrivateProfileIntA("vr", "scopemount", 1, path);
     g_cfgScopeGlass= (int)GetPrivateProfileIntA("vr", "scopeglass", 26, path);
     g_cfgHudZoom   = (int)GetPrivateProfileIntA("vr", "hudzoom", 0, path);
-    g_cfgHudSharp  = (int)GetPrivateProfileIntA("vr", "hudsharp", 1, path);
+    g_cfgHudSharp  = (int)GetPrivateProfileIntA("vr", "hudsharp", 0, path);
     g_cfgAutoAt    = (int)GetPrivateProfileIntA("vr", "autozoomat", 30, path);
     g_cfgZoomSmooth= (int)GetPrivateProfileIntA("vr", "zoomsmooth", 55, path);
-    GetPrivateProfileStringA("vr", "gunmodel", "", g_cfgGun, MAX_PATH, path);
+    GetPrivateProfileStringA("vr", "gunmodel", "gun.obj", g_cfgGun, MAX_PATH, path);
     g_cfgGunScale  = (int)GetPrivateProfileIntA("vr", "gunscale", 100, path);
     g_cfgReloadMs  = (int)GetPrivateProfileIntA("vr", "reloadms", 180, path);
     if (g_cfgReloadMs < 60)   g_cfgReloadMs = 60;
@@ -1526,6 +1529,7 @@ static unsigned                 g_gunCount;
 static ID3D11ShaderResourceView *g_gunSRV;   /* map_Kd of the OBJ, if any */
 static ID3D11VertexShader      *g_vsGun;
 static ID3D11PixelShader       *g_psGun;
+static ID3D11Buffer            *g_cbGunColor;
 static ID3D11DepthStencilState *g_dssGun;
 static XrPosef                  g_gunPose;
 static int                      g_gunValid;
@@ -1540,17 +1544,24 @@ static DWORD                    g_gun2FireAt, g_gun2ReloadAt;   /* the same, gun
 
 static const char *SRC_GUN =
 "cbuffer C : register(b0) { row_major float4x4 mvp; };\n"
+"cbuffer G : register(b1) { float4 arcadeColor; float4 gunOutput; };\n"
 "Texture2D    gtex : register(t0);\n"
 "SamplerState gsmp : register(s0);\n"
 "struct VIn  { float3 p : POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float d : TEXCOORD1; };\n"
-"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; };\n"
-"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; return o; }\n"
+"struct VOut { float4 p : SV_POSITION; float4 c : COLOR; float2 t : TEXCOORD0; float3 local : TEXCOORD1; };\n"
+"VOut vs(VIn i) { VOut o; o.p = mul(mvp, float4(i.p,1)); o.c = i.c; o.t = i.t; o.local = i.p; return o; }\n"
 /* u < 0 marks a vertex without a texture (the built-in pistol and Kd-only
  * OBJs); those keep the baked flat colour. Textured vertices carry the baked
  * face light in c and the texel is attenuated by it. */
 "float4 ps(VOut i) : SV_TARGET {\n"
-"  if (i.t.x < 0) return float4(i.c.rgb, 1);\n"
-"  return float4(gtex.Sample(gsmp, i.t).rgb * i.c.rgb, 1);\n"
+"  float3 rgb;\n"
+"  if (arcadeColor.a > 0) {\n"
+"    float3 n = normalize(cross(ddx(i.local), ddy(i.local)));\n"
+"    float light = abs(dot(n, normalize(float3(0.35, 0.80, 0.45))));\n"
+"    rgb = arcadeColor.rgb * (0.25 + 0.65 * light) + 0.012 * pow(light, 8);\n"
+"  } else if (i.t.x < 0) rgb = i.c.rgb;\n"
+"  else rgb = gtex.Sample(gsmp, i.t).rgb * i.c.rgb;\n"
+"  return float4(pow(saturate(rgb * gunOutput.y), gunOutput.x), 1);\n"
 "}\n";
 
 #define GUN_MAX_V   8192
@@ -1888,6 +1899,11 @@ upload:
                                    ID3D10Blob_GetBufferSize(psb), NULL, &g_psGun);
     ID3D10Blob_Release(vsb); ID3D10Blob_Release(psb);
 
+    ZeroMemory(&bd, sizeof(bd));
+    bd.ByteWidth = 32; bd.Usage = D3D11_USAGE_DYNAMIC;
+    bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    if (FAILED(ID3D11Device_CreateBuffer(g_dev, &bd, NULL, &g_cbGunColor))) die("gun colour buffer");
+
     ZeroMemory(&dd, sizeof(dd));
     dd.DepthEnable = TRUE;
     dd.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
@@ -1897,7 +1913,7 @@ upload:
 }
 
 /* into the current target, local-space view*proj; call from drawUI */
-static void drawGunAt(const float *vp, const XrPosef *pose, DWORD fireAt, DWORD reloadAt)
+static void drawGunAt(const float *vp, const XrPosef *pose, DWORD fireAt, DWORD reloadAt, unsigned player)
 {
     float r[16], m[16], mvp[16];
     D3D11_MAPPED_SUBRESOURCE mm;
@@ -1938,8 +1954,16 @@ static void drawGunAt(const float *vp, const XrPosef *pose, DWORD fireAt, DWORD 
     ID3D11DeviceContext_VSSetShader(g_ctx, g_vsGun, NULL, 0);
     ID3D11DeviceContext_VSSetConstantBuffers(g_ctx, 0, 1, &g_cb);
     ID3D11DeviceContext_PSSetShader(g_ctx, g_psGun, NULL, 0);
-    if (g_gunSRV) {
-        ID3D11DeviceContext_PSSetShaderResources(g_ctx, 0, 1, &g_gunSRV);
+    /* Photo-matched Sega shell shades (2535-5408 red / 2535-5407 blue), in sRGB. */
+    float color[8]={0,0,0,(float)g_cfgArcadeGunColors,g_gammaOut,g_cfgBrightness/100.0f,0,0};
+    if(g_cfgArcadeGunColors)for(unsigned c=0;c<3;c++)color[c]=((g_arcadeGunColors[player]>>(c*8))&255)/255.0f;
+    if(FAILED(ID3D11DeviceContext_Map(g_ctx,(ID3D11Resource *)g_cbGunColor,0,D3D11_MAP_WRITE_DISCARD,0,&mm)))return;
+    CopyMemory(mm.pData,color,sizeof(color));
+    ID3D11DeviceContext_Unmap(g_ctx,(ID3D11Resource *)g_cbGunColor,0);
+    ID3D11DeviceContext_PSSetConstantBuffers(g_ctx,1,1,&g_cbGunColor);
+    ID3D11ShaderResourceView *texture=g_cfgArcadeGunColors?NULL:g_gunSRV;
+    ID3D11DeviceContext_PSSetShaderResources(g_ctx,0,1,&texture);
+    if (texture) {
         ID3D11DeviceContext_PSSetSamplers(g_ctx, 0, 1, &g_samp);
     }
     ID3D11DeviceContext_Draw(g_ctx, g_gunCount, 0);
@@ -1970,8 +1994,8 @@ static void drawGun(const float *vp)
         }
         if (rtv) ID3D11RenderTargetView_Release(rtv);
     }
-    if (one) drawGunAt(vp, &g_gunPose,  g_gunFireAt,  g_gunReloadAt);
-    if (two) drawGunAt(vp, &g_gun2Pose, g_gun2FireAt, g_gun2ReloadAt);
+    if (one) drawGunAt(vp, &g_gunPose,  g_gunFireAt,  g_gunReloadAt, 0);
+    if (two) drawGunAt(vp, &g_gun2Pose, g_gun2FireAt, g_gun2ReloadAt, 1);
     ID3D11DeviceContext_OMSetDepthStencilState(g_ctx, g_dssUI, 0);
     /* restore the shared view*proj for whoever draws next */
     if (SUCCEEDED(ID3D11DeviceContext_Map(g_ctx, (ID3D11Resource *)g_cb, 0,
@@ -2021,6 +2045,7 @@ static void releaseGraphics(void)
     RELEASE(g_scopeSRV); RELEASE(g_scopeRtv); RELEASE(g_scopeDsv); RELEASE(g_scopeTex);
     RELEASE(g_scopeVB); RELEASE(g_cbScope); RELEASE(g_vsScope); RELEASE(g_psScope);
     RELEASE(g_gunVB); RELEASE(g_gunSRV); RELEASE(g_vsGun); RELEASE(g_psGun); RELEASE(g_dssGun);
+    RELEASE(g_cbGunColor);
     RELEASE(g_atlSRV); RELEASE(g_atlTex); RELEASE(g_scrSRV); RELEASE(g_scrTex);
     RELEASE(g_vrMenuSRV); RELEASE(g_vrMenuTexture); RELEASE(g_vrMenuBlend);
     RELEASE(g_scrVB); RELEASE(g_vsTex); RELEASE(g_psTex); RELEASE(g_ilTex);
@@ -2845,17 +2870,19 @@ static int handleControllers(XrSession session, XrSpace space, XrTime when,
     g_ovCount = 0;
     if(g_gunValid) {
         int fired = (buttons & VC2_BTN_FIRE) != 0;
+        DWORD color=(g_arcadeGunColors[0]&0x00FFFFFFu)|0x80000000u;
         ovSight(p, hitLocal,
-                fired ? 0x8070D0FFu : 0x802828FFu,    /* beam  */
-                fired ? 0x8090E0FFu : 0x804040FFu,    /* ring  */
-                fired ? 0x80E0F0FFu : 0x80A0A0FFu);   /* core  */
+                ovDim(color,fired?1.5f:1.0f),
+                ovDim(color,fired?1.75f:1.2f),
+                ovDim(color,fired?2.0f:1.5f));
     }
-    if (g_gun2Valid) {   /* second gun, amber, to tell them apart */
+    if (g_gun2Valid) {
         int fired = (g_gun2Fire & VC2_BTN_FIRE) != 0;
+        DWORD color=(g_arcadeGunColors[1]&0x00FFFFFFu)|0x80000000u;
         ovSight(g_gun2Origin, g_gun2Hit,
-                fired ? 0x8040D0FFu : 0x8010A0FFu,
-                fired ? 0x8060E0FFu : 0x8020C0FFu,
-                fired ? 0x80D0F0FFu : 0x8090E0FFu);
+                ovDim(color,fired?1.5f:1.0f),
+                ovDim(color,fired?1.75f:1.2f),
+                ovDim(color,fired?2.0f:1.5f));
     }
     return recentre;
 }
