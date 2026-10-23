@@ -1,6 +1,6 @@
 # HOTD2 PC2VR
 
-Play the original Windows version of **The House of the Dead 2** in VR. Look around the scene and aim with your motion controllers as light guns. Save and load scene checkpoints, choose your starting stage and scene, and enable optional cheats. This is an experimental mod for the original PC game.
+Play the original Windows version of **The House of the Dead 2** in VR. Look around the scene and aim with your motion controllers as light guns. Save and load scene checkpoints, choose your starting stage and scene, and enable optional cheats.
 
 ![The House of the Dead 2 VR gameplay](docs/screenshots/gameplay-vr-animated.png)
 
