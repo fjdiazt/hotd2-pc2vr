@@ -229,13 +229,13 @@ int main(void)
 
     tick(VC2_BTN_RELOAD,VC2_BTN_FIRE);
     assert(!gun1->valid && gun1->fire==1 && gun2->valid && gun2->fire==1);
-    assert(*(DWORD *)(game_base+0x5C9028)==0x100);
+    assert(*(DWORD *)(game_base+0x5C9028)==0x40100);
     tick(VC2_BTN_RELOAD,VC2_BTN_FIRE);
     assert(!gun1->valid && !gun1->fire && !gun2->fire); /* Held inputs have no new edges. */
     tick(0,0);
     tick(VC2_BTN_FIRE,VC2_BTN_RELOAD);
     assert(gun1->valid && gun1->fire && !gun2->valid && !gun2->fire);
-    assert(reload_input==0x20100 && *(DWORD *)(game_base+0x5C9028)==0x100); /* Reload cannot reach skip/cancel. */
+    assert(reload_input==0x20100 && *(DWORD *)(game_base+0x5C9028)==0x104); /* Only P1 Fire reaches native menus. */
     tick(VC2_BTN_FIRE,VC2_BTN_RELOAD);
     assert(*(DWORD *)(game_base+0x5C9028)==0x100);
     tick(0,0);
@@ -247,7 +247,7 @@ int main(void)
     assert(gun1->valid && gun1->fire); /* Held cancel does not suppress a fresh shot. */
     tick(0,0);
     tick(VC2_BTN_FIRE,VC2_BTN_BACK);
-    assert(gun1->valid && gun1->fire && *(DWORD *)(game_base+0x5C9028)==0x100);
+    assert(gun1->valid && gun1->fire && *(DWORD *)(game_base+0x5C9028)==0x104);
     tick(0,0);
     *(DWORD *)(game_base+0x5C8E98)=1; /* Menu, not gameplay. */
     tick(VC2_BTN_RELOAD,VC2_BTN_RELOAD);
@@ -282,6 +282,14 @@ int main(void)
     frame->aim_buttons=0;frame->aim2_buttons=VC2_BTN_BACK;
     assert(SUCCEEDED(keyboard_state(NULL,256,keys)));
     assert(!keys[DIK_RCONTROL] && keys[DIK_LCONTROL] && !keys[DIK_ESCAPE]);
+    /* Original Mode item selection reads native Fire edges, not gun->fire. */
+    tick(0,0);tick(VC2_BTN_FIRE,VC2_BTN_FIRE);
+    assert(*(DWORD *)(game_base+0x5C9028)==(polled_input|0x40004));
+    tick(VC2_BTN_FIRE,VC2_BTN_FIRE);
+    assert(*(DWORD *)(game_base+0x5C9028)==polled_input); /* No repeat while held. */
+    tick(0,0);tick(VC2_BTN_RELOAD,VC2_BTN_RELOAD);
+    assert(*(DWORD *)(game_base+0x5C9028)==polled_input); /* Grip is never Fire. */
+    tick(0,0);
     /* Native keyboard navigation works in every interface, including Options. */
     for(unsigned phase=0;phase<=16;phase++) {
         *(DWORD *)(game_base+0x5C8E98)=phase;

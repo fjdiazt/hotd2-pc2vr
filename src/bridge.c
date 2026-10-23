@@ -681,6 +681,8 @@ static DWORD __cdecl native_input(void)
                 !*(short *)(game_base+0x5A1A00),frame->rapid_fire_rate,GetTickCount())) {
                 gun->fire=1;action=VC2_BTN_FIRE;
             }
+            /* Item selectors consume the native Fire edge instead of gun->fire. */
+            if(action==VC2_BTN_FIRE)*(DWORD *)(game_base+0x5C9028)|=4u<<(p*16);
             if(action==VC2_BTN_RELOAD) {
                 int accepted=native_reload(p,gun);
                 if(trace_input)logline("native reload P%u: queued=%d ammo_before=%d phase=%lu status=%d control=%u",p+1,accepted,

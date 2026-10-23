@@ -648,3 +648,21 @@ select 4. Protocol 24 rejects both old main and protocol-23 feature binaries.
 No protocol-23 canvas/catalog fields were reordered; no installed game files or
 active runtime binaries are modified by the source merge. Combined live native
 window and headset validation remains pending.
+
+
+## Original Mode item selection receives native Fire edges
+
+VR trigger edges reached the native gun state but not the separate native button
+edge mask used by the Original Mode trunk menu. The bridge now also publishes
+`4 << (player * 16)` for an accepted Fire edge, preserving existing native bits,
+hold/release behavior, Grip-only reload and VR Settings input ownership. No
+protocol or viewer change is needed. The earlier gun-visibility hypothesis was
+disproved: P1 was active on this screen.
+
+The isolated input regression failed before the bridge change and passes after
+it, covering both player edges, held input and reload isolation. A desktop probe
+through the normal Original Mode entry added Power Up 1.2, then Chamber +2, and
+retained the two-item limit. Evidence is in
+`build/original-item-input-candidate/` (native screenshots and input JSON).
+Config and checkpoint bytes remained unchanged; the probe closed only its own
+game. Headset acceptance remains pending. Training navigation needed no change.
