@@ -14,8 +14,8 @@ static const char *const vrMenuGroups[]={"GAME SETTINGS","DISPLAY","RENDERING","
 static const char *const vrMenuGroupHelp[]={"GAME STARTUP AND SAVING","OUTPUTS AND PICTURE SETTINGS",
     "WORLD SCALE AND GRAPHICS QUALITY","GAME MUSIC AND EFFECTS VOLUME",
     "GUNS AIMING AND CONTROLLER FEEDBACK","OPTIONAL GAMEPLAY ASSISTS"};
-enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_STAGE_SELECT,MENU_NEW_GAME,MENU_GROUP_FIRST,MENU_RESET=MENU_GROUP_FIRST+MENU_GROUP_COUNT,MENU_TITLE,MENU_QUIT };
-static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","STAGE SELECT","NEW GAME","GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","RESET DEFAULTS","RETURN TO TITLE","QUIT GAME"};
+enum { MENU_SAVE_GAME,MENU_LOAD_GAME,MENU_STAGE_SELECT,MENU_GROUP_FIRST,MENU_RESET=MENU_GROUP_FIRST+MENU_GROUP_COUNT,MENU_TITLE,MENU_QUIT };
+static const char *const vrMenuRootLabels[]={"SAVE GAME","LOAD GAME","STAGE SELECT","GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS","RESET DEFAULTS","RETURN TO TITLE","QUIT GAME"};
 enum { MENU_STAGES=MENU_GROUP_COUNT,MENU_SCENES };
 static const unsigned vrMenuRootCount=sizeof(vrMenuRootLabels)/sizeof(vrMenuRootLabels[0]);
 static unsigned g_vrMenuRequest,g_vrMenuAction;
@@ -368,7 +368,6 @@ static int vrMenuControl(unsigned input)
             if(g_frame && g_frame->checkpoint_current_stage>=1 && g_frame->checkpoint_current_stage<=6)
                 g_vrMenuRow=(int)g_frame->checkpoint_current_stage-1;
         }
-        else if(g_vrMenuRow==MENU_NEW_GAME)vrMenuCheckpoint(HOTD_CHECKPOINT_NEW,0,0);
         else if(g_vrMenuRow==MENU_RESET)vrMenuResetDefaults();
         else if(g_vrMenuRow==MENU_TITLE){if(vrMenuSave())vrMenuCheckpoint(HOTD_CHECKPOINT_TITLE,0,0);}
         else if(g_vrMenuRow==MENU_QUIT)vrMenuQuitGame();
@@ -463,7 +462,6 @@ static void vrMenuCanvas(void)
     const char *hint=g_vrMenuPage>=0 && g_vrMenuPage<MENU_GROUP_COUNT?vrMenuItems[g_vrMenuPage][g_vrMenuRow].help:
         g_vrMenuRow>=MENU_GROUP_FIRST && g_vrMenuRow<MENU_RESET?vrMenuGroupHelp[g_vrMenuRow-MENU_GROUP_FIRST]:"";
     if(g_vrMenuPage<0 && (g_vrMenuRow==MENU_SAVE_GAME || g_vrMenuRow==MENU_LOAD_GAME))hint=g_vrMenuDestination;
-    if(g_vrMenuPage<0 && g_vrMenuRow==MENU_NEW_GAME)hint="RESTART ARCADE AT FIRST SCENE";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_STAGE_SELECT)hint="CHOOSE STAGE THEN SCENE";
     if(g_vrMenuPage<0 && g_vrMenuRow==MENU_RESET)
         hint=g_vrMenuResetPending?"DEFAULTS RESTORED   SAVE ON CLOSE":"RESET ALL OPTIONS   CHEATS OFF";

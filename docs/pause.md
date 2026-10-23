@@ -28,7 +28,7 @@ Desktop replay verification:
 
 ## Separate Start and Pause input
 
-Integrated protocol 23 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside audio, briefing-book metadata, player-HUD ownership, acknowledged manual-checkpoint requests and native menu canvas transport. Current bindings:
+Integrated protocol 24 carries `VC2_BTN_PAUSE=128` and separate Reload/Skip/Cancel inputs alongside audio, briefing-book metadata, player-HUD ownership, acknowledged manual-checkpoint requests and native menu canvas transport. Current bindings:
 
 - Trigger: Fire and Start/confirm; existing tilted-gun reload gesture remains.
 - A/X: Start/confirm and Pause/resume.

@@ -100,7 +100,7 @@ static void check_menu_layout(void)
         {"infinite_ammo","infinite_lives","invincibility","protect_rescue_npcs","infinite_continues","rapid_fire","rapid_fire_rate"}
     };
     const unsigned counts[]={2,7,11,3,8,7};
-    assert(vrMenuRootCount==13);
+    assert(vrMenuRootCount==12);
     g_vrMenuEnabled=g_vrMenuOpen=1;g_vrMenuArmed=g_vrMenuBlock=g_vrMenuPrevious=0;
     for(unsigned g=0;g<6;g++) {
         g_vrMenuPage=-1;g_vrMenuRow=MENU_GROUP_FIRST+g;

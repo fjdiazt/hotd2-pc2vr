@@ -255,6 +255,14 @@ static void check_controller_modes(void)
     controller_reloads=3;controller_tick();
     assert(g_frame->aim_buttons==VC2_BTN_RELOAD && g_frame->aim2_buttons==VC2_BTN_RELOAD);
     controller_reloads=0;controller_tick();
+    for(unsigned paired=0;paired<2;paired++)for(unsigned hand=0;hand<2;hand++) {
+        g_cfgAkimbo=paired;g_activePlayers=3;controller_backs=1u<<hand;controller_tick();
+        unsigned mask=VC2_BTN_BACK|VC2_BTN_RELOAD|VC2_BTN_FIRE;
+        assert((g_frame->aim_buttons&mask)==(hand==1?VC2_BTN_BACK:0));
+        assert((g_frame->aim2_buttons&mask)==(hand==0?VC2_BTN_BACK:0));
+        controller_backs=0;controller_tick();
+    }
+    g_cfgAkimbo=0;
     /* Both sticks navigate independently of gun visibility or player joining. */
     controller_fires=0;g_activePlayers=0;controller_sticks_active=1;
     const unsigned directions[]={VC2_BTN_UP,VC2_BTN_DOWN,VC2_BTN_RIGHT,VC2_BTN_LEFT};
@@ -455,7 +463,9 @@ int main(void)
     assert(g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons); /* UI Trigger cannot join/fire behind the page. */
     controller_fires=0;g_cheatFlags=0;vrMenuInit();
     g_actSettings=(XrAction)(uintptr_t)10;
-    controller_backs=2;controller_tick();controller_backs=0;controller_tick(); /* Back to root. */
+    controller_backs=2;controller_tick(); /* Back to root; cannot reload behind settings. */
+    assert(g_vrMenuPage==-1 && g_frame->aim_buttons==VC2_BTN_MENU && !g_frame->aim2_buttons);
+    controller_backs=0;controller_tick();
     controller_backs=2;controller_tick();controller_backs=0;controller_tick();assert(g_vrMenuOpen);
     controller_pauses=3;controller_tick();controller_pauses=0;controller_tick();assert(g_vrMenuOpen);
     for(int h=0;h<2;h++) {

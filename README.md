@@ -1,8 +1,8 @@
 # HOTD2 PC2VR
 
-Play the original Windows version of **The House of the Dead 2** in VR. Look around the scene, aim with your motion controllers, and use them as light guns. This is an experimental mod for the original PC game.
+Play the original Windows version of **The House of the Dead 2** in VR. Look around the scene and aim with your motion controllers as light guns. Save and load scene checkpoints, choose your starting stage and scene, and enable optional cheats. This is an experimental mod for the original PC game.
 
-![The House of the Dead 2 main menu](docs/screenshots/game-menu.png)
+![The House of the Dead 2 VR gameplay](docs/screenshots/gameplay-vr-animated.png)
 
 ## How to play
 
@@ -43,7 +43,7 @@ When finished, choose **Quit game** in VR Settings to close both the game and it
 
 This panel controls the VR mod. The original game's **Options** menu is separate.
 
-![VR Settings main page with Save game, Load game and settings groups](docs/screenshots/vr-settings.png)
+![VR Settings main page with Save game, Load game, Stage select and settings groups](docs/screenshots/vr-settings.png)
 
 - **Up/down:** select an item. Keep moving down to reach the next page. Matching **PAGE X OF Y** counters at the top and bottom show when other pages are available.
 - **Left/right:** change the selected setting.
@@ -59,7 +59,7 @@ The selected option shows a short explanation below the list. For example, **Aki
 
 ## Settings explained
 
-Groups appear after Save game, Load game, Stage select and New game in this order: **Game Settings**, **Display**, **Rendering**, **Audio**, **Controls**, **Cheats**.
+Groups appear after Save game, Load game and Stage select in this order: **Game Settings**, **Display**, **Rendering**, **Audio**, **Controls**, **Cheats**.
 
 The names below match the menu. **On/off** options show `1` for on and `0` for off. Defaults describe a fresh installation; your saved settings may differ.
 
@@ -70,7 +70,6 @@ The names below match the menu. **On/off** options show `1` for on and `0` for o
 | **Save game** | Saves the current Arcade chapter and scene. Works during play or pause. This is a scene checkpoint: loading restarts that scene, rather than restoring the exact moment, enemy positions or player state. |
 | **Load game** | Restarts the saved Arcade scene. Also works from the title/menu. There is one save slot, shared with Autosave. The destination appears below the selected row. |
 | **Stage select** | Choose one of six named stages, then an available native scene ID. Confirm to restart there; browsing leaves the game unchanged. Scene availability does not guarantee every earlier route/script prerequisite. |
-| **New game** | Starts chapter 1, scene 0. Keeps the existing save, although Autosave can replace it when enabled. |
 | **Reset defaults** | Restores the menu settings to their built-in defaults, including turning cheats off. Close the panel to save the reset. Settings that need a restart still need one. |
 | **Return to title** | Ends the current run and returns to the startup title/attract sequence after the publisher logos. Saves changed settings first and keeps the checkpoint file. |
 | **Quit game** | Saves your changed settings, closes the game normally, and ends the VR viewer. |
@@ -290,7 +289,7 @@ To start a new Arcade game at another chapter, use `./Start-HOTD2.ps1 -StartStag
 
 Enable `[vr] continue_game=1` to record the latest Arcade stage/scene and resume it on subsequent new Arcade starts. Default is `0`. Launcher switches `-ContinueGame` / `-NoContinueGame` override this for one launch; opposing PowerShell switches are rejected. Explicit `-StartStage` / `-StartScene` take priority over the saved location. With recording enabled, subsequent scene changes update the checkpoint even after an explicit jump.
 
-VR Settings starts with **Save game**, **Load game**, **Stage select**, then **New game**. Save writes the current Arcade stage/scene during active or paused gameplay. Load restarts the last saved scene, including from the title/menu, with Autosave off or on. New game starts chapter 1, scene 0 and retains the save file; enabled Autosave can subsequently replace it. Load, Stage select and New game override startup stage/scene options and rebuild through native mode/task/resource initialization, resuming native pause when necessary. Existing active players remain joined; menu loads start P1 (both with akimbo on). Companion desktop previews remain read-only.
+VR Settings starts with **Save game**, **Load game**, then **Stage select**. Save writes the current Arcade stage/scene during active or paused gameplay. Load restarts the last saved scene, including from the title/menu, with Autosave off or on. Load and Stage select override startup stage/scene options and rebuild through native mode/task/resource initialization, resuming native pause when necessary. Existing active players remain joined; menu loads start P1 (both with akimbo on). Companion desktop previews remain read-only.
 
 **Game Settings > Autosave** controls `continue_game` live and saves its edited value to the active INI on settings close. The effective startup/CLI value is shown when connecting. Before selection, Save shows the current stage, chapter name and scene; Load shows the saved destination, for example `SAVE STAGE 3 DARKNESS SCENE 7` and `LOAD STAGE 2 MUDDY SCENE 8`. Missing saves and unavailable gameplay are labeled explicitly. Locations update while the menu stays open, including during pause. Save/Load captions then report progress and the acknowledged chapter name and scene, for example `SAVED A PRELUDE SCENE 4` or `LOADED MUDDY SCENE 8`. Status clears on navigation. Invalid/missing saves leave the running game intact. Initialization failure reports failure instead of success. There is one save slot, shared by manual saves and Autosave; both manual actions work with Autosave off.
 
@@ -298,7 +297,7 @@ The bridge hook uses the writable shared frame: set `checkpoint_action` (`HOTD_C
 
 The bridge stores `[checkpoint] version=1`, `stage=1..6` and `scene=0..255` in `HOTD2VR.checkpoint.ini` beside its DLL, separate from both configuration and native game saves. It writes only when the location changes during active Arcade gameplay, using a flushed temporary file and atomic replacement. No player health, score, inventory, enemy state, route history or exact script position is saved. Resume restarts the selected scene. Disabling the feature retains the file; deleting it starts normally until another checkpoint is recorded.
 
-Direct launcher equivalents are `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. These startup options belong to `HOTD2Launch.exe`, not the viewer; `--native-window` cannot be combined with an explicit checkpoint request because it skips bridge injection. Stage/scene selection is CLI-only; only the recording/resume toggle is in the INI. The existing VR settings menu provides Save, Load and New game, with Autosave under Game Settings; stage/scene selection remains CLI-only.
+Direct launcher equivalents are `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. These startup options belong to `HOTD2Launch.exe`, not the viewer; `--native-window` cannot be combined with an explicit checkpoint request because it skips bridge injection. Stage/scene selection also works through VR Settings > Stage select; only the Autosave preference is stored in the INI. The menu provides Save, Load and Stage select, with Autosave under Game Settings and Return to Title above Quit Game.
 
 Invalid numeric arguments report `Invalid stage 20` or `Invalid scene 256` before starting a process. A missing direct-launcher value reports `Invalid stage` or `Invalid scene`.
 

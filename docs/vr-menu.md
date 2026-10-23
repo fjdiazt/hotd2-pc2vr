@@ -41,7 +41,7 @@ Right click recenters. F8 toggles the panel in the native window, headset or des
 
 | Group | Existing settings |
 | --- | --- |
-| Game Settings | Skip startup logos and live Autosave. This is the first group after New game. |
+| Game Settings | Skip startup logos and live Autosave. This is the first group after Stage select. |
 | Display | Brightness, gamma, player-HUD swap, desktop/headset outputs, native windowed mode and initial game focus. |
 | Rendering | World scale, units per metre, resolution, MSAA, Sharp HUD, native lighting, mesh/world expansion, depth mode/bias and background rendering, in that order. |
 | Audio | Master, music and effects volumes. |
@@ -156,7 +156,7 @@ Swap player HUD is available live in Display and included in Reset Defaults.
 
 ## Save and Load integration
 
-Root entries start with Save game, Load game and New game, followed by Game Settings,
+Root entries start with Save game, Load game and Stage select, followed by Game Settings,
 Display, Rendering, Audio, Controls, Cheats, Reset Defaults, Return to Title and Quit Game. Root pages
 eight entries; settings groups page six. Matching PAGE X OF Y counters use the
 existing font, size and colour at the top and bottom of every multi-page list. Game Settings
@@ -165,9 +165,9 @@ with existing atomic INI backups. Opening settings reflects the effective startu
 CLI value and never changes it.
 
 Save works during active or paused Arcade gameplay, independently of Autosave.
-Load also works from title/menu and restarts the saved Arcade scene. New game
-starts chapter 1, scene 0 without deleting the save. Enabled Autosave can later
-replace that slot. Existing players remain joined; menu loads start P1, or both
+Load also works from title/menu and restarts the saved Arcade scene. Stage select
+chooses an available stage/scene without deleting the save. Enabled Autosave can
+later replace that slot. Existing players remain joined; menu loads start P1, or both
 when akimbo is enabled. Controller/player assignments stay unchanged.
 
 Progress captions resolve to acknowledged chapter/scene or an error and clear on
@@ -275,7 +275,7 @@ prerequisites. Native desktop selection and invalid-target tests pass; headset s
 
 ## Combined main integration
 
-Stage select follows Load game, ahead of New game and Game Settings. The current
+Stage select follows Load game, ahead of Game Settings. The current
 Controls order, Akimbo label, per-option help, Return to Title, HUD ownership and
 rescue-NPC protection remain intact. Stage select uses command 4; Return to Title
 retains command 3. Matching protocol-24 bridge/viewer builds are mandatory because
@@ -295,3 +295,8 @@ The main branch's graphics-free services mode remains unchanged: disabling both
 outputs (or using NoGraphicsHooks) disables the menu and installs no graphics hooks.
 Native-window menu composition requires capture enabled by a desktop/headset output.
 The standalone native-window comparison launcher remains uninjected.
+
+The root New Game action is removed. Stage select supplies explicit scene starts,
+while Return to Title ends the current run. The legacy NEW bridge command remains
+for protocol compatibility and existing native smoke tests; the VR menu cannot
+submit it. This menu-only change does not alter protocol 24, INI values or saves.
