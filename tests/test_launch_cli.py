@@ -30,7 +30,7 @@ class LaunchOptionsTest(unittest.TestCase):
             fixture = Path(temporary)
             build = fixture / "build"
             build.mkdir()
-            game = fixture / "game.exe"
+            game = fixture / "game & file [1].exe"
             game.write_bytes(b"Test identity; never executed")
             script = (root / "Start-HOTD2.ps1").read_text()
             script = script.replace(
@@ -70,6 +70,70 @@ int wmain(int argc,wchar_t **argv) {
                              "--start-scene", "0", "--no-continue-game", "--no-window", "--no-vrwindow"])
             self.assertEqual(viewer_log.read_text().splitlines(), ["--no-window", "--no-vrwindow",
                              "--infinite-ammo", "--invincibility", "--protect-rescue-npcs", "--master-volume", "25"])
+            # Model an extracted release several levels below its game, launched from another CWD.
+            mod = fixture / "game folder & spaces [1]" / "vr"
+            mod.mkdir(parents=True)
+            shutil.copyfile(fixture / "Start-HOTD2.ps1", mod / "Start-HOTD2.ps1")
+            shutil.copyfile(root / "Start-HOTD2.bat", mod / "Start-HOTD2.bat")
+            shutil.copytree(build, mod / "build")
+            automatic = command[:3] + [str(mod / "Start-HOTD2.ps1")]
+            detected = fixture / "Hod2.exe"
+            detected.write_bytes(game.read_bytes())
+            result = subprocess.run(automatic, cwd=root, env=env, capture_output=True,
+                                    text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(detected)])
+            nearby = mod.parent / "Hod2.exe"
+            nearby.write_bytes(game.read_bytes())
+            result = subprocess.run(automatic, cwd=root, env=env, capture_output=True,
+                                    text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(nearby)])
+            colocated = mod / "Hod2.exe"
+            colocated.write_bytes(game.read_bytes())
+            result = subprocess.run(automatic, cwd=root, env=env, capture_output=True,
+                                    text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(colocated)])
+            colocated.unlink()
+            bat = f'""{mod / "Start-HOTD2.bat"}""'
+            result = subprocess.run(f'"{os.environ["COMSPEC"]}" /d /s /c {bat}', cwd=root,
+                                    env=env, input="", capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(nearby)])
+            self.assertEqual(viewer_log.read_text().splitlines(), [])
+            result = subprocess.run(automatic + ["-GameExe", game.name], cwd=fixture,
+                                    env=env, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(game)])
+            nearby.write_bytes(b"Unsupported nearest game must not fall back to a parent")
+            log.unlink(); viewer_log.unlink()
+            result = subprocess.run(automatic, env=env, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Unsupported HOTD2 executable", result.stderr)
+            self.assertFalse(log.exists())
+            self.assertFalse(viewer_log.exists())
+            result = subprocess.run(automatic + ["-GameExe", str(fixture / "missing.exe")],
+                                    env=env, capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Game executable not found", result.stderr)
+            self.assertFalse(log.exists())
+            self.assertFalse(viewer_log.exists())
+            # A BAT entry must preserve quoted paths/options and the backend's failure status.
+            bat = f'""{mod / "Start-HOTD2.bat"}" -GameExe "{game}" -NoWindow -NoVrWindow -InfiniteAmmo"'
+            result = subprocess.run(f'"{os.environ["COMSPEC"]}" /d /s /c {bat}', cwd=root,
+                                    env=env, input="", capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(log.read_text().splitlines(), [str(game), "--no-window", "--no-vrwindow"])
+            self.assertEqual(viewer_log.read_text().splitlines(), ["--no-window", "--no-vrwindow", "--infinite-ammo"])
+            nearby.unlink(); detected.unlink(); log.unlink(); viewer_log.unlink()
+            bat = f'""{mod / "Start-HOTD2.bat"}""'
+            result = subprocess.run(f'"{os.environ["COMSPEC"]}" /d /s /c {bat}', cwd=root,
+                                    env=env, input="", capture_output=True, text=True, timeout=15)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Hod2.exe not found", result.stdout + result.stderr)
+            self.assertFalse(log.exists())
+            self.assertFalse(viewer_log.exists())
             # A first launch must dispatch PowerShell extraction without Python on PATH.
             (build / "menu-font.rgba").unlink()
             (fixture / "tools").mkdir()

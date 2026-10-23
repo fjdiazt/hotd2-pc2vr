@@ -1,5 +1,5 @@
 param(
-    [string]$GameExe = 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe',
+    [string]$GameExe,
     [ValidateSet('VR','Window','Stereo')][string]$Mode = 'VR',
     [switch]$Window,
     [switch]$NoWindow,
@@ -53,10 +53,21 @@ if ($PSBoundParameters.ContainsKey('StartStage') -and ($StartStage -lt 1 -or $St
 if ($PSBoundParameters.ContainsKey('StartScene') -and ($StartScene -lt 0 -or $StartScene -gt 255)) { throw "Invalid scene $StartScene" }
 if ($PSBoundParameters.ContainsKey('StartScene') -and !$PSBoundParameters.ContainsKey('StartStage')) { throw '-StartScene requires -StartStage.' }
 $out = Join-Path $PSScriptRoot 'build'
-if (!(Test-Path "$out\HOTD2Launch.exe") -or !(Test-Path "$out\HOTD2Bridge.dll") -or !(Test-Path "$out\HOTD2VR.exe")) { throw 'Run build.ps1 first.' }
+if (!(Test-Path -LiteralPath "$out\HOTD2Launch.exe" -PathType Leaf) -or !(Test-Path -LiteralPath "$out\HOTD2Bridge.dll" -PathType Leaf) -or !(Test-Path -LiteralPath "$out\HOTD2VR.exe" -PathType Leaf)) { throw 'Mod runtime missing. Extract the complete release ZIP, or build the source checkout with build.ps1.' }
+if (!$PSBoundParameters.ContainsKey('GameExe')) {
+    $gameDirectory = [IO.DirectoryInfo]$PSScriptRoot
+    while ($gameDirectory) {
+        $candidate = Join-Path $gameDirectory.FullName 'Hod2.exe'
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) { $GameExe = $candidate; break }
+        $gameDirectory = $gameDirectory.Parent
+    }
+    if (!$GameExe) { throw 'Hod2.exe not found. Extract the mod into your game folder, or pass -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe".' }
+}
+if ([string]::IsNullOrWhiteSpace($GameExe) -or !(Test-Path -LiteralPath $GameExe -PathType Leaf)) { throw "Game executable not found: $GameExe" }
+$GameExe = (Get-Item -LiteralPath $GameExe).FullName
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
 if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) { throw 'Unsupported HOTD2 executable; no process started.' }
-if (!(Test-Path "$out\menu-font.rgba")) {
+if (!(Test-Path -LiteralPath "$out\menu-font.rgba" -PathType Leaf)) {
     & "$PSScriptRoot\tools\extract_menu_font.ps1" -GameExe $GameExe -Output "$out\menu-font.rgba"
 }
 $launchArgs = @($GameExe)

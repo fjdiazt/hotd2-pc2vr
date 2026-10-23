@@ -8,15 +8,10 @@ Play the original Windows version of **The House of the Dead 2** in VR. Look aro
 
 You need your own installed Windows PC copy of the game, a PC VR headset, and motion controllers. The Remake and emulated versions are not supported.
 
-1. **Get the mod.** Download the Windows ZIP from [Releases](https://github.com/fjdiazt/hotd2-pc2vr/releases) and choose **Extract All**. Keep the extracted folders together. If no ZIP is available, see [Build from source](#build-from-source).
-2. **Find your game.** Locate your installed **`Hod2.exe`** and copy its full path.
+1. **Get the mod.** Download the Windows ZIP from [Releases](https://github.com/fjdiazt/hotd2-pc2vr/releases). If no ZIP is available, see [Build from source](#build-from-source).
+2. **Install.** Extract the ZIP and place its **`vr`** folder beside your game's **`Hod2.exe`**. Keep all mod files inside `vr`.
 3. **Connect your headset and controllers.** Start your usual PC VR software and make sure the headset is ready.
-4. **Start the mod.** Open the extracted mod folder, right-click an empty space and choose **Open in Terminal**. Paste this command, replace the example game path with your own, keep the quotation marks, and press **Enter**:
-
-   ```powershell
-   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Start-HOTD2.ps1 -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -Mode VR
-   ```
-
+4. **Start the mod.** Open `vr` and double-click **`Start-HOTD2.bat`**. It finds and starts the game automatically.
 5. **Start playing.** Put on the headset, face forward, choose **Arcade mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
 
 ### Buttons you need
@@ -176,9 +171,19 @@ The launcher checks the SHA256 before starting a game; native hooks also check t
 
 ### Download and run
 
-Follow [How to play](#how-to-play) for installation. Release ZIPs include the matching bridge, launcher, viewer, default settings, gun assets, x64 OpenXR loader, scripts, documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
+Follow [How to play](#how-to-play) for installation. Each release ZIP contains a `vr` folder with the matching bridge, launcher, viewer, default settings, gun assets, x64 OpenXR loader, scripts, documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
 
-First launch extracts the menu font from your game with PowerShell/.NET. Keep the ZIP's `build\` and `tools\` directories together. The launch command's execution-policy override applies only to that PowerShell process.
+The BAT launcher uses Windows PowerShell internally for executable validation and first-launch menu-font extraction. No terminal setup is needed. Keep its `build\` and `tools\` subfolders together inside `vr`.
+
+Game discovery starts beside the launcher and checks each parent folder for `Hod2.exe`, choosing the nearest copy. It does not depend on the terminal's current folder. An unsupported nearest executable stops launch rather than falling back to another installation.
+
+For a mod installed elsewhere, supply the path explicitly:
+
+```bat
+Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe"
+```
+
+All existing launcher options work through the BAT entry. `Start-HOTD2.ps1` remains available for direct PowerShell use.
 
 ### Build from source
 
@@ -188,10 +193,10 @@ From the repository root:
 
 ```powershell
 .\build.ps1
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -Mode VR
+.\Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -Mode VR
 ```
 
-Replace the example game path with your own. Supplying `-GameExe` avoids the launch script's machine-specific development default.
+Replace the example path with your game location when running from a separate source checkout.
 
 The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun assets and `HOTD2VR.ini` under `build\`. It runs offline checks before reporting success. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
 
@@ -214,8 +219,8 @@ The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256,
 #### Desktop previews and reconnecting
 
 ```powershell
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -Mode Window
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -Mode Stereo
+.\Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -Mode Window
+.\Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -Mode Stereo
 ```
 
 `Window` shows the reconstructed scene on the desktop; `Stereo` shows both eyes side by side. These help distinguish capture/rendering problems from OpenXR problems.
@@ -233,7 +238,7 @@ Under `[vr]`, `window` controls the existing reconstructed desktop preview and `
 | `0` | `1` | Headset (default) |
 | `1` | `1` | Desktop preview and headset |
 
-CLI overrides: `--window` / `--no-window`, `--vrwindow` / `--no-vrwindow`. For both outputs, use `HOTD2VR.exe --window --vrwindow` or `Start-HOTD2.ps1 -Window -VrWindow`. `-Mode Window` selects preview only; `-Mode VR` enables the headset while preserving the INI preview setting. With no explicit mode/switches, the INI selects both outputs. `--stereo` remains a separate desktop diagnostic mode.
+CLI overrides: `--window` / `--no-window`, `--vrwindow` / `--no-vrwindow`. For both outputs, use `HOTD2VR.exe --window --vrwindow` or `Start-HOTD2.bat -Window -VrWindow`. `-Mode Window` selects preview only; `-Mode VR` enables the headset while preserving the INI preview setting. With no explicit mode/switches, the INI selects both outputs. `--stereo` remains a separate desktop diagnostic mode.
 
 The launcher applies these same flags before bridge injection. Both outputs off skips graphics capture, lighting reconstruction, culling expansion and native pause replay while retaining checkpoint, cheat and audio services. `HOTD2VR.exe` then runs its existing service loop without D3D11/OpenXR or synthetic aiming. Changing whether capture hooks are installed requires a game restart through the launcher; reconnecting a viewer alone cannot remove or install those hooks.
 
@@ -257,7 +262,7 @@ Ownership comes from the native player ammo/lives draw routines and gameplay cre
 
 #### Experimental Save game and scene selection
 
-To start a new Arcade game at another chapter, use `./Start-HOTD2.ps1 -StartStage 6`. `-StartStage` accepts 1–6. Optional `-StartScene 3` selects the native zero-based scene ID within that stage; omitted scene uses the chapter entrance (scene 7 for chapter 3, scene 0 for the others). These options change the next **new Arcade start after the normal menus**, rather than jumping immediately from the title. Original, Training, Boss and attract modes keep their native behavior.
+To start a new Arcade game at another chapter, use `./Start-HOTD2.bat -StartStage 6`. `-StartStage` accepts 1–6. Optional `-StartScene 3` selects the native zero-based scene ID within that stage; omitted scene uses the chapter entrance (scene 7 for chapter 3, scene 0 for the others). These options change the next **new Arcade start after the normal menus**, rather than jumping immediately from the title. Original, Training, Boss and attract modes keep their native behavior.
 
 Enable `[vr] continue_game=1` to record the latest Arcade stage/scene and resume it on subsequent new Arcade starts. Default is `0`. Launcher switches `-ContinueGame` / `-NoContinueGame` override this for one launch; opposing PowerShell switches are rejected. Explicit `-StartStage` / `-StartScene` take priority over the saved location. With recording enabled, subsequent scene changes update the checkpoint even after an explicit jump.
 
@@ -328,7 +333,7 @@ Audio values are percentages from 0 to 100. Master and category gains multiply: 
 For music and effects muted, without changing the INI:
 
 ```powershell
-.\Start-HOTD2.ps1 -MusicVolume 0 -EffectsVolume 0
+.\Start-HOTD2.bat -MusicVolume 0 -EffectsVolume 0
 .\build\HOTD2VR.exe --music-volume 0 --effects-volume 0
 ```
 
@@ -343,7 +348,7 @@ worldscale=1.25
 
 World scale is a multiplier: **1** restores the previous size, **1.25** makes the world 25% larger, **0.8** makes it 20% smaller, and **2** doubles it. Allowed range: 0.1–10. Missing or invalid values fall back to 1.25. Convert older percentage settings by dividing by 100 (`140` becomes `1.4`).
 
-Use `Start-HOTD2.ps1 -WorldScale 1.25` or `HOTD2VR.exe --world-scale 1.25` for a session override. Geometry and controller-ray conversion share the scale; HUD/menu size and controller gun size stay fixed. `[bridge] units_per_metre` remains the base conversion from native game units, not this multiplier.
+Use `Start-HOTD2.bat -WorldScale 1.25` or `HOTD2VR.exe --world-scale 1.25` for a session override. Geometry and controller-ray conversion share the scale; HUD/menu size and controller gun size stay fixed. `[bridge] units_per_metre` remains the base conversion from native game units, not this multiplier.
 
 #### Laser and crosshair
 
@@ -358,7 +363,7 @@ crosshair=1
 Session overrides:
 
 ```powershell
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -NoLaser -NoCrosshair
+.\Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -NoLaser -NoCrosshair
 .\build\HOTD2VR.exe --no-laser --no-crosshair
 ```
 
@@ -378,7 +383,7 @@ native_lighting=1
 Session overrides (INI remains unchanged):
 
 ```powershell
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -NoNativeLighting
+.\Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -NoNativeLighting
 .\build\HOTD2VR.exe --no-native-lighting
 ```
 
@@ -391,7 +396,7 @@ Lighting adds CPU work; VR frame-time cost remains unmeasured.
 For 80% scene brightness, without changing the INI:
 
 ```powershell
-.\Start-HOTD2.ps1 -Brightness 80
+.\Start-HOTD2.bat -Brightness 80
 .\build\HOTD2VR.exe --brightness 80
 ```
 
@@ -412,7 +417,7 @@ expand_world=1
 Session overrides, without changing the INI:
 
 ```powershell
-.\Start-HOTD2.ps1 -ExpandWorld
+.\Start-HOTD2.bat -ExpandWorld
 .\build\HOTD2VR.exe --expand-world
 ```
 
@@ -443,7 +448,7 @@ The [shipped INI](HOTD2VR.ini) contains no overrides. Relative gun-model paths r
 
 #### Startup splashes and native window
 
-`[bridge] skip_splash=1` starts at the title, skipping SEGA/Empire logos. Use `skip_splash=0`, `Start-HOTD2.ps1 -ShowSplash` or launcher `--show-splash` to restore them; `-SkipSplash` / `--skip-splash` enables the bypass. Launcher flags also work with `--wait` and `--native-window`.
+`[bridge] skip_splash=1` starts at the title, skipping SEGA/Empire logos. Use `skip_splash=0`, `Start-HOTD2.bat -ShowSplash` or launcher `--show-splash` to restore them; `-SkipSplash` / `--skip-splash` enables the bypass. Launcher flags also work with `--wait` and `--native-window`.
 
 Optional `[bridge] launchfix=1` bypasses the supported game's CD check in memory before startup. The launcher checks the original instruction signature, changes one branch displacement, restores memory protection and verifies the result. Unsupported code stops launch. The default is off; set it in `build/HOTD2VR.ini` to enable. `Hod2.exe` stays unchanged; setting `launchfix=0` restores the original check on the next launch. Installed game data is still required.
 
@@ -452,13 +457,13 @@ The launcher validates the startup instruction and changes one byte while the pr
 For a native windowed comparison with the original splash sequence, without the capture bridge or viewer:
 
 ```powershell
-.\build\HOTD2Launch.exe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' --native-window --show-splash
+.\build\HOTD2Launch.exe "C:\Games\TheHouseOfTheDead2\Hod2.exe" --native-window --show-splash
 ```
 
 For native graphics with no graphics hooks:
 
 ```powershell
-.\Start-HOTD2.ps1 -NoGraphicsHooks -StartStage 4 -StartScene 0 -NoContinueGame
+.\Start-HOTD2.bat -NoGraphicsHooks -StartStage 4 -StartScene 0 -NoContinueGame
 ```
 
 Start a new Arcade game through the normal menus to enter the selected scene. Native keyboard/mouse controls remain available. Existing cheat and volume flags still work; ammo, lives, invincibility and free-play controls do not require conversion rendering. Rapid fire remains tied to VR trigger input and supplies no physical mouse auto-fire in this mode.
@@ -480,7 +485,7 @@ Native renderer and quit questions remain in this comparison mode. Starting `Hod
 All default off. Enable for a session:
 
 ```powershell
-.\Start-HOTD2.ps1 -GameExe 'C:\Games\TheHouseOfTheDead2\Hod2.exe' -InfiniteLives -InfiniteAmmo -Invincibility -ProtectRescueNpcs -InfiniteContinues -RapidFire -RapidFireRate 4
+.\Start-HOTD2.bat -GameExe "C:\Games\TheHouseOfTheDead2\Hod2.exe" -InfiniteLives -InfiniteAmmo -Invincibility -ProtectRescueNpcs -InfiniteContinues -RapidFire -RapidFireRate 4
 ```
 
 Choose the flags you need. Viewer equivalents: `--infinite-lives`, `--infinite-ammo`, `--invincibility`, `--protect-rescue-npcs`, `--infinite-continues`, `--rapid-fire`, `--rapid-fire-rate 4`.
@@ -517,7 +522,7 @@ Texture capture preserves each material's independent U/V wrap, mirror and clamp
 ### Troubleshooting and current limits
 
 - **Unsupported executable:** compare the game's hash with the supported build above. This is an exact-build integration.
-- **No bridge / protocol mismatch:** launch through `Start-HOTD2.ps1`, close stale game/viewer sessions, and rebuild the bridge and viewer together. A viewer alone cannot inject an already running unmodified game.
+- **No bridge / protocol mismatch:** launch through `Start-HOTD2.bat`, close stale game/viewer sessions, and rebuild the bridge and viewer together. A viewer alone cannot inject an already running unmodified game.
 - **OpenXR fails but desktop preview works:** check the active runtime, headset connection and x64 loader beside the viewer.
 - **Unexpected settings:** check `build\HOTD2VR.ini`, not only the root template. Rebuilding preserves existing values.
 - **Missing surfaces or rendering glitches:** capture cannot supply geometry the game never submits. Texture-atlas capacity, mutable textures, transparency ordering and broader scene coverage remain areas for qualification.
@@ -547,7 +552,7 @@ This diagnostic build reuses the RE project's autoplay selector and gun calibrat
 
 ### Removal and rollback
 
-Close the viewer and game. All hooks and startup changes disappear with the game process. Launch the original `Hod2.exe` normally to play without the mod; the mod does not deploy DLLs into its folder or edit `Hod2.ini`. The development backup `build\Hod2.ini.before-test`, when present, predates the first desktop test.
+Close the viewer and game, then remove the `vr` folder to uninstall. Keep `vr\build\HOTD2VR.ini` and `vr\build\HOTD2VR.checkpoint.ini` if you want to preserve settings and saved progress. Hooks and startup changes disappear with the game process; the original `Hod2.exe` and `Hod2.ini` remain unchanged.
 
 ## Credits
 
