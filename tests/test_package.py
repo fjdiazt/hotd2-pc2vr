@@ -29,7 +29,7 @@ class PackageTest(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
         for name in ('HOTD2VR.ini', 'README.md', 'LICENSE',
-                     'THIRD-PARTY.md', 'third_party/openxr/LICENSE',
+                     'THIRD-PARTY.md',
                      'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md',
                      'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png'):
             target = self.root / name
@@ -77,17 +77,20 @@ class PackageTest(unittest.TestCase):
         archive = self.output / 'HOTD2-PC2VR-v1.2.3-windows-x64.zip'
         with zipfile.ZipFile(archive) as package:
             paths = {name.replace('\\', '/') for name in package.namelist() if not name.endswith('/')}
-            self.assertFalse(any(name.startswith(('vr/', 'build/')) or name.endswith(('.bat', '.ps1')) for name in paths), paths)
+            self.assertFalse(any(name.startswith(('vr/', 'build/', 'third_party/')) or name.endswith(('.bat', '.ps1')) for name in paths), paths)
             files = paths
             self.assertEqual(files, {
                 'README.md', 'LICENSE', 'THIRD-PARTY.md',
-                'third_party/openxr/LICENSE', 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
+                'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
                 'docs/findings.md', 'HOTD2Launch.exe', 'HOTD2Bridge.dll',
                 'HOTD2VR.exe', 'HOTD2VR.ini', 'openxr_loader.dll',
                 'gun.obj', 'gun.mtl', 'gun.bmp',
                 'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png',
             })
             self.assertEqual(package.read('HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
+            notices = package.read('THIRD-PARTY.md').decode('utf-8').replace('\r\n', '\n')
+            self.assertIn((ROOT / 'third_party/openxr/LICENSE').read_text(encoding='utf-8'), notices)
+            self.assertNotIn('third_party/openxr/LICENSE', notices)
             for image in ('gameplay-vr-animated.png', 'vr-settings.png'):
                 name = 'docs/screenshots/' + image
                 self.assertEqual(package.read(name), (ROOT / name).read_bytes())
