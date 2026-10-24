@@ -9,6 +9,8 @@ if ((& $gcc -dumpmachine) -ne 'i686-w64-mingw32') { throw '32-bit MinGW GCC requ
 if ($LASTEXITCODE) { throw 'Bridge build failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\HOTD2Launch.exe" "$root\src\launch.c"
 if ($LASTEXITCODE) { throw 'Launcher build failed.' }
+& $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\test_native_startup.exe" "$root\tests\test_native_startup.c" -lbcrypt
+if ($LASTEXITCODE) { throw 'Native startup test driver build failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -static-libgcc -o "$out\test_startup.exe" "$root\tests\test_startup.c"
 if ($LASTEXITCODE) { throw 'Startup test build failed.' }
 & "$out\test_startup.exe"

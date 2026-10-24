@@ -3,6 +3,15 @@
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include "../src/startup.h"
+static wchar_t output_test_launch_options[256];
+static const char *output_test_prepare(const wchar_t *viewer,const wchar_t *game,const wchar_t *options,int launch,int font)
+{
+    (void)viewer;(void)game;(void)font;
+    assert(launch);wcscpy(output_test_launch_options,options);return "fixture stopped before game launch";
+}
+#define hotdPrepareGame output_test_prepare
+#define MessageBoxA(a,b,c,d) 0
 static char output_test_share[96];
 static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
 {(void)name;return OpenFileMappingA(access,inherit,output_test_share);}
@@ -11,6 +20,8 @@ static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
 #include "../src/hotd2vr.c"
 #undef main
 #undef OpenFileMappingA
+#undef hotdPrepareGame
+#undef MessageBoxA
 
 static Vc2Frame *headless_frame;
 static DWORD WINAPI observe_headless(void *unused)
@@ -45,6 +56,16 @@ int main(int argc,char **argv)
     char *last[]={"viewer","--window","--vrwindow","--no-window","--no-vrwindow","--stop-before-bridge"};
     assert(viewer_application_main(6,last)==2 && !g_cfgWindow && !g_cfgVrWindow);
     assert(DeleteFileA(ini));
+
+    char *launch[]={"viewer","--no-menu","--no-graphics-hooks","--window","--vrwindow","--stereo",
+        "--start-stage","4","--start-scene","0","--continue-game","--no-continue-game","--show-splash"};
+    assert(viewer_application_main(sizeof(launch)/sizeof(*launch),launch)==1);
+    assert(wcsstr(output_test_launch_options,L"--no-window --no-vrwindow"));
+    assert(wcsstr(output_test_launch_options,L"--no-graphics-hooks"));
+    assert(wcsstr(output_test_launch_options,L"--start-stage 4 --start-scene 0"));
+    assert(wcsstr(output_test_launch_options,L"--no-continue-game"));
+    assert(wcsstr(output_test_launch_options,L"--show-splash"));
+    assert(!wcsstr(output_test_launch_options,L"--stereo"));
 
     /* Any accidental publication faults against this read-only frame. */
     g_frame=VirtualAlloc(NULL,sizeof(*g_frame),MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);

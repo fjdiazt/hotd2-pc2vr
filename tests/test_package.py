@@ -28,8 +28,8 @@ class PackageTest(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix='hotd2-package-')
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        for name in ('Start-HOTD2.bat', 'Start-HOTD2.ps1', 'HOTD2VR.ini', 'README.md', 'LICENSE',
-                     'THIRD-PARTY.md', 'tools/extract_menu_font.ps1', 'third_party/openxr/LICENSE',
+        for name in ('HOTD2VR.ini', 'README.md', 'LICENSE',
+                     'THIRD-PARTY.md', 'third_party/openxr/LICENSE',
                      'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md',
                      'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png'):
             target = self.root / name
@@ -77,21 +77,20 @@ class PackageTest(unittest.TestCase):
         archive = self.output / 'HOTD2-PC2VR-v1.2.3-windows-x64.zip'
         with zipfile.ZipFile(archive) as package:
             paths = {name.replace('\\', '/') for name in package.namelist() if not name.endswith('/')}
-            self.assertTrue(all(name.startswith('vr/') for name in paths), paths)
-            files = {name.removeprefix('vr/') for name in paths}
+            self.assertFalse(any(name.startswith(('vr/', 'build/')) or name.endswith(('.bat', '.ps1')) for name in paths), paths)
+            files = paths
             self.assertEqual(files, {
-                'Start-HOTD2.bat', 'Start-HOTD2.ps1', 'tools/extract_menu_font.ps1', 'README.md', 'LICENSE', 'THIRD-PARTY.md',
+                'README.md', 'LICENSE', 'THIRD-PARTY.md',
                 'third_party/openxr/LICENSE', 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
-                'docs/findings.md', 'build/HOTD2Launch.exe', 'build/HOTD2Bridge.dll',
-                'build/HOTD2VR.exe', 'build/HOTD2VR.ini', 'build/openxr_loader.dll',
-                'build/gun.obj', 'build/gun.mtl', 'build/gun.bmp',
+                'docs/findings.md', 'HOTD2Launch.exe', 'HOTD2Bridge.dll',
+                'HOTD2VR.exe', 'HOTD2VR.ini', 'openxr_loader.dll',
+                'gun.obj', 'gun.mtl', 'gun.bmp',
                 'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png',
             })
-            self.assertEqual(package.read('vr/build/HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
-            self.assertEqual(package.read('vr/Start-HOTD2.bat'), (ROOT / 'Start-HOTD2.bat').read_bytes())
+            self.assertEqual(package.read('HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
             for image in ('gameplay-vr-animated.png', 'vr-settings.png'):
                 name = 'docs/screenshots/' + image
-                self.assertEqual(package.read('vr/' + name), (ROOT / name).read_bytes())
+                self.assertEqual(package.read(name), (ROOT / name).read_bytes())
         checksum = archive.with_suffix('.zip.sha256').read_text().strip()
         self.assertEqual(checksum.lower(), f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}'.lower())
 

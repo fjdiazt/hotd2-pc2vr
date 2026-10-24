@@ -19,7 +19,7 @@ function Assert-PeMachine([string]$Path, [int]$Machine) {
 foreach ($name in 'HOTD2Launch.exe', 'HOTD2Bridge.dll') { Assert-PeMachine (Join-Path $BuildDirectory $name) 0x14C }
 Assert-PeMachine (Join-Path $BuildDirectory 'HOTD2VR.exe') 0x8664
 $runtime = @('HOTD2Launch.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'gun.obj', 'gun.mtl', 'gun.bmp')
-$sources = @('Start-HOTD2.bat', 'Start-HOTD2.ps1', 'tools\extract_menu_font.ps1', 'README.md', 'LICENSE', 'THIRD-PARTY.md',
+$sources = @('README.md', 'LICENSE', 'THIRD-PARTY.md',
     'third_party\openxr\LICENSE', 'docs\vr-menu.md', 'docs\cheats.md', 'docs\pause.md', 'docs\findings.md',
     'docs\screenshots\gameplay-vr-animated.png', 'docs\screenshots\vr-settings.png')
 foreach ($name in $runtime) {
@@ -40,13 +40,12 @@ if ((Test-Path -LiteralPath $archivePath) -or (Test-Path -LiteralPath "$archiveP
 $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
 $stage = [IO.Path]::GetFullPath((Join-Path $tempRoot ('hotd2-package-' + [Guid]::NewGuid().ToString('N'))))
 if ([IO.Path]::GetDirectoryName($stage).TrimEnd('\') -ne $tempRoot.TrimEnd('\')) { throw 'Invalid package staging directory.' }
-$modStage = Join-Path $stage 'vr'
-[IO.Directory]::CreateDirectory((Join-Path $modStage 'build')) | Out-Null
+[IO.Directory]::CreateDirectory($stage) | Out-Null
 try {
-    foreach ($name in $runtime) { Copy-Item -LiteralPath (Join-Path $BuildDirectory $name) -Destination (Join-Path $modStage 'build') }
-    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'HOTD2VR.ini') -Destination (Join-Path $modStage 'build')
+    foreach ($name in $runtime) { Copy-Item -LiteralPath (Join-Path $BuildDirectory $name) -Destination $stage }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'HOTD2VR.ini') -Destination $stage
     foreach ($name in $sources) {
-        $target = Join-Path $modStage $name
+        $target = Join-Path $stage $name
         [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($target)) | Out-Null
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $target
     }
@@ -54,9 +53,9 @@ try {
     try {
         $entry = $loader.GetEntry('native/x64/release/bin/openxr_loader.dll')
         if (!$entry) { throw 'Official OpenXR package has no x64 loader.' }
-        [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $modStage 'build\openxr_loader.dll'))
+        [IO.Compression.ZipFileExtensions]::ExtractToFile($entry, (Join-Path $stage 'openxr_loader.dll'))
     } finally { $loader.Dispose() }
-    Assert-PeMachine (Join-Path $modStage 'build\openxr_loader.dll') 0x8664
+    Assert-PeMachine (Join-Path $stage 'openxr_loader.dll') 0x8664
     [IO.Directory]::CreateDirectory($outputPath) | Out-Null
     [IO.Compression.ZipFile]::CreateFromDirectory($stage, $archivePath)
     $checksum = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()

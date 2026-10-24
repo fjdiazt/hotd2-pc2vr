@@ -42,6 +42,8 @@
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
+#pragma comment(lib,"shell32.lib")
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <d3dcompiler.h>
@@ -60,6 +62,7 @@
 #include "game_input.h"
 #include "player_hud.h"
 #include "audio_control.h"
+#include "startup.h"
 
 #define NEAR_M 0.05f
 #define FAR_M  4000.0f
@@ -3799,6 +3802,8 @@ int main(int argc, char **argv)
 {
 
     int stereo = 0, seconds = 0, i;
+    int startStage=0,startScene=-1,skipSplash=-1,noGraphics=0;
+    wchar_t gamePath[MAX_PATH]={0},viewerPath[MAX_PATH],launchOptions[256];
     DesktopPreview preview={0};
     g_previewOnly=0;
     loadCfg();
@@ -3809,6 +3814,27 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--vrwindow")) g_cfgVrWindow = 1;
         else if (!strcmp(argv[i], "--no-vrwindow")) g_cfgVrWindow = 0;
         else if (!strcmp(argv[i], "--preview-only")) g_previewOnly = 1;
+        else if (!strcmp(argv[i], "--no-graphics-hooks")) noGraphics=1;
+        else if (!strcmp(argv[i], "--skip-splash")) skipSplash=1;
+        else if (!strcmp(argv[i], "--show-splash")) skipSplash=0;
+        else if (!strcmp(argv[i], "--continue-game")) {g_cfgContinueGame=1;g_cfgContinueEdited=1;}
+        else if (!strcmp(argv[i], "--no-continue-game")) {g_cfgContinueGame=0;g_cfgContinueEdited=1;}
+        else if (!strcmp(argv[i], "--game-exe")) {
+            int wideCount=0;wchar_t **wide=CommandLineToArgvW(GetCommandLineW(),&wideCount);
+            if(++i>=argc || !wide || i>=wideCount || wcslen(wide[i])>=MAX_PATH || !wide[i][0]) {
+                if(wide)LocalFree(wide);note("--game-exe requires a game executable path.\n");return 2;
+            }
+            wcscpy(gamePath,wide[i]);LocalFree(wide);
+        }
+        else if (!strcmp(argv[i], "--start-stage") || !strcmp(argv[i], "--start-scene")) {
+            int stage=!strcmp(argv[i],"--start-stage");char *end=NULL;
+            if(++i>=argc || !argv[i][0]) {note("Missing stage/scene value.\n");return 2;}
+            long value=strtol(argv[i],&end,10);
+            if(*end || value<(stage?1:0) || value>(stage?6:HOTD_CHECKPOINT_MAX_SCENE)) {
+                note("Invalid %s: %s\n",stage?"stage":"scene",argv[i]);return 2;
+            }
+            if(stage)startStage=(int)value;else startScene=(int)value;
+        }
         else if (!strcmp(argv[i], "--menu")) g_vrMenuEnabled = 1;
         else if (!strcmp(argv[i], "--no-menu")) g_vrMenuEnabled = 0;
         else if (!strcmp(argv[i], "--stereo")) stereo = 1;
@@ -3849,14 +3875,46 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--protect-rescue-npcs] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--game-exe PATH] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game] [--skip-splash | --show-splash] [--no-graphics-hooks] [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--protect-rescue-npcs] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
+    if(startScene>=0 && !startStage) {note("--start-scene requires --start-stage.\n");return 2;}
+    if(noGraphics) {g_cfgWindow=0;g_cfgVrWindow=0;stereo=0;}
     if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
     int rendering=stereo || g_cfgWindow || g_cfgVrWindow;
     if(!rendering)g_vrMenuEnabled=0;
-    if(g_vrMenuEnabled && !vrMenuLoadFont()) {
-        note("Settings menu disabled: menu-font.rgba missing or invalid. Run Start-HOTD2.ps1 to generate it.\n");
-        g_vrMenuEnabled=0;
+    int fontReady=!g_vrMenuEnabled || vrMenuLoadFont();
+    openShare();
+    if(g_frame && gameExited()) {
+        UnmapViewOfFile(g_frame);CloseHandle(g_map);CloseHandle(g_gameProc);
+        g_frame=NULL;g_map=NULL;g_gameProc=NULL;
+    }
+    if(!g_previewOnly && (!g_frame || !fontReady)) {
+        DWORD n=GetModuleFileNameW(NULL,viewerPath,MAX_PATH);
+        if(!n || n>=MAX_PATH)return 1;
+        /* Reconnecting needs only the missing font, never another game process. */
+        if(g_frame && !gamePath[0]) {
+            HANDLE game=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,g_frame->game_pid);
+            DWORD size=MAX_PATH;
+            if(game) {QueryFullProcessImageNameW(game,0,gamePath,&size);CloseHandle(game);}
+        }
+        swprintf(launchOptions,256,L"%ls %ls %ls %ls %ls %ls",
+            g_cfgWindow?L"--window":L"--no-window",g_cfgVrWindow?L"--vrwindow":L"--no-vrwindow",
+            stereo?L"--stereo":L"",noGraphics?L"--no-graphics-hooks":L"",
+            skipSplash<0?L"":skipSplash?L"--skip-splash":L"--show-splash",
+            g_cfgContinueEdited?(g_cfgContinueGame?L"--continue-game":L"--no-continue-game"):L"");
+        if(startStage)swprintf(launchOptions+wcslen(launchOptions),256-wcslen(launchOptions),L" --start-stage %d",startStage);
+        if(startScene>=0)swprintf(launchOptions+wcslen(launchOptions),256-wcslen(launchOptions),L" --start-scene %d",startScene);
+        const char *error=hotdPrepareGame(viewerPath,gamePath[0]?gamePath:NULL,launchOptions,!g_frame,!fontReady);
+        if(error) {
+            note("%s\n",error);
+            DWORD consolePids[2];
+            if(GetConsoleProcessList(consolePids,2)==1)MessageBoxA(NULL,error,"HOTD2 PC2VR",MB_OK|MB_ICONERROR);
+            return 1;
+        }
+        if(!fontReady)fontReady=vrMenuLoadFont();
+    }
+    if(!fontReady) {
+        note("Settings menu disabled: menu-font.rgba missing or invalid.\n");g_vrMenuEnabled=0;
     }
     note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
     note("Player HUD: swap=%d (akimbo=%d)\n",g_cfgSwapPlayerHud,g_cfgAkimbo);
@@ -3867,8 +3925,8 @@ int main(int argc, char **argv)
     note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
     note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
     note("HOTD2 PC2VR - waiting for injected game bridge\n");
-    for (i = 0; i < 100 && !openShare(); i++) Sleep(100);
-    if (!g_frame) { note("No HOTD2 bridge. Start through Start-HOTD2.ps1.\n"); return 1; }
+    for (i = 0; i < 100 && !g_frame && !openShare(); i++) Sleep(100);
+    if (!g_frame) { note("No HOTD2 bridge. Check HOTD2Bridge.log and matching mod binaries.\n"); return 1; }
     vrMenuInit();
     if (seconds > 0) g_stopAt = GetTickCount() + (DWORD)seconds*1000;
     note("Bridge connected; input profile %s\n", g_frame->input_supported ? "verified" : "unavailable");
