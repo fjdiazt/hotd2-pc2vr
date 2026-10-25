@@ -12,7 +12,8 @@ You need your own installed Windows PC copy of the game, a PC VR headset, and mo
 2. **Install.** Extract the ZIP into the folder containing your game's **`Hod2.exe`**. It includes a **`vr`** folder.
 3. **Connect your headset and controllers.** Start your usual PC VR software and make sure the headset is ready.
 4. **Start the mod.** Open `vr` and double-click **`start.bat`** to launch **`HOTD2VR.exe`**. It finds and starts the game automatically.
-5. **Start playing.** Put on the headset, face forward, choose **Arcade or Original mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
+5. **Center the view.** Face forward and press the **right thumbstick button**.
+6. **Start playing.** Choose a game mode with a thumbstick, then pull the **trigger** to confirm.
 
 ### Buttons you need
 
@@ -20,7 +21,7 @@ You need your own installed Windows PC copy of the game, a PC VR headset, and mo
 | --- | --- |
 | Shoot | Pull that hand's **trigger**. |
 | Reload | Press that hand's **grip**. You can also point the gun up, down or sideways away from your view and pull its trigger. |
-| Navigate game menus | Move either **thumbstick**; press **A/X** or pull the **trigger** to confirm. |
+| Navigate game menus | Move either **thumbstick**; pull the **trigger** to confirm. |
 | Pause or resume | Press **A/X**. |
 | Skip a scene or go back | Press **B/Y**. |
 | Recenter | Face forward and press the **right thumbstick button**. |
