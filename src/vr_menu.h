@@ -323,7 +323,7 @@ static int vrMenuLoadFont(void)
     lstrcpynA(path+n,"menu-font.rgba",sizeof(path)-n);
     FILE *file=fopen(path,"rb");if(!file)return 0;
     char magic[4];
-    int ok=fread(magic,1,4,file)==4 && !memcmp(magic,"H2PF",4) &&
+    int ok=fread(magic,1,4,file)==4 && !memcmp(magic,HOTD_FONT_MAGIC,4) &&
         fread(g_vrMenuFont,1,sizeof(g_vrMenuFont),file)==sizeof(g_vrMenuFont) && fgetc(file)==EOF;
     fclose(file);return ok;
 }
@@ -476,7 +476,7 @@ static void vrMenuCanvas(void)
     unsigned count=vrMenuCount();
     unsigned perPage=g_vrMenuPage<0?8:6,first=(unsigned)g_vrMenuRow/perPage*perPage;
     for(unsigned row=first;row<count && row<first+perPage;row++) {
-        int y=112+(int)(row-first)*(g_vrMenuPage<0?32:43),selected=(int)row==g_vrMenuRow;
+        int y=112+(int)(row-first)*(g_vrMenuPage<0?30:43),selected=(int)row==g_vrMenuRow;
         if(selected){vrMenuRect(34,y+(g_vrMenuPage<0?7:11),4,23,red);vrMenuRect(44,y+(g_vrMenuPage<0?3:6),552,g_vrMenuPage<0?30:35,0x8020202B);}
         char label[64];
         if(g_vrMenuPage==MENU_STAGES)snprintf(label,sizeof(label),"STAGE %u %s",row+1,vrMenuChapters[row]);
@@ -516,8 +516,9 @@ static void vrMenuCanvas(void)
     vrMenuText(48,378,hint,.65f,grey);
     notice=g_vrMenuError?g_vrMenuError:g_previewOnly?"READ ONLY PREVIEW":g_vrMenuStatus[0]?g_vrMenuStatus:notice;
     if(notice)vrMenuText(48,400,notice,.5f,grey);
-    if(count>perPage){char page[32];snprintf(page,sizeof(page),"PAGE %u OF %u",first/perPage+1,(count+perPage-1)/perPage);
-        vrMenuText(440,72,page,.6f,grey);vrMenuText(440,356,page,.6f,grey);}
+    /* Original's item-menu arrow and its vertical flip occupy font slots 1/2. */
+    if(first)vrMenuText(560,56,"\2",1,grey);
+    if(first+perPage<count)vrMenuText(560,356,"\1",1,grey);
     vrMenuRect(42,418,552,1,0xFF303077);
     vrMenuText(44,427,"ARROWS MOVE   ENTER SELECT   CTRL BACK",.65f,white);
     vrMenuText(44,451,"F8 LEFT CLICK TOGGLE   STICK TRIGGER B IN VR",.6f,grey);

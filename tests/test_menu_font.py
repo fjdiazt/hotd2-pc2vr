@@ -14,6 +14,7 @@ SHELL = 'powershell.exe'
 
 
 class MenuFontTest(unittest.TestCase):
+    magic = b'H2PF'
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='hotd2-font-')
         self.addCleanup(self.temporary.cleanup)
@@ -56,7 +57,7 @@ class MenuFontTest(unittest.TestCase):
     def test_rgba_layout_and_vertical_flip(self):
         result = self.run_extractor()
         self.assertEqual(result.returncode, 0, result.stderr)
-        expected = bytearray(b'H2PF' + bytes(128 * 32 * 32 * 4))
+        expected = bytearray(self.magic + bytes(128 * 32 * 32 * 4))
         for character in 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789':
             base = 4 + ord(character) * 32 * 32 * 4
             expected[base:base+8] = bytes((119, 136, 153, 0, 170, 187, 204, 204))
@@ -117,7 +118,7 @@ class MenuFontTest(unittest.TestCase):
         self.texture.write_bytes(struct.pack('<I', 64512) + compressed)
         result = self.run_extractor()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.output.read_bytes(), b'H2PF' + bytes(128 * 32 * 32 * 4))
+        self.assertEqual(self.output.read_bytes(), self.magic + bytes(128 * 32 * 32 * 4))
 
 
 if __name__ == '__main__':

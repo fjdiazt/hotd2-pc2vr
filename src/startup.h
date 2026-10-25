@@ -14,6 +14,7 @@
 
 #define HOTD_GAME_SHA256 "C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A"
 #define HOTD_FONT_SIZE (4+128*32*32*4)
+#define HOTD_FONT_MAGIC "H2P2"
 
 static int hotdSibling(wchar_t *out,const wchar_t *path,const wchar_t *name)
 {
@@ -113,59 +114,74 @@ static unsigned hotdFontBit(HotdFontStream *s)
     unsigned bit=s->bits&1;s->bits>>=1;s->left--;return bit;
 }
 
-static int hotdDecodeFont(const unsigned char *exe,size_t exe_length,const unsigned char *source,size_t size,unsigned char *font)
+static int hotdUnpackMenuTexture(const unsigned char *source,size_t size,unsigned char *pixels,unsigned capacity)
 {
-    unsigned char pixels[64512];unsigned length=0;
+    unsigned length=0;
     HotdFontStream stream={source,size,4,0,0,0};
-    if(size<4 || hotdU32(source)!=sizeof(pixels))return 0;
+    if(size<4 || hotdU32(source)!=capacity)return 0;
     for(;;) {
         if(hotdFontBit(&stream)) {
-            if(length>=sizeof(pixels))return 0;
+            if(length>=capacity)return 0;
             pixels[length++]=(unsigned char)hotdFontByte(&stream);
         }else {
             int offset;unsigned count;
             if(hotdFontBit(&stream)) {
                 unsigned word=hotdFontByte(&stream);word|=hotdFontByte(&stream)<<8;
-                if(!word) {if(stream.failed || length!=sizeof(pixels))return 0;break;}
+                if(!word) {if(stream.failed || length!=capacity)return 0;break;}
                 offset=(int)(word>>3)-8192;count=word&7;
                 count=count?count+2:hotdFontByte(&stream)+1;
             }else {
                 count=hotdFontBit(&stream)<<1;count=(count|hotdFontBit(&stream))+2;
                 offset=(int)hotdFontByte(&stream)-256;
             }
-            if(stream.failed || offset>=0 || offset<-(int)length || count>sizeof(pixels)-length)return 0;
+            if(stream.failed || offset>=0 || offset<-(int)length || count>capacity-length)return 0;
             while(count--) {pixels[length]=pixels[(int)length+offset];length++;}
         }
         if(stream.failed)return 0;
     }
-    uint32_t descriptors,count;
-    if(!hotdFontValue(exe,exe_length,0x55B9B8+0x15E*4,4,&descriptors) ||
-       !hotdFontValue(exe,exe_length,0x55C0A8+0x15E*2,2,&count) || !count || count>4096)return 0;
-    memset(font,0,HOTD_FONT_SIZE);memcpy(font,"H2PF",4);
+    return 1;
+}
+
+static int hotdMenuGlyph(const unsigned char *exe,size_t exe_length,const unsigned char *pixels,size_t pixel_length,
+    unsigned glyph,unsigned expected_group,unsigned char *output)
+{
+    uint32_t group,descriptors,count,texture,width=0,height=0,format=0,offset=0;unsigned matches=0;
+    if(!hotdFontValue(exe,exe_length,0x57A5BC+(uint64_t)glyph*4,4,&group) || group!=expected_group ||
+       !hotdFontValue(exe,exe_length,0x55B9B8+(uint64_t)group*4,4,&descriptors) ||
+       !hotdFontValue(exe,exe_length,0x55C0A8+(uint64_t)group*2,2,&count) || !count || count>4096 ||
+       !hotdFontValue(exe,exe_length,0x57D448+(uint64_t)glyph*4,4,&texture))return 0;
+    for(unsigned i=0;i<count;i++) {
+        uint64_t descriptor=(uint64_t)descriptors+i*16;uint32_t id;
+        if(!hotdFontValue(exe,exe_length,descriptor+12,4,&id))return 0;
+        if(id!=texture)continue;
+        matches++;
+        if(!hotdFontValue(exe,exe_length,descriptor,2,&width) ||
+           !hotdFontValue(exe,exe_length,descriptor+2,2,&height) ||
+           !hotdFontValue(exe,exe_length,descriptor+4,4,&format) ||
+           !hotdFontValue(exe,exe_length,descriptor+8,4,&offset))return 0;
+    }
+    if(matches!=1 || format!=0x902 || !width || width>32 || !height || height>32 ||
+       (uint64_t)offset+width*height*2>pixel_length)return 0;
+    memset(output,0,32*32*4);
+    for(unsigned i=0;i<width*height;i++) {
+        unsigned value=hotdU16(pixels+offset+i*2);
+        unsigned char *p=output+((height-1-i/width)*32+i%width)*4;
+        p[0]=(unsigned char)(((value>>8)&15)*17);p[1]=(unsigned char)(((value>>4)&15)*17);
+        p[2]=(unsigned char)((value&15)*17);p[3]=(unsigned char)(((value>>12)&15)*17);
+    }
+    return 1;
+}
+
+static int hotdDecodeFont(const unsigned char *exe,size_t exe_length,const unsigned char *source,size_t size,unsigned char *font)
+{
+    unsigned char pixels[64512];
+    if(!hotdUnpackMenuTexture(source,size,pixels,sizeof(pixels)))return 0;
+    memset(font,0,HOTD_FONT_SIZE);memcpy(font,HOTD_FONT_MAGIC,4);
     const char *characters="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     for(const char *c=characters;*c;c++) {
-        uint32_t glyph,group,texture,width=0,height=0,format=0,offset=0;unsigned matches=0;
+        uint32_t glyph;
         if(!hotdFontValue(exe,exe_length,0x56AED0+(unsigned)*c*2,2,&glyph) ||
-           !hotdFontValue(exe,exe_length,0x57A5BC+(uint64_t)glyph*4,4,&group) || group!=0x15E ||
-           !hotdFontValue(exe,exe_length,0x57D448+(uint64_t)glyph*4,4,&texture))return 0;
-        for(unsigned i=0;i<count;i++) {
-            uint64_t descriptor=(uint64_t)descriptors+i*16;uint32_t id;
-            if(!hotdFontValue(exe,exe_length,descriptor+12,4,&id))return 0;
-            if(id!=texture)continue;
-            matches++;
-            if(!hotdFontValue(exe,exe_length,descriptor,2,&width) ||
-               !hotdFontValue(exe,exe_length,descriptor+2,2,&height) ||
-               !hotdFontValue(exe,exe_length,descriptor+4,4,&format) ||
-               !hotdFontValue(exe,exe_length,descriptor+8,4,&offset))return 0;
-        }
-        if(matches!=1 || format!=0x902 || !width || width>32 || !height || height>32 ||
-           (uint64_t)offset+width*height*2>sizeof(pixels))return 0;
-        for(unsigned i=0;i<width*height;i++) {
-            unsigned value=hotdU16(pixels+offset+i*2);
-            unsigned char *p=font+4+((unsigned)*c*1024+(height-1-i/width)*32+i%width)*4;
-            p[0]=(unsigned char)(((value>>8)&15)*17);p[1]=(unsigned char)(((value>>4)&15)*17);
-            p[2]=(unsigned char)((value&15)*17);p[3]=(unsigned char)(((value>>12)&15)*17);
-        }
+           !hotdMenuGlyph(exe,exe_length,pixels,sizeof(pixels),glyph,0x15E,font+4+(unsigned)*c*4096))return 0;
     }
     return 1;
 }
@@ -175,11 +191,20 @@ static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsign
     wchar_t output[MAX_PATH],texture[MAX_PATH],temporary[MAX_PATH];size_t length;
     if(!hotdSibling(output,viewer,L"menu-font.rgba") || !hotdSibling(texture,game,L"tex\\scr_opt_moji05.bin"))return 0;
     unsigned char *data=hotdReadFile(output,&length);
-    int valid=data && length==HOTD_FONT_SIZE && !memcmp(data,"H2PF",4);free(data);
+    int valid=data && length==HOTD_FONT_SIZE && !memcmp(data,HOTD_FONT_MAGIC,4);free(data);
     if(valid)return 1;
     data=hotdReadFile(texture,&length);
     unsigned char *font=malloc(HOTD_FONT_SIZE);
     valid=data && font && hotdDecodeFont(exe,exe_length,data,length,font);free(data);
+    if(valid) {
+        unsigned char *pixels=malloc(811008);
+        data=hotdSibling(texture,game,L"tex\\scr_item.bin")?hotdReadFile(texture,&length):NULL;
+        valid=data && pixels && hotdUnpackMenuTexture(data,length,pixels,811008) &&
+            hotdMenuGlyph(exe,exe_length,pixels,811008,0x5F7,0x156,font+4+4096);
+        free(data);free(pixels);
+        if(valid)for(unsigned row=0;row<32;row++)
+            memcpy(font+4+2*4096+row*128,font+4+4096+(31-row)*128,128);
+    }
     if(valid) {
         wchar_t directory[MAX_PATH];wcscpy(directory,output);*wcsrchr(directory,L'\\')=0;
         valid=GetTempFileNameW(directory,L"h2f",0,temporary)!=0;
@@ -218,7 +243,7 @@ static const char *hotdPrepareGame(const wchar_t *viewer,const wchar_t *explicit
         free(exe);return "Unsupported HOTD2 executable (SHA256 mismatch). Game not started.";
     }
     int ready=!font || hotdEnsureFont(game,viewer,exe,length);free(exe);
-    if(!ready)return "Menu font extraction failed. Check tex/scr_opt_moji05.bin and write access to the mod folder.";
+    if(!ready)return "Menu asset extraction failed. Check tex/scr_opt_moji05.bin, tex/scr_item.bin and write access to the mod folder.";
     if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check HOTD2Launch.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";
     return NULL;
 }

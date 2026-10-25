@@ -168,11 +168,15 @@ Swap player HUD is available live in Display and included in Reset Defaults.
 
 Root entries start with Save game, Load game and Stage select, followed by Game Settings,
 Display, Rendering, Audio, Controls, Cheats, Reset Defaults, Return to Title and Quit Game. Root pages
-eight entries; settings groups page six. Matching PAGE X OF Y counters use the
-existing font, size and colour at the top and bottom of every multi-page list. Game Settings
+eight entries; settings groups page six. Original-mode item-menu arrows replace page
+counters: up when earlier rows exist, down when later rows exist. Game Settings
 contains live Autosave (`continue_game`), persisted on close
 with existing atomic INI backups. Opening settings reflects the effective startup
 CLI value and never changes it.
+
+The native startup extracts sprite `0x5F7` from the owned game's `tex/scr_item.bin`
+into unused font slots 1/2, with a vertical flip for up. The `H2P2` cache replaces
+older font caches atomically; extraction failure preserves the previous file.
 
 Save works during active or paused Arcade/Original gameplay, independently of Autosave.
 Load chooses a mode and also works from title/menu. Original opens native item selection before restarting its saved scene. Stage select

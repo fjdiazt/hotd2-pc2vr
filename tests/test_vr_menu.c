@@ -123,19 +123,28 @@ static void check_menu_layout(void)
         press(VC2_BTN_BACK);assert(g_vrMenuPage==-1 && g_vrMenuRow==(int)(MENU_GROUP_FIRST+g));
     }
     assert(vrMenuItems[MENU_RENDERING][1].value==10 && (vrMenuItems[MENU_RENDERING][1].flags&MENU_RESTART_GAME));
-    BYTE glyphs[2][sizeof(g_vrMenuFont['M'])];
-    memcpy(glyphs[0],g_vrMenuFont['M'],sizeof(glyphs[0]));memcpy(glyphs[1],g_vrMenuFont['P'],sizeof(glyphs[1]));
-    memset(g_vrMenuFont['M'],255,sizeof(glyphs[0]));memset(g_vrMenuFont['P'],255,sizeof(glyphs[1]));
+    BYTE glyphs[2][sizeof(g_vrMenuFont[1])];
+    memcpy(glyphs[0],g_vrMenuFont[1],sizeof(glyphs[0]));memcpy(glyphs[1],g_vrMenuFont[2],sizeof(glyphs[1]));
+    memset(g_vrMenuFont[1],255,sizeof(glyphs[0]));memset(g_vrMenuFont[2],255,sizeof(glyphs[1]));
     for(int group=-1;group<6;group++) {
         g_vrMenuPage=group;unsigned count=group<0?vrMenuRootCount:vrMenuCounts[group],perPage=group<0?8:6;
         for(unsigned row=0;row<count;row++) {
             g_vrMenuRow=row;vrMenuCanvas();
             assert(g_vrMenuPixels[48][440]==0x8017191D);
-            assert((g_vrMenuPixels[72][440]==0xFF989898)==(count>perPage));
-            assert((g_vrMenuPixels[356][440]==0xFF989898)==(count>perPage));
+            unsigned first=row/perPage*perPage;
+            assert((g_vrMenuPixels[56][560]==0xFF989898)==(first>0));
+            assert((g_vrMenuPixels[356][560]==0xFF989898)==(first+perPage<count));
         }
     }
-    memcpy(g_vrMenuFont['M'],glyphs[0],sizeof(glyphs[0]));memcpy(g_vrMenuFont['P'],glyphs[1],sizeof(glyphs[1]));
+    unsigned scenes=g_vrMenuSceneCount;
+    g_vrMenuPage=MENU_SCENES;g_vrMenuStage=1;g_vrMenuSceneCount=20;
+    for(unsigned row=0;row<20;row++) {
+        g_vrMenuRow=row;vrMenuCanvas();
+        assert((g_vrMenuPixels[56][560]==0xFF989898)==(row>=6));
+        assert((g_vrMenuPixels[356][560]==0xFF989898)==(row<18));
+    }
+    g_vrMenuSceneCount=scenes;
+    memcpy(g_vrMenuFont[1],glyphs[0],sizeof(glyphs[0]));memcpy(g_vrMenuFont[2],glyphs[1],sizeof(glyphs[1]));
     g_vrMenuPage=-1;g_vrMenuRow=g_vrMenuOpen=g_vrMenuPrevious=0;
 }
 static void check_footer(const char *help,const char *notice)
@@ -539,6 +548,6 @@ int main(void)
     do {if(!(found.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY)) {
         snprintf(file,sizeof(file),"%s\\%s",directory,found.cFileName);assert(DeleteFileA(file));
     }}while(FindNextFileA(search,&found));FindClose(search);assert(RemoveDirectoryA(directory));
-    puts("Settings menu: live values/shaders, restart staging, stick toggle, unchanged pause, paging, preview guards, reset defaults, page counters, acknowledged title return, saved native quit and save/backup/retry passed.");
+    puts("Settings menu: live values/shaders, restart staging, stick toggle, unchanged pause, paging, preview guards, reset defaults, overflow arrows, acknowledged title return, saved native quit and save/backup/retry passed.");
     return 0;
 }
