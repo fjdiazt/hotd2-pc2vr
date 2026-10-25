@@ -460,7 +460,7 @@ The [shipped INI](HOTD2VR.ini) contains no overrides. Relative gun-model paths r
 
 `[bridge] skip_splash=1` starts at the title, skipping SEGA/Empire logos. Use `skip_splash=0` or `HOTD2VR.exe --show-splash` to restore them; `--skip-splash` enables the bypass. The internal `injector.exe` helper also accepts these flags with `--wait` and `--native-window`.
 
-Optional `[bridge] launchfix=1` bypasses the supported game's CD check in memory before startup. The launcher checks the original instruction signature, changes one branch displacement, restores memory protection and verifies the result. Unsupported code stops launch. The default is off; set it in `HOTD2VR.ini` beside the executables to enable. `Hod2.exe` stays unchanged; setting `launchfix=0` restores the original check on the next launch. Installed game data is still required.
+Release settings enable `[bridge] launchfix=1` to bypass the supported game's CD check in memory before startup. The injector checks the original instruction signature, changes one branch displacement, restores memory protection and verifies the result. Unsupported code stops launch. `Hod2.exe` stays unchanged; setting `launchfix=0` in `HOTD2VR.ini` restores the original check on the next launch. Installed game data is still required.
 
 The launcher validates the startup instruction and changes one byte while the process is suspended, preserving normal initialization. The bridge selects native 640×480 windowed mode, keeps the game rendering in the background, and accepts the known renderer-selection and quit-confirmation dialogs. Back retains its native action; quit confirmation is accepted whenever the game asks it. Other dialogs retain normal behavior.
 
