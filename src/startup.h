@@ -52,15 +52,21 @@ static int hotdFindGame(const wchar_t *viewer,const wchar_t *explicit_path,wchar
 
 static unsigned char *hotdReadFile(const wchar_t *path,size_t *length)
 {
-    FILE *file=_wfopen(path,L"rb");
-    if(!file)return NULL;
-    /* Both inputs are small; reject damaged or unrelated multi-gigabyte files. */
-    if(fseek(file,0,SEEK_END)) {fclose(file);return NULL;}
-    long n=ftell(file);
-    if(n<0 || n>32*1024*1024 || fseek(file,0,SEEK_SET)) {fclose(file);return NULL;}
-    unsigned char *data=malloc((size_t)n+1);
-    if(!data || fread(data,1,(size_t)n,file)!=(size_t)n) {free(data);fclose(file);return NULL;}
-    fclose(file);*length=(size_t)n;return data;
+    *length=0;
+    HANDLE file=CreateFileW(path,GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,NULL,OPEN_EXISTING,0,NULL);
+    if(file==INVALID_HANDLE_VALUE)return NULL;
+    LARGE_INTEGER size;DWORD count=0,error=0;unsigned char *data=NULL;
+    if(!GetFileSizeEx(file,&size))error=GetLastError();
+    else if(size.QuadPart<0 || size.QuadPart>32*1024*1024)error=ERROR_FILE_TOO_LARGE;
+    else {
+        data=malloc((size_t)size.QuadPart+1);
+        if(!data)error=ERROR_NOT_ENOUGH_MEMORY;
+        else if(!ReadFile(file,data,(DWORD)size.QuadPart,&count,NULL))error=GetLastError();
+        else if(count!=(DWORD)size.QuadPart)error=ERROR_HANDLE_EOF;
+    }
+    CloseHandle(file);
+    if(error){free(data);SetLastError(error);return NULL;}
+    *length=count;return data;
 }
 
 static int hotdGameHash(const unsigned char *data,size_t length,char hex[65])
@@ -172,51 +178,152 @@ static int hotdMenuGlyph(const unsigned char *exe,size_t exe_length,const unsign
     return 1;
 }
 
-static int hotdDecodeFont(const unsigned char *exe,size_t exe_length,const unsigned char *source,size_t size,unsigned char *font)
+static int hotdDecodeFont(const unsigned char *exe,size_t exe_length,const unsigned char *pixels,unsigned char *font)
 {
-    unsigned char pixels[64512];
-    if(!hotdUnpackMenuTexture(source,size,pixels,sizeof(pixels)))return 0;
     memset(font,0,HOTD_FONT_SIZE);memcpy(font,HOTD_FONT_MAGIC,4);
     const char *characters="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     for(const char *c=characters;*c;c++) {
         uint32_t glyph;
         if(!hotdFontValue(exe,exe_length,0x56AED0+(unsigned)*c*2,2,&glyph) ||
-           !hotdMenuGlyph(exe,exe_length,pixels,sizeof(pixels),glyph,0x15E,font+4+(unsigned)*c*4096))return 0;
+           !hotdMenuGlyph(exe,exe_length,pixels,64512,glyph,0x15E,font+4+(unsigned)*c*4096))return 0;
     }
     return 1;
 }
 
-static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsigned char *exe,size_t exe_length)
+typedef struct {const char *reason,*action;wchar_t path[MAX_PATH];DWORD code;} HotdFontError;
+
+static void hotdFontError(HotdFontError *error,const wchar_t *path,const char *reason,const char *action,DWORD code)
 {
-    wchar_t output[MAX_PATH],texture[MAX_PATH],temporary[MAX_PATH];size_t length;
-    if(!hotdSibling(output,viewer,L"menu-font.rgba") || !hotdSibling(texture,game,L"tex\\scr_opt_moji05.bin"))return 0;
-    unsigned char *data=hotdReadFile(output,&length);
-    int valid=data && length==HOTD_FONT_SIZE && !memcmp(data,HOTD_FONT_MAGIC,4);free(data);
-    if(valid)return 1;
-    data=hotdReadFile(texture,&length);
-    unsigned char *font=malloc(HOTD_FONT_SIZE);
-    valid=data && font && hotdDecodeFont(exe,exe_length,data,length,font);free(data);
-    if(valid) {
-        unsigned char *pixels=malloc(811008);
-        data=hotdSibling(texture,game,L"tex\\scr_item.bin")?hotdReadFile(texture,&length):NULL;
-        valid=data && pixels && hotdUnpackMenuTexture(data,length,pixels,811008) &&
-            hotdMenuGlyph(exe,exe_length,pixels,811008,0x5F7,0x156,font+4+4096);
-        free(data);free(pixels);
-        if(valid)for(unsigned row=0;row<32;row++)
-            memcpy(font+4+2*4096+row*128,font+4+4096+(31-row)*128,128);
+    error->reason=reason;error->action=action;error->code=code;
+    wcsncpy(error->path,path,MAX_PATH-1);error->path[MAX_PATH-1]=0;
+}
+
+static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsigned char *exe,size_t exe_length,HotdFontError *error)
+{
+    wchar_t output[MAX_PATH],texture[MAX_PATH],temporary[MAX_PATH]={0};size_t length;
+    unsigned char *data=NULL,*font=NULL,*pixels=NULL;int valid=0;
+    const char *write_help="Check free disk space and allow writes to the mod folder, or move the game/mod to a writable folder.";
+    if(!hotdSibling(output,viewer,L"menu-font.rgba")) {
+        hotdFontError(error,viewer,"Mod folder path is too long","Move the game/mod to a shorter folder path.",ERROR_FILENAME_EXCED_RANGE);return 0;
     }
-    if(valid) {
-        wchar_t directory[MAX_PATH];wcscpy(directory,output);*wcsrchr(directory,L'\\')=0;
-        valid=GetTempFileNameW(directory,L"h2f",0,temporary)!=0;
-        if(valid) {
-            FILE *file=_wfopen(temporary,L"wb");
-            valid=file!=NULL;
-            if(file) {valid=fwrite(font,1,HOTD_FONT_SIZE,file)==HOTD_FONT_SIZE;if(fclose(file))valid=0;}
-            if(valid)valid=MoveFileExW(temporary,output,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)!=0;
-            if(!valid)DeleteFileW(temporary);
+    data=hotdReadFile(output,&length);
+    valid=data && length==HOTD_FONT_SIZE && !memcmp(data,HOTD_FONT_MAGIC,4);free(data);data=NULL;
+    if(valid)return 1;
+    font=malloc(HOTD_FONT_SIZE);pixels=malloc(811008);
+    if(!font || !pixels) {
+        hotdFontError(error,output,"Not enough memory to extract the settings font","Close other applications and retry.",ERROR_NOT_ENOUGH_MEMORY);goto done;
+    }
+    const wchar_t *names[]={L"tex\\scr_opt_moji05.bin",L"tex\\scr_item.bin"};
+    for(unsigned i=0;i<2;i++) {
+        if(!hotdSibling(texture,game,names[i])) {
+            hotdFontError(error,game,"Game texture path is too long","Move the game/mod to a shorter folder path.",ERROR_FILENAME_EXCED_RANGE);goto done;
+        }
+        data=hotdReadFile(texture,&length);
+        if(!data) {
+            DWORD code=GetLastError();
+            int missing=code==ERROR_FILE_NOT_FOUND || code==ERROR_PATH_NOT_FOUND;
+            hotdFontError(error,texture,missing?"Required game texture is missing":"Cannot read required game texture",
+                missing?"Restore the complete game files. Keep the tex folder beside Hod2.exe; use the installed game folder, not the CD root.":
+                "Check read access to this game file and close applications locking it.",code);goto done;
+        }
+        if(!hotdUnpackMenuTexture(data,length,pixels,i?811008:64512)) {
+            hotdFontError(error,texture,i?"Cannot decompress menu arrow texture":"Cannot decompress menu font texture",
+                "Restore this texture from the original game files. It is damaged or uses an unsupported format.",0);goto done;
+        }
+        free(data);data=NULL;
+        if(!(i?hotdMenuGlyph(exe,exe_length,pixels,811008,0x5F7,0x156,font+4+4096):hotdDecodeFont(exe,exe_length,pixels,font))) {
+            hotdFontError(error,game,i?"Unsupported menu arrow tables in Hod2.exe":"Unsupported menu font tables in Hod2.exe",
+                "Send the startup report with your game version so this executable layout can be checked.",0);goto done;
         }
     }
-    free(font);return valid;
+    for(unsigned row=0;row<32;row++)memcpy(font+4+2*4096+row*128,font+4+4096+(31-row)*128,128);
+    wchar_t directory[MAX_PATH];wcscpy(directory,output);*wcsrchr(directory,L'\\')=0;
+    if(!GetTempFileNameW(directory,L"h2f",0,temporary)) {
+        hotdFontError(error,output,"Cannot create settings font in the mod folder",write_help,GetLastError());goto done;
+    }
+    HANDLE file=CreateFileW(temporary,GENERIC_WRITE,0,NULL,OPEN_EXISTING,0,NULL);
+    if(file==INVALID_HANDLE_VALUE) {
+        hotdFontError(error,output,"Cannot open temporary settings font for writing",write_help,GetLastError());goto done;
+    }
+    DWORD written=0,code=0;
+    if(!WriteFile(file,font,HOTD_FONT_SIZE,&written,NULL))code=GetLastError();
+    else if(written!=HOTD_FONT_SIZE)code=ERROR_WRITE_FAULT;
+    else if(!FlushFileBuffers(file))code=GetLastError();
+    if(!CloseHandle(file) && !code)code=GetLastError();
+    if(code) {hotdFontError(error,output,"Cannot write settings font",write_help,code);goto done;}
+    if(!MoveFileExW(temporary,output,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) {
+        hotdFontError(error,output,"Cannot replace menu-font.rgba",
+            "Allow writes to the mod folder and remove any read-only flag from menu-font.rgba, or move the game/mod to a writable folder.",GetLastError());goto done;
+    }
+    valid=1;
+done:
+    free(data);free(font);free(pixels);
+    if(!valid && temporary[0])DeleteFileW(temporary);
+    return valid;
+}
+
+static void hotdStartupUtf8(char *out,int capacity,const wchar_t *text)
+{
+    if(!WideCharToMultiByte(CP_UTF8,0,text,-1,out,capacity,NULL,NULL))strcpy(out,"<path conversion failed>");
+}
+
+static void hotdReportFile(FILE *report,const char *label,const wchar_t *path)
+{
+    char name[MAX_PATH*4],hash[65];size_t size=0;
+    hotdStartupUtf8(name,sizeof(name),path);
+    unsigned char *data=hotdReadFile(path,&size);DWORD code=data?0:GetLastError();
+    fprintf(report,"\n%s: %s\n",label,name);
+    if(data) {
+        fprintf(report,"Bytes: %zu\nSHA256: %s\n",size,hotdGameHash(data,size,hash)?hash:"unavailable");
+        fprintf(report,"Attributes: 0x%08lX\n",(unsigned long)GetFileAttributesW(path));
+    }else fprintf(report,"Unavailable: Windows error %lu\n",(unsigned long)code);
+    free(data);
+}
+
+static int hotdWriteFontReport(const wchar_t *path,const HotdFontError *error,const char *windows_error,
+    const wchar_t *game,const wchar_t *viewer,const char *hash)
+{
+    FILE *report=_wfopen(path,L"wb");
+    if(!report)return 0;
+    SYSTEMTIME utc;GetSystemTime(&utc);
+    char failed[MAX_PATH*4];hotdStartupUtf8(failed,sizeof(failed),error->path);
+    fprintf(report,"HOTD2 PC2VR startup report\nBuild: %s %s (%u-bit)\nUTC: %04u-%02u-%02u %02u:%02u:%02u\n",
+        __DATE__,__TIME__,(unsigned)(sizeof(void *)*8),utc.wYear,utc.wMonth,utc.wDay,utc.wHour,utc.wMinute,utc.wSecond);
+    fprintf(report,"\nFailure: %s\nFile: %s\n%s\nRecovery: %s\nGame SHA256 at startup: %s\n",
+        error->reason,failed,windows_error,error->action,hash[0]?hash:"unavailable");
+    hotdReportFile(report,"Game EXE",game);hotdReportFile(report,"Mod EXE",viewer);
+    const wchar_t *names[]={L"tex\\scr_opt_moji05.bin",L"tex\\scr_item.bin"};wchar_t input[MAX_PATH];
+    for(unsigned i=0;i<2;i++)if(hotdSibling(input,game,names[i]))hotdReportFile(report,"Game texture",input);
+    if(hotdSibling(input,viewer,L"menu-font.rgba"))hotdReportFile(report,"Font cache",input);
+    int ok=!ferror(report);if(fclose(report))ok=0;
+    return ok;
+}
+
+static const char *hotdFontFailure(const HotdFontError *error,const wchar_t *game,const wchar_t *viewer,const char *hash)
+{
+    static char message[4096];char failed[MAX_PATH*4],windows_error[1200]={0};
+    hotdStartupUtf8(failed,sizeof(failed),error->path);
+    if(error->code) {
+        wchar_t native[256]={0};char text[1024];
+        FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,NULL,error->code,0,native,256,NULL);
+        native[wcscspn(native,L"\r\n")]=0;hotdStartupUtf8(text,sizeof(text),native);
+        snprintf(windows_error,sizeof(windows_error),"Windows error %lu: %s",(unsigned long)error->code,text);
+    }
+    snprintf(message,sizeof(message),"Menu asset extraction failed: %s\nFile: %s\n%s%sWhat to do: %s\n",
+        error->reason,failed,windows_error,windows_error[0]?"\n":"",error->action);
+    wchar_t report[MAX_PATH];int saved=hotdSibling(report,viewer,L"HOTD2VR-startup.log") &&
+        hotdWriteFontReport(report,error,windows_error,game,viewer,hash);
+    if(!saved) {
+        wchar_t temporary[MAX_PATH];DWORD n=GetTempPathW(MAX_PATH,temporary);
+        if(n && n<MAX_PATH && swprintf(report,MAX_PATH,L"%lsHOTD2VR-startup-%lu.log",temporary,GetCurrentProcessId())>0)
+            saved=hotdWriteFontReport(report,error,windows_error,game,viewer,hash);
+    }
+    size_t used=strlen(message);
+    if(saved) {
+        char name[MAX_PATH*4];hotdStartupUtf8(name,sizeof(name),report);
+        snprintf(message+used,sizeof(message)-used,"Startup report: %s\nSend this file when reporting the issue.",name);
+    }else snprintf(message+used,sizeof(message)-used,"Could not save a startup report. Copy this full message and include your mod version and game folder path.");
+    return message;
 }
 
 static int hotdStartGame(const wchar_t *viewer,const wchar_t *game,const wchar_t *options)
@@ -245,8 +352,9 @@ static const char *hotdPrepareGame(const wchar_t *viewer,const wchar_t *explicit
     char hash[65];
     if(!hotdGameHash(exe,length,hash) || strcmp(hash,HOTD_GAME_SHA256))
         fprintf(stderr,"Warning: unrecognized HOTD2 executable SHA256; continuing with unverified compatibility.\nSHA256: %s\nInclude this SHA256 when reporting issues.\n",hash[0]?hash:"unavailable");
-    int ready=!font || hotdEnsureFont(game,viewer,exe,length);free(exe);
-    if(!ready)return "Menu asset extraction failed. Check tex/scr_opt_moji05.bin, tex/scr_item.bin and write access to the mod folder.";
+    HotdFontError error;
+    int ready=!font || hotdEnsureFont(game,viewer,exe,length,&error);free(exe);
+    if(!ready)return hotdFontFailure(&error,game,viewer,hash);
     if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check injector.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";
     return NULL;
 }

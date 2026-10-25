@@ -153,6 +153,7 @@ To back up progress, copy `HOTD2VR.checkpoint.ini` (Arcade) and `HOTD2VR.origina
 
 - **Unrecognized executable:** different game versions can attempt startup. If yours has issues, report the game version, SHA256 printed in the warning, and symptoms. See the [tested executable](docs/technical-reference.md#requirements).
 - **Game does not start or reports a bridge mismatch:** close the game and viewer, then run `start.bat`. Keep the files from the same mod release together.
+- **Menu asset extraction fails:** follow the error's file path and recovery instructions. Include the startup report shown in the error when reporting the issue.
 - **Headset unavailable:** check that your PC VR software is running, the headset is connected, and its OpenXR runtime is active.
 - **Unexpected settings:** check `vr\HOTD2VR.ini`, or use **Reset defaults** in VR Settings.
 - **Missing scenery when looking around:** some areas were never drawn by the original game. **Expand world** can reveal more loaded scenery, but may introduce glitches or reduce performance.

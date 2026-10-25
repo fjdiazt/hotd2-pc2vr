@@ -14,7 +14,7 @@
 #define HOTD_PLAYER_HUD_SHIFT 9
 #define HOTD_PLAYER_HUD_MASK 0xE00u /* 1/2 ammo, 3/4 lives, 5/6 credits/join, P1/P2. */
 #define HOTD_PLAYER_HUD_GROUPS 6
-#define HOTD_GFILE 0x100u /* Address metadata; native U/V modes use only bits 0..3. */
+#define HOTD_GFILE 0x100u /* Books/results presentation; native U/V modes use only bits 0..3. */
 
 static inline uint32_t hotd_address(unsigned u,unsigned v)
 {

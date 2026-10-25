@@ -105,18 +105,21 @@ static void test_queue_bounds(void)
 }
 static void test_gfile_capture(BYTE *record,DWORD *task)
 {
-    const unsigned handlers[]={0x37AC0,0x24900};
-    const BYTE signatures[2][16]={
+    const unsigned handlers[]={0x37AC0,0x24900,0x34EF0};
+    const BYTE signatures[3][16]={
         {0x8B,0x44,0x24,0x04,0x83,0xEC,0x4C,0x53,0x8B,0x98,0x0C,0x13,0,0,0x55,0x8B},
-        {0x83,0xEC,0x44,0x53,0x55,0x8B,0x6C,0x24,0x50,0x33,0xDB,0x56,0x57,0x66,0x8B,0x8D}};
-    assert(!native_gfile_profile());
-    for(unsigned h=0;h<2;h++)memcpy(game_base+handlers[h],signatures[h],16);
-    assert(native_gfile_profile());
-    for(unsigned h=0;h<2;h++)for(unsigned b=0;b<16;b++) {
-        game_base[handlers[h]+b]^=1;assert(!native_gfile_profile());game_base[handlers[h]+b]^=1;
+        {0x83,0xEC,0x44,0x53,0x55,0x8B,0x6C,0x24,0x50,0x33,0xDB,0x56,0x57,0x66,0x8B,0x8D},
+        {0x0F,0xBF,0x05,0x08,0x1A,0x9A,0x00,0x83,0xEC,0x08,0x66,0x8B,0x0C,0x45,0xC0,0x89}};
+    assert(!native_gfile_profile() && !native_results_profile());
+    for(unsigned h=0;h<3;h++)memcpy(game_base+handlers[h],signatures[h],16);
+    assert(native_gfile_profile() && native_results_profile());
+    for(unsigned h=0;h<3;h++)for(unsigned b=0;b<16;b++) {
+        game_base[handlers[h]+b]^=1;
+        assert(native_gfile_profile()==(h==2) && native_results_profile()==(h!=2));
+        game_base[handlers[h]+b]^=1;
     }
-    gfile_ready=1;sphere_result=0;deferred_result=1;
-    for(unsigned h=0;h<2;h++)for(unsigned alt=0;alt<2;alt++) {
+    gfile_ready=results_ready=1;sphere_result=0;deferred_result=1;
+    for(unsigned h=0;h<3;h++)for(unsigned alt=0;alt<2;alt++) {
         BYTE alias[HOTD_MODEL_RECORD_SIZE];reset_capture(HOTD_RENDER_NATIVE_MESH_CULLING);
         task[0]=(DWORD)(ULONG_PTR)(game_base+handlers[h]);
         if(alt)native_submit_alt(record,.5f);else native_submit(record);
@@ -138,10 +141,18 @@ static void test_gfile_capture(BYTE *record,DWORD *task)
     native_model(copy,1);assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
     reset_capture(0);gfile_ready=0;native_submit(record);
     assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
-    gfile_ready=1;task[0]=0x1234;reset_capture(0);native_submit(record);
+    task[0]=(DWORD)(ULONG_PTR)(game_base+handlers[2]);
+    reset_capture(0);native_submit(record);assert(vertices[0].address&HOTD_GFILE);
+    results_ready=0;reset_capture(0);native_submit(record);
+    assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
+    gfile_ready=1;reset_capture(0);native_submit(record);
+    assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
+    results_ready=1;task[0]=(DWORD)(ULONG_PTR)(game_base+0x35760);reset_capture(0);native_submit(record);
+    assert(!(vertices[0].address&HOTD_GFILE) && (vertices[0].style&HOTD_WORLD) && !gfile_records.count);
+    task[0]=0x1234;reset_capture(0);native_submit(record);
     assert(!(vertices[0].address&HOTD_GFILE) && !gfile_records.count);
     task[0]=(DWORD)(ULONG_PTR)(game_base+handlers[0]);native_submit(record);assert(gfile_records.count==1);
-    publish_frame();assert(!gfile_records.count);gfile_ready=0;
+    publish_frame();assert(!gfile_records.count);gfile_ready=results_ready=0;
 }
 int main(void)
 {
@@ -275,5 +286,5 @@ int main(void)
     shot_events[0]=17;shot_events[1]=23;publish_frame();
     assert(frame->shot_events[0]==17 && frame->shot_events[1]==23);
     VirtualFree(frame,0,MEM_RELEASE);VirtualFree(game_base,0,MEM_RELEASE);
-    puts("Capture visibility, G's File immediate/deferred provenance, signature and queue-bound checks passed.");return 0;
+    puts("Capture visibility, G's File/results immediate/deferred provenance, signature and queue-bound checks passed.");return 0;
 }

@@ -13,7 +13,7 @@ DRIVER = BUILD / 'test_native_startup.exe'
 
 
 def run(*args):
-    return subprocess.run([str(DRIVER), *map(str, args)], capture_output=True, text=True,
+    return subprocess.run([str(DRIVER), *map(str, args)], capture_output=True, text=True, encoding='utf-8',
                           timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
 
 
@@ -55,6 +55,123 @@ class NativeFontTest(test_menu_font.MenuFontTest):
         self.assertIn('unverified compatibility', result.stderr)
         self.assertIn('SHA256: ' + self.identity, result.stderr)
         self.assertEqual(self.output.read_bytes()[:4], self.magic)
+
+    def prepare_font(self):
+        self.output.parent.mkdir(parents=True, exist_ok=True)
+        return run('prepare-font', self.output.parent / 'HOTD2VR.exe', self.game)
+
+    def test_missing_texture_reports_exact_path_and_saves_context(self):
+        self.texture.unlink()
+        result = self.prepare_font()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Required game texture is missing', result.stderr)
+        self.assertIn(str(self.texture), result.stderr)
+        self.assertIn('Windows error 2', result.stderr)
+        report = self.output.parent / 'HOTD2VR-startup.log'
+        self.assertIn(str(report), result.stderr)
+        text = report.read_text(encoding='utf-8')
+        self.assertIn(str(self.game), text)
+        self.assertIn(self.identity, text)
+        self.assertIn(hashlib.sha256(self.items_texture.read_bytes()).hexdigest().upper(), text)
+        self.assertIn('Build:', text)
+        self.assertFalse(self.output.exists())
+
+    def test_corrupt_textures_identify_decode_step(self):
+        for texture, expected in ((self.texture, 'Cannot decompress menu font texture'),
+                                  (self.items_texture, 'Cannot decompress menu arrow texture')):
+            original = texture.read_bytes()
+            with self.subTest(texture=texture):
+                texture.write_bytes(b'corrupt')
+                result = self.prepare_font()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(expected, result.stderr)
+                self.assertIn(str(texture), result.stderr)
+                self.assertIn(hashlib.sha256(b'corrupt').hexdigest().upper(),
+                              (self.output.parent / 'HOTD2VR-startup.log').read_text(encoding='utf-8'))
+                self.assertFalse(self.output.exists())
+            texture.write_bytes(original)
+
+    def test_missing_arrow_texture_identified(self):
+        self.items_texture.unlink()
+        result = self.prepare_font()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Required game texture is missing', result.stderr)
+        self.assertIn(str(self.items_texture), result.stderr)
+
+    def test_unreadable_texture_identified_as_read_failure(self):
+        self.texture.unlink()
+        self.texture.mkdir()
+        result = self.prepare_font()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Cannot read required game texture', result.stderr)
+        self.assertIn('Windows error 5', result.stderr)
+        self.assertIn(str(self.texture), result.stderr)
+
+    def test_font_tables_identified_separately_from_compression(self):
+        original = self.game.read_bytes()
+        exe = bytearray(original)
+        exe[60:64] = b'\xff' * 4
+        self.game.write_bytes(exe)
+        result = self.prepare_font()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Unsupported menu font tables in Hod2.exe', result.stderr)
+        self.assertIn(str(self.game), result.stderr)
+        self.assertFalse(self.output.exists())
+
+    def test_readonly_cache_preserved_and_write_error_reported(self):
+        import stat
+        self.output.parent.mkdir()
+        self.output.write_bytes(b'previous font')
+        self.output.chmod(stat.S_IREAD)
+        try:
+            result = self.prepare_font()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Cannot replace menu-font.rgba', result.stderr)
+            self.assertIn('Windows error 5', result.stderr)
+            self.assertIn(str(self.output), result.stderr)
+            self.assertIn('read-only', result.stderr)
+            self.assertEqual(self.output.read_bytes(), b'previous font')
+            self.assertEqual(set(p.name for p in self.output.parent.iterdir()),
+                             {'menu-font.rgba', 'HOTD2VR-startup.log'})
+        finally:
+            self.output.chmod(stat.S_IWRITE)
+
+    def test_report_falls_back_to_temp_when_mod_report_blocked(self):
+        self.output.parent.mkdir()
+        (self.output.parent / 'HOTD2VR-startup.log').mkdir()
+        self.texture.unlink()
+        result = self.prepare_font()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Startup report: ', result.stderr)
+        report = Path(result.stderr.split('Startup report: ', 1)[1].splitlines()[0])
+        self.addCleanup(report.unlink, missing_ok=True)
+        self.assertEqual(report.parent.resolve(), Path(tempfile.gettempdir()).resolve())
+        self.assertIn(str(self.texture), report.read_text(encoding='utf-8'))
+
+    def test_failure_stays_visible_when_report_locations_unwritable(self):
+        self.output.parent.mkdir()
+        (self.output.parent / 'HOTD2VR-startup.log').mkdir()
+        self.texture.unlink()
+        unavailable = str(self.root / 'unavailable temp')
+        result = subprocess.run([str(DRIVER), 'prepare-font', str(self.output.parent / 'HOTD2VR.exe'), str(self.game)],
+                                env=dict(os.environ, TEMP=unavailable, TMP=unavailable), capture_output=True,
+                                text=True, encoding='utf-8', timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Required game texture is missing', result.stderr)
+        self.assertIn(str(self.texture), result.stderr)
+        self.assertIn('Could not save a startup report. Copy this full message', result.stderr)
+
+    def test_unicode_paths_preserved_in_error_and_report(self):
+        import shutil
+        game = self.root / 'game \u00e9\u65e5\u672c' / 'Hod2.exe'
+        game.parent.mkdir()
+        shutil.copyfile(self.game, game)
+        self.output.parent.mkdir()
+        result = run('prepare-font', self.output.parent / 'HOTD2VR.exe', game)
+        self.assertNotEqual(result.returncode, 0)
+        expected = str(game.parent / 'tex/scr_opt_moji05.bin')
+        self.assertIn(expected, result.stderr)
+        self.assertIn(expected, (self.output.parent / 'HOTD2VR-startup.log').read_text(encoding='utf-8'))
 
     def test_corruption_preserves_previous_font(self):
         self.output.parent.mkdir()

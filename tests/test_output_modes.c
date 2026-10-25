@@ -44,7 +44,7 @@ static const char *output_test_prepare(const wchar_t *viewer,const wchar_t *game
     assert(launch);wcscpy(output_test_launch_options,options);return "fixture stopped before game launch";
 }
 #define hotdPrepareGame output_test_prepare
-#define MessageBoxA(a,b,c,d) 0
+#define MessageBoxW(a,b,c,d) 0
 static char output_test_share[96];
 static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
 {(void)name;return OpenFileMappingA(access,inherit,output_test_share);}
@@ -54,7 +54,7 @@ static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
 #undef main
 #undef OpenFileMappingA
 #undef hotdPrepareGame
-#undef MessageBoxA
+#undef MessageBoxW
 
 static void test_launch_focus(void)
 {

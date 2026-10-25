@@ -68,7 +68,7 @@ static DWORD capture_visibility_planes;
 static HotdStageRecords stage_records;
 static HotdStageRecords gfile_records;
 static const BYTE *gfile_immediate;
-static int gfile_ready,capture_gfile;
+static int gfile_ready,results_ready,capture_gfile;
 static HotdSpriteRecords crosshair_records,player_hud_records[HOTD_PLAYER_HUD_GROUPS];
 static unsigned player_hud_owner,capture_player_hud;
 static int player_hud_ready;
@@ -1288,12 +1288,18 @@ static int native_gfile_profile(void)
     static const BYTE boss[]={0x83,0xEC,0x44,0x53,0x55,0x8B,0x6C,0x24,0x50,0x33,0xDB,0x56,0x57,0x66,0x8B,0x8D};
     return !memcmp(game_base+0x37AC0,story,sizeof(story)) && !memcmp(game_base+0x24900,boss,sizeof(boss));
 }
+static int native_results_profile(void)
+{
+    static const BYTE results[]={0x0F,0xBF,0x05,0x08,0x1A,0x9A,0x00,0x83,0xEC,0x08,0x66,0x8B,0x0C,0x45,0xC0,0x89};
+    return !memcmp(game_base+0x34EF0,results,sizeof(results));
+}
 static int native_gfile_task(void)
 {
-    if(!gfile_ready)return 0;
+    if(!gfile_ready && !results_ready)return 0;
     const DWORD *task=*(const DWORD **)(game_base+0x3DF8B0);
-    return task && (task[0]==(DWORD)(ULONG_PTR)(game_base+0x37AC0) ||
-        task[0]==(DWORD)(ULONG_PTR)(game_base+0x24900));
+    return task && ((gfile_ready && (task[0]==(DWORD)(ULONG_PTR)(game_base+0x37AC0) ||
+        task[0]==(DWORD)(ULONG_PTR)(game_base+0x24900))) ||
+        (results_ready && task[0]==(DWORD)(ULONG_PTR)(game_base+0x34EF0)));
 }
 static int native_stage_submission(const BYTE *record)
 {
@@ -1907,6 +1913,8 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     logline("native capture visibility hooks: %s",install_capture_visibility()?"ready":"unavailable; native culling retained");
     gfile_ready=visibility_hooks_ready && native_gfile_profile();
     logline("G's File presentation capture: %s",gfile_ready?"ready":"unavailable; native depth retained");
+    results_ready=visibility_hooks_ready && native_results_profile();
+    logline("stage results presentation capture: %s",results_ready?"ready":"unavailable; native depth retained");
     logline("native crosshair capture hooks: %s",install_crosshair_capture(crosshair_profile_valid)?"ready":"unavailable; native crosshairs retained");
     player_hud_ready=install_player_hud();
     logline("player HUD provenance: %s",player_hud_ready?"ready":"unavailable; original HUD positions retained");

@@ -18,7 +18,8 @@ int wmain(int argc,wchar_t **argv)
         }
         if(!hotdGameHash(exe,length,actual) || strcmp(actual,hash))
             fprintf(stderr,"Warning: unrecognized HOTD2 executable SHA256\nSHA256: %s\n",actual[0]?actual:"unavailable");
-        int ok=hotdEnsureFont(argv[2],argv[3],exe,length);free(exe);
+        HotdFontError error;
+        int ok=hotdEnsureFont(argv[2],argv[3],exe,length,&error);free(exe);
         if(!ok)fputs("Unexpected decompressed font size or invalid font data\n",stderr);
         return ok?0:1;
     }

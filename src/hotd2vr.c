@@ -461,7 +461,7 @@ static int pullFrame(void)
                 g_unitsPerMetre=units/g_cfgWorldScale;
                 for(unsigned v=0;v<n;v++) {
                     float scale;
-                    /* Native book animation is authored around a one-unit camera plane. */
+                    /* Native books and stage results use a one-unit camera plane. */
                     if(g_local[v].address&HOTD_GFILE)scale=g_unitsPerMetre*HOTD_GFILE_DISTANCE_M;
                     else if(v>=ovStart && g_cfgWorldScale!=1.0f)scale=g_unitsPerMetre/units;
                     else continue;
@@ -3948,9 +3948,13 @@ int main(int argc, char **argv)
         swprintf(launchOptions+wcslen(launchOptions),256-wcslen(launchOptions),L" --game-mode %ls",gameMode?L"original":L"arcade");
         const char *error=hotdPrepareGame(viewerPath,gamePath[0]?gamePath:NULL,launchOptions,!g_frame,!fontReady);
         if(error) {
+            SetConsoleOutputCP(CP_UTF8);
             note("%s\n",error);
             DWORD consolePids[2];
-            if(GetConsoleProcessList(consolePids,2)==1)MessageBoxA(NULL,error,"HOTD2 PC2VR",MB_OK|MB_ICONERROR);
+            if(GetConsoleProcessList(consolePids,2)==1) {
+                wchar_t text[4096];
+                if(MultiByteToWideChar(CP_UTF8,0,error,-1,text,4096))MessageBoxW(NULL,text,L"HOTD2 PC2VR",MB_OK|MB_ICONERROR);
+            }
             return 1;
         }
         if(!fontReady)fontReady=vrMenuLoadFont();

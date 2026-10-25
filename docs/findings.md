@@ -666,3 +666,17 @@ retained the two-item limit. Evidence is in
 `build/original-item-input-candidate/` (native screenshots and input JSON).
 Config and checkpoint bytes remained unchanged; the probe closed only its own
 game. Headset acceptance remains pending. Training navigation needed no change.
+
+## Stage-end results presentation depth
+
+The native stage-clear task at `0x434EF0` draws rescued-person labels, score and hit-rate digits as view-space 3D models at Z = -1 (`0x435118`, with score/rate helpers at `0x4362E0`/`0x436620`). They bypass the regular two-metre HUD canvas, causing the same excessive proximity as the boss briefing book.
+
+The bridge independently validates the stage-clear task's first 16 instruction bytes, then reuses `HOTD_GFILE` presentation provenance and its existing one-metre viewer placement. Immediate, deferred and alternate submissions retain their ownership. Layout, materials, projected size and native depth testing/writing remain intact; rescued civilian actors (`0x435760`) and backdrop sprites are not reclassified. No protocol, configuration or native-game draw change is needed. An unsupported results signature retains native placement without disabling the book correction.
+
+The capture regression fails against the original bridge at the results-tag assertion (`build-artifacts/stage-results-before.log`). Coverage includes independent signature corruption/fallback, both submission variants, deferred copies and aliases, rescued actor exclusion, book behavior and frame cleanup. Viewer coverage includes flat results glyphs and animated book geometry at 1/1.25/2x world scales, preserving projection, source snapshots, depth state, regular HUD placement and aim exclusion. Full build/offline results are recorded in `build-artifacts/stage-results-build.log`. No boss fight was automated and no one-shot cheat was added. Headset comfort, stage coverage and overlap remain unverified.
+
+## First-run menu font diagnostics
+
+The former generic extraction error combined missing/unreadable textures, decompression failures, unsupported EXE tables and output-write failures. First-run setup now returns the failing operation/path, Windows error when applicable, and a recovery instruction. A UTF-8 startup report records build time/architecture, game/viewer identities, input texture sizes/hashes and cache status. It is written beside the viewer, falling back to a process-specific file in `%TEMP%`; both write locations failing leaves the full error visible. No asset validation is bypassed, and failed font generation/replacement preserves the previous cache.
+
+Full build/offline checks and 35 Python checks (27 native startup, six legacy extractor, two launch CLI) pass. Regressions cover missing/read-denied/corrupt textures, EXE tables, read-only cache preservation, both report fallbacks and Unicode paths; the new diagnostics tests fail against the original implementation. The actual x64 console launcher was checked against the CD root without starting game code, and its dialog was visually inspected. Fresh extraction from the installed game's files succeeds. Evidence is under `build-artifacts/startup-diagnostics-*.log` and `build-artifacts/startup-diagnostics-demo-20261025-204022/`. No game/VR session was launched; the reporting user's underlying cause remains unknown.

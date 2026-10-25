@@ -22,7 +22,7 @@ Build scripts and developer tests require a source checkout.
 - Right controller as P1, left controller as P2; paired akimbo or independent joining.
 - Physical reload gesture, recoil and haptics.
 - Floating menus and HUD, with separate laser and crosshair switches.
-- G's File boss briefings at approximately one metre, preserving their animated 3D pages and native depth testing.
+- G's File boss briefings and stage-end results text at approximately one metre, preserving projected layout, animated 3D pages and native depth testing.
 - Configurable world size, picture settings and optional cheats.
 - Startup-logo bypass and native windowed startup through memory-only changes.
 
@@ -49,6 +49,8 @@ An unrecognized SHA256 prints a warning with the executable's actual SHA256 and 
 Follow [How to play](../README.md#how-to-play) for installation. Each release ZIP contains one `vr` folder with the matching executables, bridge, default settings, gun assets, x64 OpenXR loader, documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
 
 `HOTD2VR.exe` validates the game and extracts the settings font on first run. No scripts are needed to play. Keep the packaged runtime files together.
+
+Font extraction failures identify the failing file and operation, include the Windows error when applicable, and suggest a recovery step. `HOTD2VR-startup.log` is saved beside the viewer; if that location cannot be written, a process-specific report is saved in `%TEMP%`. The error displays its exact path. Reports contain build time/architecture, game and viewer paths, SHA256 hashes, texture sizes/hashes and font-cache status. If neither location can be written, the error asks the user to copy the full message. Existing font files remain intact when extraction or replacement fails.
 
 Game discovery starts beside the launcher and checks each parent folder for `Hod2.exe`, choosing the nearest copy. It does not depend on the terminal's current folder. An unrecognized hash still uses that nearest copy, without falling back to another installation.
 
