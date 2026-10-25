@@ -27,7 +27,7 @@ class LaunchOptionsTest(unittest.TestCase):
     def test_output_flags_reach_both_bridge_and_service_process(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="hotd2-launch-") as temporary:
-            fixture = Path(temporary)
+            fixture = Path(temporary).resolve()  # GitHub's TEMP can use an 8.3 alias.
             build = fixture / "build"
             build.mkdir()
             game = fixture / "game & file [1].exe"
