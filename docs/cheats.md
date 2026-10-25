@@ -1,6 +1,6 @@
 # Native cheat implementation and checks
 
-These addresses apply to the executable hash documented in the README. Unsupported signatures leave the affected feature unavailable.
+These addresses apply to the [supported executable](technical-reference.md#requirements). Unsupported signatures leave the affected feature unavailable.
 
 ## Invincibility
 

@@ -30,6 +30,7 @@ class PackageTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         for name in ('HOTD2VR.ini', 'README.md', 'LICENSE', 'start.bat',
                      'THIRD-PARTY.md',
+                     'docs/technical-reference.md', 'docs/culling-review.md',
                      'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md',
                      'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png'):
             target = self.root / name
@@ -84,6 +85,7 @@ class PackageTest(unittest.TestCase):
                                  (name.endswith('.bat') and name != 'start.bat') for name in files), files)
             self.assertEqual(files, {
                 'README.md', 'LICENSE', 'THIRD-PARTY.md', 'start.bat',
+                'docs/technical-reference.md', 'docs/culling-review.md',
                 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
                 'docs/findings.md', 'injector.exe', 'HOTD2Bridge.dll',
                 'HOTD2VR.exe', 'HOTD2VR.ini', 'openxr_loader.dll',

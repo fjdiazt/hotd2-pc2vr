@@ -20,6 +20,7 @@ foreach ($name in 'injector.exe', 'HOTD2Bridge.dll') { Assert-PeMachine (Join-Pa
 Assert-PeMachine (Join-Path $BuildDirectory 'HOTD2VR.exe') 0x8664
 $runtime = @('injector.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'gun.obj', 'gun.mtl', 'gun.bmp')
 $sources = @('README.md', 'LICENSE', 'THIRD-PARTY.md', 'start.bat',
+    'docs\technical-reference.md', 'docs\culling-review.md',
     'docs\vr-menu.md', 'docs\cheats.md', 'docs\pause.md', 'docs\findings.md',
     'docs\screenshots\gameplay-vr-animated.png', 'docs\screenshots\vr-settings.png')
 foreach ($name in $runtime) {
