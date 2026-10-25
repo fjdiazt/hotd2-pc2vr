@@ -9,7 +9,7 @@ Play the original Windows version of **The House of the Dead 2** in VR. Look aro
 You need your own installed Windows PC copy of the game, a PC VR headset, and motion controllers. The Remake and emulated versions are not supported.
 
 1. **Get the mod.** Download the Windows ZIP from [Releases](https://github.com/fjdiazt/hotd2-pc2vr/releases). If no ZIP is available, see [Build from source](#build-from-source).
-2. **Install.** Create a **`vr`** folder beside your game's **`Hod2.exe`**. Extract the ZIP's contents into `vr`.
+2. **Install.** Extract the ZIP into the folder containing your game's **`Hod2.exe`**. It includes a **`vr`** folder.
 3. **Connect your headset and controllers.** Start your usual PC VR software and make sure the headset is ready.
 4. **Start the mod.** Open `vr` and double-click **`start.bat`** to launch **`HOTD2VR.exe`**. It finds and starts the game automatically.
 5. **Start playing.** Put on the headset, face forward, choose **Arcade or Original mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
@@ -171,7 +171,7 @@ The launcher checks the SHA256 before starting a game; native hooks also check t
 
 ### Download and run
 
-Follow [How to play](#how-to-play) for installation. Each release ZIP contains the matching executables, bridge, default settings, gun assets and x64 OpenXR loader at its root, plus documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
+Follow [How to play](#how-to-play) for installation. Each release ZIP contains one `vr` folder with the matching executables, bridge, default settings, gun assets, x64 OpenXR loader, documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
 
 `HOTD2VR.exe` validates the game and extracts the settings font on first run. No scripts are needed to play. Keep the packaged runtime files together.
 

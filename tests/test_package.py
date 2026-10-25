@@ -77,9 +77,11 @@ class PackageTest(unittest.TestCase):
         archive = self.output / 'HOTD2-PC2VR-v1.2.3-windows-x64.zip'
         with zipfile.ZipFile(archive) as package:
             paths = {name.replace('\\', '/') for name in package.namelist() if not name.endswith('/')}
+            self.assertTrue(paths)
+            self.assertTrue(all(name.startswith('vr/') for name in paths), paths)
+            files = {name[3:] for name in paths}
             self.assertFalse(any(name.startswith(('vr/', 'build/', 'third_party/')) or name.endswith('.ps1') or
-                                 (name.endswith('.bat') and name != 'start.bat') for name in paths), paths)
-            files = paths
+                                 (name.endswith('.bat') and name != 'start.bat') for name in files), files)
             self.assertEqual(files, {
                 'README.md', 'LICENSE', 'THIRD-PARTY.md', 'start.bat',
                 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
@@ -88,13 +90,13 @@ class PackageTest(unittest.TestCase):
                 'gun.obj', 'gun.mtl', 'gun.bmp',
                 'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png',
             })
-            self.assertEqual(package.read('HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
-            notices = package.read('THIRD-PARTY.md').decode('utf-8').replace('\r\n', '\n')
+            self.assertEqual(package.read('vr/HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
+            notices = package.read('vr/THIRD-PARTY.md').decode('utf-8').replace('\r\n', '\n')
             self.assertIn((ROOT / 'third_party/openxr/LICENSE').read_text(encoding='utf-8'), notices)
             self.assertNotIn('third_party/openxr/LICENSE', notices)
             for image in ('gameplay-vr-animated.png', 'vr-settings.png'):
                 name = 'docs/screenshots/' + image
-                self.assertEqual(package.read(name), (ROOT / name).read_bytes())
+                self.assertEqual(package.read('vr/' + name), (ROOT / name).read_bytes())
         checksum = archive.with_suffix('.zip.sha256').read_text().strip()
         self.assertEqual(checksum.lower(), f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}'.lower())
 
