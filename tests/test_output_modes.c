@@ -3,6 +3,39 @@
 #define COBJMACROS
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+static int focus_fixture,focus_allowed,focus_visible=1,focus_calls;
+static int focus_attached,focus_attaches,focus_detaches;
+static HWND focus_foreground;
+static DWORD focus_now=100;
+static HWND WINAPI focus_get_foreground(void)
+{return focus_fixture?focus_foreground:GetForegroundWindow();}
+static BOOL WINAPI focus_set_foreground(HWND window)
+{
+    if(!focus_fixture)return SetForegroundWindow(window);
+    focus_calls++;
+    int allowed=focus_allowed==1 || (focus_allowed==2 && focus_attached);
+    if(allowed)focus_foreground=window;return allowed;
+}
+static BOOL WINAPI focus_show(HWND window,int command)
+{return focus_fixture?TRUE:ShowWindow(window,command);}
+static BOOL WINAPI focus_is_visible(HWND window)
+{return focus_fixture?focus_visible:IsWindowVisible(window);}
+static DWORD WINAPI focus_tick(void)
+{return focus_fixture?focus_now:GetTickCount();}
+static DWORD WINAPI focus_window_thread(HWND window,LPDWORD owner)
+{return focus_fixture?123:GetWindowThreadProcessId(window,owner);}
+static BOOL WINAPI focus_attach(DWORD current,DWORD foreground,BOOL attach)
+{
+    if(!focus_fixture)return AttachThreadInput(current,foreground,attach);
+    focus_attached=attach;if(attach)focus_attaches++;else focus_detaches++;return TRUE;
+}
+#define GetForegroundWindow focus_get_foreground
+#define SetForegroundWindow focus_set_foreground
+#define ShowWindow focus_show
+#define IsWindowVisible focus_is_visible
+#define GetTickCount focus_tick
+#define GetWindowThreadProcessId focus_window_thread
+#define AttachThreadInput focus_attach
 #include "../src/startup.h"
 static wchar_t output_test_launch_options[256];
 static const char *output_test_prepare(const wchar_t *viewer,const wchar_t *game,const wchar_t *options,int launch,int font)
@@ -22,6 +55,29 @@ static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
 #undef OpenFileMappingA
 #undef hotdPrepareGame
 #undef MessageBoxA
+
+static void test_launch_focus(void)
+{
+    g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
+    g_cfgFocus=1;g_focusDone=0;focus_fixture=1;
+    gameFocus();assert(!focus_calls && !g_focusDone); /* Bridge has no window yet. */
+    g_frame->game_hwnd=1;
+    gameFocus();assert(focus_calls==2 && !g_focusDone); /* Windows rejected both requests. */
+    assert(!focus_attached && focus_attaches==1 && focus_detaches==1);
+    gameFocus();assert(focus_calls==2 && !g_focusDone); /* Throttled between frames. */
+    focus_now+=250;focus_allowed=2;
+    gameFocus();assert(focus_calls==4 && g_focusDone && focus_foreground==(HWND)1);
+    assert(!focus_attached && focus_attaches==2 && focus_detaches==2);
+    focus_foreground=(HWND)2;focus_now+=250;
+    gameFocus();assert(focus_calls==4 && focus_foreground==(HWND)2); /* User clicked away. */
+    g_focusDone=0;g_focusUntil=g_focusNext=0;focus_allowed=0;
+    g_cfgFocus=0;gameFocus();assert(focus_calls==4);
+    g_cfgFocus=1;g_previewOnly=1;gameFocus();assert(focus_calls==4);
+    g_previewOnly=0;focus_visible=0;gameFocus();assert(focus_calls==4);
+    focus_visible=1;gameFocus();assert(focus_calls==6 && !g_focusDone);
+    focus_now+=5000;gameFocus();assert(focus_calls==6 && g_focusDone);
+    focus_fixture=0;free(g_frame);g_frame=NULL;g_focusDone=0;g_focusUntil=g_focusNext=0;
+}
 
 static Vc2Frame *headless_frame;
 static unsigned command_action,command_mode;
@@ -58,6 +114,7 @@ int main(int argc,char **argv)
     for(int i=1;i<argc;i++)if(!strcmp(argv[i],"--preview-only")) {
         Sleep(INFINITE);return 0; /* Job ownership test child, no renderer. */
     }
+    test_launch_focus();
     char dir[MAX_PATH],ini[MAX_PATH];
     assert(GetTempPathA(sizeof(dir),dir));
     assert(GetTempFileNameA(dir,"out",0,ini));

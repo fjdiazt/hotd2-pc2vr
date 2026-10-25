@@ -516,14 +516,37 @@ static HANDLE g_gameProc;
 static HWND g_gameWnd;
 static DWORD g_stopAt;
 static int g_focusDone;
+static DWORD g_focusUntil,g_focusNext;
 static float g_gfxBase;
 static void gameFocus(void)
 {
-    if (!g_cfgFocus || g_focusDone || !g_frame || !g_frame->game_hwnd) return;
+    if (!g_cfgFocus || g_focusDone || g_previewOnly || !g_frame || !g_frame->game_hwnd) return;
     g_gameWnd = (HWND)(ULONG_PTR)g_frame->game_hwnd;
-    g_focusDone = 1;
+    if (!IsWindowVisible(g_gameWnd)) return;
+    if (GetForegroundWindow()==g_gameWnd) {
+        g_focusDone=1;note("Game window focused.\n");return;
+    }
+    DWORD now=GetTickCount();
+    if (g_focusUntil && (LONG)(now-g_focusUntil)>=0) {
+        g_focusDone=1;note("Game window focus denied; click the game window.\n");return;
+    }
+    if (g_focusNext && (LONG)(now-g_focusNext)<0) return;
+    if (!g_focusUntil) g_focusUntil=now+5000;
+    g_focusNext=now+250;
     ShowWindow(g_gameWnd, SW_RESTORE);
     SetForegroundWindow(g_gameWnd);
+    if (GetForegroundWindow()!=g_gameWnd) {
+        DWORD current=GetCurrentThreadId();
+        DWORD foreground=GetWindowThreadProcessId(GetForegroundWindow(),NULL);
+        if (foreground && foreground!=current && AttachThreadInput(current,foreground,TRUE)) {
+            SetForegroundWindow(g_gameWnd);
+            AttachThreadInput(current,foreground,FALSE);
+        }
+    }
+    /* A rejected request must not disable startup retries. */
+    if (GetForegroundWindow()==g_gameWnd) {
+        g_focusDone=1;note("Game window focused.\n");
+    }
 }
 static int gameExited(void)
 {
@@ -3184,6 +3207,7 @@ static int runVR(void)
         uint32_t got = 0;
 
         if (gameExited()) { gameEnded = 1; goto cleanup; }
+        gameFocus();
 
         for (;;) {
             ZeroMemory(&ev, sizeof(ev));
@@ -3369,7 +3393,6 @@ static int runVR(void)
         fei.displayTime = fs.predictedDisplayTime;
         fei.environmentBlendMode = XR_ENVIRONMENT_BLEND_MODE_OPAQUE;
         pxrEndFrame(session, &fei);
-        gameFocus();                    /* we are live; the game can have it back */
     }
 cleanup:
     if (running && state != XR_SESSION_STATE_EXITING &&
@@ -3512,6 +3535,7 @@ static int runWindow(void)
         char title[200];
 
         if (gameExited()) { gameEnded = 1; goto cleanup; }
+        gameFocus();
         while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) goto cleanup;
             TranslateMessage(&msg);
@@ -3681,6 +3705,7 @@ static int runStereo(void)
         int i;
 
         if (gameExited()) { gameEnded = 1; goto cleanup; }
+        gameFocus();
         while (PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) goto cleanup;
             TranslateMessage(&msg);
@@ -3945,7 +3970,7 @@ int main(int argc, char **argv)
     if (!g_frame) { note("No HOTD2 bridge. Check HOTD2Bridge.log and matching mod binaries.\n"); return 1; }
     if(!g_previewOnly && (checkpointAction>=0 || startStage)) {
         for(i=0;i<450 && (g_frame->checkpoint_game_phase<3 || g_frame->checkpoint_game_phase>12) && !gameExited();i++) {
-            if(!commandOnly) {gameFocus();g_focusDone=0;}
+            if(!commandOnly) gameFocus();
             Sleep(100);
         }
         g_vrMenuMode=(unsigned)gameMode;
@@ -3983,7 +4008,7 @@ int main(int argc, char **argv)
             note("Desktop preview unavailable; headset continues.\n");
         runVR();
     } else if(g_cfgWindow)runWindow();
-    else while(!gameExited()) { vrMenuCheckpointPoll();vrMenuKeyboard();pushCheats();Sleep(10); }
+    else while(!gameExited()) { gameFocus();vrMenuCheckpointPoll();vrMenuKeyboard();pushCheats();Sleep(10); }
     closeDesktopPreview(&preview);
     if(g_vrMenuEnabled)vrMenuSave();
     g_cheatFlags=0;

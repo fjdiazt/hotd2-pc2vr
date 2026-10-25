@@ -84,7 +84,7 @@ Defaults below apply to a fresh installation. Toggle values appear as **ON/OFF**
 | **Desktop preview** | Off | Opens a separate desktop view of the reconstructed scene. Game restart required. |
 | **Headset output** | On | Sends the game to your headset. Game restart required. |
 | **Native windowed** | On | Runs the original game in a desktop window. Game restart required. |
-| **Focus game** | On | Brings the game window to the front at startup. Viewer restart required. |
+| **Focus game** | On | Brings the game window to the front at startup. Retries for up to five seconds if Windows rejects focus; stops once focused. Viewer restart required. |
 
 ### Rendering
 
