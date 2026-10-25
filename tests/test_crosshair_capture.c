@@ -152,7 +152,7 @@ int main(void)
     IDirect3DDevice7Vtbl vt={.GetTransform=transform,.GetViewport=get_viewport,.GetRenderState=state,
         .GetTextureStageState=stage,.GetTexture=texture,.GetMaterial=material,.GetRenderTarget=no_target};
     IDirect3DDevice7 device={&vt};BYTE preview[40]={0},alias[HOTD_SPRITE_RECORD_SIZE],saved[HOTD_SPRITE_RECORD_SIZE];
-    game_base=VirtualAlloc(NULL,0x5C9000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
+    game_base=VirtualAlloc(NULL,0x600000,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);
     frame=VirtualAlloc(NULL,sizeof(*frame),MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);assert(game_base&&frame);
     frame->units_per_metre=10;active_device=&device;game_window=GetDesktopWindow();
     native_bitmap_original=bitmap;native_sprite_submit_original=submit;native_sprite_draw_original=sprite;

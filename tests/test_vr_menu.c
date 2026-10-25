@@ -5,6 +5,14 @@
 #define COBJMACROS
 #include <windows.h>
 static char config_test_exe[MAX_PATH];
+typedef struct {HANDLE mutex,ready,release;} CommandLockTest;
+static DWORD WINAPI hold_command_lock(void *data)
+{
+    CommandLockTest *test=data;
+    assert(WaitForSingleObject(test->mutex,5000)==WAIT_OBJECT_0);
+    SetEvent(test->ready);assert(WaitForSingleObject(test->release,5000)==WAIT_OBJECT_0);
+    ReleaseMutex(test->mutex);return 0;
+}
 static DWORD config_test_module(HMODULE module,char *path,DWORD size)
 {
     if(!module && config_test_exe[0]) {
@@ -161,7 +169,7 @@ static void check_menu_help(void)
     g_vrMenuPage=MENU_CONTROLS;g_vrMenuRow=0;check_footer("PLAY WITH TWO GUNS",NULL);
     g_vrMenuError="SAVE FAILED";check_footer("PLAY WITH TWO GUNS","SAVE FAILED");g_vrMenuError=NULL;
     g_previewOnly=1;check_footer("PLAY WITH TWO GUNS","READ ONLY PREVIEW");g_previewOnly=0;
-    lstrcpyA(g_vrMenuStatus,"SAVED A PRELUDE SCENE 4");check_footer("PLAY WITH TWO GUNS",g_vrMenuStatus);
+    lstrcpyA(g_vrMenuStatus,"SAVED ARCADE A PRELUDE SCENE 4");check_footer("PLAY WITH TWO GUNS",g_vrMenuStatus);
     g_vrMenuStatus[0]=0;g_vrMenuPage=MENU_RENDERING;g_vrMenuRow=5;g_nativePaused=1;
     check_footer("USE GAME LIGHTS AND FOG","APPLIES WHEN GAME RESUMES");
     g_nativePaused=0;g_vrMenuPage=-1;g_vrMenuRow=0;memset(g_vrMenuFont,0,sizeof(g_vrMenuFont));
@@ -245,22 +253,30 @@ int main(void)
     /* First two entries call the bridge, show progress, and report only acknowledged results. */
     assert(!strcmp(vrMenuRootLabels[0],"SAVE GAME") && !strcmp(vrMenuRootLabels[1],"LOAD GAME"));
     g_previewOnly=1;press(VC2_BTN_START);assert(!g_frame->checkpoint_request);g_previewOnly=0;
+    CommandLockTest commandLock={CreateMutexA(NULL,FALSE,VC2_SHARE_NAME "_Checkpoint"),CreateEventA(NULL,TRUE,FALSE,NULL),CreateEventA(NULL,TRUE,FALSE,NULL)};
+    assert(commandLock.mutex && commandLock.ready && commandLock.release);
+    HANDLE publisher=CreateThread(NULL,0,hold_command_lock,&commandLock,0,NULL);assert(publisher);
+    assert(WaitForSingleObject(commandLock.ready,5000)==WAIT_OBJECT_0);
+    press(VC2_BTN_START);assert(!g_frame->checkpoint_request && g_vrMenuError);
+    SetEvent(commandLock.release);assert(WaitForSingleObject(publisher,5000)==WAIT_OBJECT_0);
+    CloseHandle(publisher);CloseHandle(commandLock.mutex);CloseHandle(commandLock.ready);CloseHandle(commandLock.release);
     press(VC2_BTN_START);assert(g_frame->checkpoint_request==1 && g_vrMenuRequest==1);
     assert(!strcmp(g_vrMenuStatus,"SAVING GAME") && !g_cfgContinueGame);
     press(VC2_BTN_START);assert(g_frame->checkpoint_request==1); /* No duplicate outstanding command. */
     g_frame->checkpoint_result=HOTD_SAVE_OK;g_frame->checkpoint_stage=1;g_frame->checkpoint_scene=4;
     g_frame->checkpoint_response=1;vrMenuCheckpointPoll();
-    assert(!g_vrMenuRequest && !strcmp(g_vrMenuStatus,"SAVED A PRELUDE SCENE 4"));
+    assert(!g_vrMenuRequest && !strcmp(g_vrMenuStatus,"SAVED ARCADE A PRELUDE SCENE 4"));
     press(VC2_BTN_DOWN);press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_LOAD_MODES && g_vrMenuRow==0);press(VC2_BTN_START);
     assert(g_frame->checkpoint_action==HOTD_CHECKPOINT_LOAD && !strcmp(g_vrMenuStatus,"LOADING GAME"));
     g_frame->checkpoint_result=HOTD_SAVE_INVALID;g_frame->checkpoint_response=2;vrMenuCheckpointPoll();
     assert(!strcmp(g_vrMenuStatus,"NO VALID SAVED GAME"));
     press(VC2_BTN_START);g_frame->checkpoint_result=HOTD_SAVE_OK;g_frame->checkpoint_stage=2;g_frame->checkpoint_scene=8;
-    g_frame->checkpoint_response=3;vrMenuCheckpointPoll();assert(!strcmp(g_vrMenuStatus,"LOADED MUDDY SCENE 8"));
+    g_frame->checkpoint_response=3;vrMenuCheckpointPoll();assert(!strcmp(g_vrMenuStatus,"LOADED ARCADE MUDDY SCENE 8"));
     press(VC2_BTN_START);g_vrMenuRequestTick=GetTickCount()-45001;vrMenuCheckpointPoll();
     assert(!g_vrMenuRequest && strstr(g_vrMenuStatus,"UNKNOWN"));
     press(VC2_BTN_START);assert(g_frame->checkpoint_request==4); /* Timeout cannot release bridge ownership. */
-    g_frame->checkpoint_response=4;g_vrMenuRow=0;g_vrMenuError=NULL;g_vrMenuStatus[0]=0;
+    g_frame->checkpoint_response=4;g_vrMenuPage=-1;g_vrMenuRow=0;g_vrMenuError=NULL;g_vrMenuStatus[0]=0;
     /* Autosave updates heartbeat live; configuration persists through existing atomic save. */
     vrMenuChange(&vrMenuItems[MENU_GAME_SETTINGS][1],1);
     assert(g_cfgContinueGame && g_frame->checkpoint_autosave==2 && g_cfgContinueEdited);
@@ -277,14 +293,14 @@ int main(void)
     }
     /* Pre-action captions show current Save location and independent saved Load destination. */
     g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=7;
-    g_frame->checkpoint_saved_stage=2;g_frame->checkpoint_saved_scene=8;
-    vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"SAVE STAGE 3 DARKNESS SCENE 7"));
+    g_frame->checkpoint_mode_saves[0][0]=2;g_frame->checkpoint_mode_saves[0][1]=8;
+    vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"SAVE ARCADE STAGE 3 DARKNESS SCENE 7"));
     if(font)image("build/menu-save-destination.bmp");
-    g_vrMenuRow=MENU_LOAD_GAME;vrMenuDestination();
-    assert(!strcmp(g_vrMenuDestination,"LOAD STAGE 2 MUDDY SCENE 8"));
+    g_vrMenuPage=MENU_LOAD_MODES;g_vrMenuRow=0;vrMenuDestination();
+    assert(!strcmp(g_vrMenuDestination,"LOAD ARCADE STAGE 2 MUDDY SCENE 8"));
     if(font)image("build/menu-load-destination.bmp");
-    g_frame->checkpoint_saved_stage=0;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"NO SAVED GAME"));
-    g_vrMenuRow=MENU_SAVE_GAME;g_frame->checkpoint_current_stage=0;vrMenuDestination();
+    g_frame->checkpoint_mode_saves[0][0]=0;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"NO SAVED GAME"));
+    g_vrMenuPage=-1;g_vrMenuRow=MENU_SAVE_GAME;g_frame->checkpoint_current_stage=0;vrMenuDestination();
     assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
     g_frame->checkpoint_current_stage=9;vrMenuDestination();assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
     g_frame->seq=1;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"WAITING FOR GAME LOCATION"));
@@ -298,6 +314,8 @@ int main(void)
     g_frame->checkpoint_stage_scenes[2][2]=1u;g_frame->checkpoint_stage_scenes[2][7]=1u<<31;
     g_frame->checkpoint_stage_scenes[5][7]=1u<<31;
     g_vrMenuRow=MENU_STAGE_SELECT;press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_STAGE_MODES && vrMenuCount()==2 && g_vrMenuRow==0);
+    press(VC2_BTN_START);
     assert(g_vrMenuPage==MENU_STAGES && g_vrMenuRow==2 && g_frame->checkpoint_request==4);
     check_footer("SELECT STAGE TO CHOOSE ITS SCENE",NULL);
     if(font)image("build/menu-stage-select.bmp");
@@ -318,13 +336,35 @@ int main(void)
     press(VC2_BTN_START);assert(g_frame->checkpoint_request==5);
     g_frame->checkpoint_response=5;g_frame->checkpoint_result=HOTD_SAVE_OK;
     g_frame->checkpoint_stage=3;g_frame->checkpoint_scene=9;vrMenuCheckpointPoll();
-    assert(!strcmp(g_vrMenuStatus,"LOADED DARKNESS SCENE 9"));
+    assert(!strcmp(g_vrMenuStatus,"LOADED ARCADE DARKNESS SCENE 9"));
     press(VC2_BTN_BACK);assert(g_vrMenuPage==MENU_STAGES && g_vrMenuRow==2);
     for(int i=0;i<3;i++)press(VC2_BTN_DOWN);press(VC2_BTN_START);
     assert(g_vrMenuPage==MENU_SCENES && vrMenuCount()==1 && g_vrMenuScenes[0]==255);
     press(VC2_BTN_BACK);press(VC2_BTN_UP);press(VC2_BTN_START);
     assert(g_vrMenuPage==MENU_STAGES && !strcmp(g_vrMenuError,"NO AVAILABLE SCENES"));
+    press(VC2_BTN_BACK);assert(g_vrMenuPage==MENU_STAGE_MODES && g_vrMenuRow==0);
     press(VC2_BTN_BACK);assert(g_vrMenuPage==-1 && g_vrMenuRow==MENU_STAGE_SELECT && !g_vrMenuError);
+    /* Mode selection defaults to the active supported game; requests carry that mode. */
+    g_frame->checkpoint_game_phase=6;g_frame->checkpoint_game_mode=1;
+    g_vrMenuRow=MENU_STAGE_SELECT;press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_STAGE_MODES && g_vrMenuRow==1);
+    press(VC2_BTN_START);assert(g_vrMenuPage==MENU_STAGES && g_vrMenuMode==1);
+    press(VC2_BTN_BACK);press(VC2_BTN_BACK);
+    g_vrMenuRow=MENU_LOAD_GAME;press(VC2_BTN_START);
+    assert(g_vrMenuPage==MENU_LOAD_MODES && g_vrMenuRow==1);
+    unsigned originalRequest=g_frame->checkpoint_request+1;
+    press(VC2_BTN_START);
+    assert(g_frame->checkpoint_request==originalRequest && g_frame->checkpoint_target_mode==1 && g_frame->checkpoint_action==HOTD_CHECKPOINT_LOAD);
+    g_frame->checkpoint_mode=1;g_frame->checkpoint_result=HOTD_SAVE_OK;
+    g_frame->checkpoint_stage=2;g_frame->checkpoint_scene=6;g_frame->checkpoint_response=originalRequest;vrMenuCheckpointPoll();
+    assert(strstr(g_vrMenuStatus,"LOADED ORIGINAL"));press(VC2_BTN_BACK);
+    g_vrMenuRow=MENU_SAVE_GAME;press(VC2_BTN_START);
+    assert(g_frame->checkpoint_target_mode==1 && g_frame->checkpoint_action==HOTD_CHECKPOINT_SAVE);
+    g_frame->checkpoint_response=g_frame->checkpoint_request;vrMenuCheckpointPoll();
+    assert(strstr(g_vrMenuStatus,"SAVED ORIGINAL"));
+    g_frame->checkpoint_game_mode=2;unsigned rejected=g_frame->checkpoint_request;
+    press(VC2_BTN_START);assert(g_frame->checkpoint_request==rejected && g_vrMenuError);
+    g_frame->checkpoint_game_mode=g_frame->checkpoint_game_phase=0;
     g_vrMenuRow=0;g_vrMenuError=NULL;
     vrMenuCanvas();assert(g_vrMenuPixels[479][639]==0x8017191D);
     vrMenuRect(0,0,32,32,0x80FFFFFF);

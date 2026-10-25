@@ -59,7 +59,7 @@ int main(void)
 {
     IDirectSoundBufferVtbl vt={.Play=play_buffer,.SetVolume=set_volume,.Restore=restore_buffer},vt2=vt;
     FakeBuffer music={.iface={&vt}},effect={.iface={&vt}},voice={.iface={&vt2}},foreign={.iface={&vt}};
-    game_base=VirtualAlloc(NULL,0x5C9000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+    game_base=VirtualAlloc(NULL,0x600000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
     frame=VirtualAlloc(NULL,sizeof(*frame),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);assert(game_base&&frame);
     pure_checks();profile_checks();audio_ready=1;native_audio_play_original=play_channel;
     *(DWORD *)(game_base+0x3DE5B8)=0x80000000u;*(DWORD *)(game_base+0x3DE5BC)=HOTD_AUDIO_CHANNELS;

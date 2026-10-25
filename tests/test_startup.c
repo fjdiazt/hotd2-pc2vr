@@ -15,6 +15,13 @@ int main(void)
     assert(GetTempPathW(MAX_PATH,temp) && GetTempFileNameW(temp,L"hsp",0,ini));
     assert(readLaunchOptions(2,plain,ini,&options) && options.skip_splash && !options.wait && !options.native_window);
     assert(!options.launchfix);
+    assert(!options.game_mode);
+    wchar_t *original[]={L"launcher",L"game.exe",L"--game-mode",L"original",L"--start-stage",L"4"};
+    assert(readLaunchOptions(6,original,ini,&options) && options.game_mode==1 && options.start_stage==4);
+    assert(setCheckpointEnvironment(&options));
+    wchar_t mode[16];assert(GetEnvironmentVariableW(L"HOTD2VR_GAME_MODE",mode,16) && !wcscmp(mode,L"1"));
+    wchar_t *invalid_mode[]={L"launcher",L"game.exe",L"--game-mode",L"training"};
+    assert(!readLaunchOptions(4,invalid_mode,ini,&options));
     assert(WritePrivateProfileStringW(L"bridge",L"launchfix",L"1",ini));
     assert(readLaunchOptions(2,plain,ini,&options) && options.launchfix);
     assert(WritePrivateProfileStringW(L"bridge",L"skip_splash",L"1",ini));

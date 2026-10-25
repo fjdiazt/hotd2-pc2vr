@@ -148,7 +148,7 @@ int main(void)
     IDirect3DDevice7Vtbl vt={.ComputeSphereVisibility=sphere_visibility,.GetTransform=fake_transform,.GetViewport=fake_viewport,
         .GetRenderState=fake_state,.GetTextureStageState=fake_stage,.GetTexture=fake_texture,.GetMaterial=fake_material,.GetRenderTarget=no_target};
     IDirect3DDevice7 device={&vt};BYTE record[HOTD_MODEL_RECORD_SIZE]={0},actor[HOTD_MODEL_RECORD_SIZE],*copy;DWORD task[3]={0};
-    game_base=VirtualAlloc(NULL,0x5C9000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
+    game_base=VirtualAlloc(NULL,0x600000,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
     frame=VirtualAlloc(NULL,sizeof(*frame),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);assert(game_base&&frame);
     active_device=&device;original_sphere_visibility=fake_spheres;native_model_original=normal_model;native_model_alt_original=alternate_model;
     native_submit_original=submit_model;native_submit_alt_original=submit_alternate;native_sprite_submit_original=submit_sprite;original_begin=fake_begin;

@@ -12,7 +12,9 @@ static int __cdecl fake_pause(void)
 {pauses++;return 7;}
 static void __cdecl fake_event(void)
 {
-    events++;*(short *)(game_base+0x5A2BB0)=1;*(DWORD *)(game_base+0x5C7108)=0x12345678;
+    events++;*(short *)(game_base+0x5A2BB0)=*(DWORD *)(game_base+0x5CA08C)==1 && !*(short *)(game_base+0x5A1A08)?5:1;
+    if(*(short *)(game_base+0x5A2BB0)==5)*(DWORD *)(game_base+0x5A5900)|=8;
+    *(DWORD *)(game_base+0x5C7108)=0x12345678;
 }
 static void __cdecl fake_load(void)
 {
@@ -61,20 +63,25 @@ int main(void)
     assert(GetTempPathA(MAX_PATH,temporary) && GetTempFileNameA(temporary,"hcp",0,path));
     assert(!hotd_checkpoint_read(path,&point));
     for(int stage=1;stage<=6;stage++) {
-        point=(HotdCheckpoint){stage,hotd_checkpoint_first_scene(stage)};
+        point=(HotdCheckpoint){stage,hotd_checkpoint_first_scene(stage),0};
         assert(hotd_checkpoint_write(path,point));
         HotdCheckpoint read;assert(hotd_checkpoint_read(path,&read) && read.stage==stage && read.scene==point.scene);
     }
-    assert(!hotd_checkpoint_write(path,(HotdCheckpoint){7,0}));
+    assert(!hotd_checkpoint_write(path,(HotdCheckpoint){7,0,0}));
     assert(hotd_checkpoint_read(path,&point) && point.stage==6);
     HANDLE locked=CreateFileA(path,GENERIC_READ,0,NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL);
-    assert(locked!=INVALID_HANDLE_VALUE && !hotd_checkpoint_write(path,(HotdCheckpoint){2,3}));
+    assert(locked!=INVALID_HANDLE_VALUE && !hotd_checkpoint_write(path,(HotdCheckpoint){2,3,0}));
     CloseHandle(locked);assert(hotd_checkpoint_read(path,&point) && point.stage==6);
-    FILE *invalid=fopen(path,"w");assert(invalid);fputs("[checkpoint]\nversion=2\nstage=6\nscene=0\n",invalid);fclose(invalid);
+    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,4,1}));
+    assert(hotd_checkpoint_read(path,&point) && point.mode==1 && point.stage==2 && point.scene==4);
+    assert(!hotd_checkpoint_write(path,(HotdCheckpoint){2,4,2}));
+    FILE *invalid=fopen(path,"w");assert(invalid);fputs("[checkpoint]\nversion=3\nstage=6\nscene=0\n",invalid);fclose(invalid);
     assert(!hotd_checkpoint_read(path,&point));
+    invalid=fopen(path,"w");assert(invalid);fputs("[checkpoint]\nversion=1\nstage=6\nscene=0\n",invalid);fclose(invalid);
+    assert(hotd_checkpoint_read(path,&point) && point.mode==0 && point.stage==6);
     invalid=fopen(path,"w");assert(invalid);fputs("[checkpoint]\nversion=1\nstage=2bad\nscene=0\n",invalid);fclose(invalid);
     assert(!hotd_checkpoint_read(path,&point));
-    assert(hotd_checkpoint_write(path,(HotdCheckpoint){4,2}));
+    assert(hotd_checkpoint_write(path,(HotdCheckpoint){4,2,0}));
     game_base=calloc(1,0x600000);assert(game_base);
     strcpy(checkpoint_path,path);checkpoint_load_original=fake_load;checkpoint_start_original=fake_start;checkpoint_event_original=fake_event;
     *(DWORD *)(game_base+0x5C8E98)=6;
@@ -121,8 +128,8 @@ int main(void)
     assert(hotd_checkpoint_read(path,&point) && point.scene==5 && !checkpoint_retry);
     *(short *)(game_base+0x5A2BC0)=255;checkpoint_record(3);
     assert(hotd_checkpoint_read(path,&point) && point.scene==5);
-    assert(!checkpoint_scene_available((HotdCheckpoint){0,0}));
-    *(DWORD *)(game_base+0x577200)=0xFFFFFFFCu;assert(!checkpoint_scene_available((HotdCheckpoint){1,2}));
+    assert(!checkpoint_scene_available((HotdCheckpoint){0,0,0}));
+    *(DWORD *)(game_base+0x577200)=0xFFFFFFFCu;assert(!checkpoint_scene_available((HotdCheckpoint){1,2,0}));
     assert(starts==8 && events==starts);
     /* Manual saves work with autosave/hooks off, including a paused gameplay scene. */
     frame=calloc(1,sizeof(*frame));assert(frame);
@@ -160,12 +167,12 @@ int main(void)
     /* Real disk preflight, pending ACK, paused load, explicit-start precedence and new game. */
     char directory[MAX_PATH],fixture[MAX_PATH+32];strcpy(directory,temporary);disk_tables(directory);
     strcpy(checkpoint_game_directory,directory);
-    assert(hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,6}));
+    assert(hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,6,0}));
     uint32_t catalog[8];
     assert(hotd_checkpoint_file_scenes(directory,2,catalog) && catalog[0]==0xFFFFFu);
     for(unsigned i=1;i<8;i++)assert(!catalog[i]);
-    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,20}));
-    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){3,0}));
+    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,20,0}));
+    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){3,0,0}));
     checkpoint_ready=1;checkpoint_stage=6;checkpoint_scene=4;
     *(DWORD *)(game_base+0x5C8E98)=6;*(int *)(game_base+0x3C17A0)=-1;
     frame->checkpoint_action=HOTD_CHECKPOINT_LOAD;frame->checkpoint_request=5;
@@ -178,10 +185,10 @@ int main(void)
     assert(loaded_mode==1 && started_scene==6 && checkpoint_entered);
     checkpoint_manual(1);assert(!checkpoint_pending && frame->checkpoint_response==5 && frame->checkpoint_result==HOTD_SAVE_OK);
     assert(frame->checkpoint_stage==2 && frame->checkpoint_scene==6);
-    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,255}));
+    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,255,0}));
     frame->checkpoint_request=6;checkpoint_manual(1);
     assert(frame->checkpoint_response==6 && frame->checkpoint_result==HOTD_SAVE_INVALID && *(int *)(game_base+0x3C17A0)==-1);
-    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,6}));scripts(1,20);
+    assert(hotd_checkpoint_write(path,(HotdCheckpoint){2,6,0}));scripts(1,20);
     frame->checkpoint_request=7;frame->checkpoint_action=HOTD_CHECKPOINT_NEW;checkpoint_manual(3);
     assert(checkpoint_pending==7 && !checkpoint_entered);
     *(int *)(game_base+0x3C17A0)=-1;start_arcade();checkpoint_manual(3);
@@ -223,6 +230,41 @@ int main(void)
     checkpoint_deadline=GetTickCount()-1;checkpoint_manual(0);
     assert(!checkpoint_pending && frame->checkpoint_response==12 && frame->checkpoint_result==HOTD_SAVE_LOAD_FAILED);
     assert(hotd_checkpoint_read(path,&point) && point.stage==2 && point.scene==6);
+    /* Original selects native items first; its subsequent scene jump retains those live items. */
+    assert(GetTempFileNameA(temporary,"hco",0,checkpoint_original_path));
+    frame->checkpoint_target_mode=1;frame->checkpoint_target_stage=2;frame->checkpoint_target_scene=6;
+    frame->checkpoint_action=HOTD_CHECKPOINT_SELECT;frame->checkpoint_request=100;
+    *(int *)(game_base+0x3C17A0)=-1;checkpoint_manual(3);
+    assert(checkpoint_pending==100 && *(DWORD *)(game_base+0x5CA08C)==1);
+    *(int *)(game_base+0x3C17A0)=-1;start_arcade();
+    assert(checkpoint_original_items && loaded_mode==0 && started_scene==0 && *(short *)(game_base+0x5A2BB0)==5);
+    checkpoint_deadline=GetTickCount()-1;checkpoint_manual(3);
+    assert(checkpoint_pending==100 && !checkpoint_current(3,&point));
+    *(short *)(game_base+0x5A2BB0)=1;*(DWORD *)(game_base+0x5C8EA0)=0;*(DWORD *)(game_base+0x5A5900)=2;game_base[0x5A2240]=27;
+    checkpoint_manual(3);
+    assert(!checkpoint_original_items && *(DWORD *)(game_base+0x5C90A4)==1 && checkpoint_bootstrap);
+    assert(*(short *)(game_base+0x5A1A08)==1 && *(short *)(game_base+0x5A2BC0)==6);
+    checkpoint_event();*(DWORD *)(game_base+0x5C90A4)=2;checkpoint_manual(3);
+    assert(!checkpoint_pending && frame->checkpoint_response==100 && frame->checkpoint_mode==1 && frame->checkpoint_result==HOTD_SAVE_OK);
+    assert(game_base[0x5A2240]==27);
+    checkpoint_target=(HotdCheckpoint){1,4,1};checkpoint_bootstrap=1;
+    *(short *)(game_base+0x5A1A08)=0;*(short *)(game_base+0x5A2BC0)=4;
+    checkpoint_event();assert(checkpoint_current(3,&point) && point.mode==1 && point.stage==1 && point.scene==4);
+    assert((*(DWORD *)(game_base+0x5A5900)&0x3A)==2);
+    *(short *)(game_base+0x5A1A08)=1;*(short *)(game_base+0x5A2BC0)=6;
+    frame->checkpoint_action=HOTD_CHECKPOINT_SAVE;frame->checkpoint_request=101;checkpoint_manual(3);
+    assert(frame->checkpoint_result==HOTD_SAVE_OK && hotd_checkpoint_read(checkpoint_original_path,&point) && point.mode==1 && point.stage==2 && point.scene==6);
+    assert(hotd_checkpoint_read(path,&point) && !point.mode && point.stage==2 && point.scene==6);
+    frame->checkpoint_target_mode=0;frame->checkpoint_request=102;checkpoint_manual(3);
+    assert(frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE); /* A CLI default must not mislabel Original as Arcade. */
+    *(DWORD *)(game_base+0x5CA08C)=2;frame->checkpoint_request=103;checkpoint_manual(3);
+    assert(frame->checkpoint_result==HOTD_SAVE_UNAVAILABLE);
+    assert(DeleteFileA(checkpoint_original_path));
+    checkpoint_start_mode=1;checkpoint_stage=2;checkpoint_scene=255;
+    *(DWORD *)(game_base+0x5CA08C)=1;start_arcade();
+    assert(!checkpoint_original_items && !checkpoint_armed && loaded_mode==0 && started_scene==0);
+    checkpoint_start_mode=0;checkpoint_stage=0;checkpoint_scene=-1;
+    *(DWORD *)(game_base+0x5CA08C)=0;frame->checkpoint_response=8;
     frame->checkpoint_response=8;
     *(DWORD *)(game_base+0x5CA08C)=0;*(DWORD *)(game_base+0x5C90A4)=2;
     /* Stage selection reuses the native restart and leaves the save untouched when autosave is off. */
@@ -248,8 +290,8 @@ int main(void)
     assert(fwrite(table,sizeof(table),1,catalogFile)==1 && !fclose(catalogFile));
     assert(hotd_checkpoint_file_scenes(directory,2,catalog) && catalog[0]==(0xFFFFFFFFu&~(1u<<3)));
     for(unsigned i=1;i<8;i++)assert(catalog[i]==0xFFFFFFFFu);
-    assert(hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,255}));
-    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,3}));
+    assert(hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,255,0}));
+    assert(!hotd_checkpoint_file_scene(directory,(HotdCheckpoint){2,3,0}));
     table[264]=0x34;catalogFile=fopen(fixture,"wb");assert(catalogFile);
     assert(fwrite(table,sizeof(table),1,catalogFile)==1 && !fclose(catalogFile));
     assert(!hotd_checkpoint_file_scenes(directory,2,catalog));

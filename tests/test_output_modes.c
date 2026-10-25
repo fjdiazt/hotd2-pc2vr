@@ -24,6 +24,23 @@ static HANDLE output_test_open(DWORD access,BOOL inherit,const char *name)
 #undef MessageBoxA
 
 static Vc2Frame *headless_frame;
+static unsigned command_action,command_mode;
+static DWORD WINAPI observe_command(void *unused)
+{
+    (void)unused;DWORD deadline=GetTickCount()+4000;
+    while((LONG)(deadline-GetTickCount())>0) {
+        unsigned request=headless_frame->checkpoint_request;
+        if(request!=headless_frame->checkpoint_response) {
+            MemoryBarrier();assert(headless_frame->checkpoint_action==command_action && headless_frame->checkpoint_target_mode==command_mode);
+            if(command_action==HOTD_CHECKPOINT_SELECT)assert(headless_frame->checkpoint_target_stage==2 && headless_frame->checkpoint_target_scene==3);
+            headless_frame->checkpoint_stage=2;headless_frame->checkpoint_scene=3;
+            headless_frame->checkpoint_mode=command_mode;headless_frame->checkpoint_result=HOTD_SAVE_OK;
+            MemoryBarrier();InterlockedExchange((volatile LONG *)&headless_frame->checkpoint_response,request);return 1;
+        }
+        Sleep(1);
+    }
+    return 0;
+}
 static DWORD WINAPI observe_headless(void *unused)
 {
     (void)unused;
@@ -91,7 +108,26 @@ int main(int argc,char **argv)
     assert(!g_dev && !g_ctx && !g_vrMenuEnabled);
     assert(headless_frame->aim_seq==17 && headless_frame->aim2_seq==19);
     assert(!headless_frame->cheat_flags && (DWORD)(GetTickCount()-headless_frame->cheat_tick)>=500);
+    g_frame=NULL;g_map=NULL;g_gameProc=NULL;g_stopAt=0;
+    headless_frame->checkpoint_game_phase=6;
+    headless_frame->cheat_tick=123;headless_frame->cheat_flags=HOTD_CHEAT_LIVES;
+    headless_frame->audio_levels=0x123456;headless_frame->aim_seq=17;headless_frame->aim2_seq=19;
+    char *save[]={"viewer","--save"};
+    char *load[]={"viewer","--game-mode","original","--load"};
+    char *select[]={"viewer","--game-mode","original","--start-stage","2","--start-scene","3"};
+    char **commands[]={save,load,select};int counts[]={2,4,7};
+    for(unsigned command=0;command<3;command++) {
+        command_action=command==0?HOTD_CHECKPOINT_SAVE:command==1?HOTD_CHECKPOINT_LOAD:HOTD_CHECKPOINT_SELECT;
+        command_mode=command?1:0;
+        observer=CreateThread(NULL,0,observe_command,NULL,0,NULL);assert(observer);
+        assert(viewer_application_main(counts[command],commands[command])==0);
+        assert(WaitForSingleObject(observer,5000)==WAIT_OBJECT_0);
+        assert(GetExitCodeThread(observer,&observed) && observed==1);CloseHandle(observer);
+        assert(headless_frame->cheat_tick==123 && headless_frame->cheat_flags==HOTD_CHEAT_LIVES);
+        assert(headless_frame->audio_levels==0x123456 && headless_frame->aim_seq==17 && headless_frame->aim2_seq==19);
+    }
     UnmapViewOfFile(headless_frame);CloseHandle(mapping);g_frame=NULL;g_map=NULL;g_gameProc=NULL;
+    assert(viewer_application_main(2,save)==1); /* Never launch a new game just to save. */
 
     DesktopPreview preview={0};
     assert(openDesktopPreview(&preview,GetCommandLineA()));

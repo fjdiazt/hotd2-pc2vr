@@ -12,7 +12,7 @@ You need your own installed Windows PC copy of the game, a PC VR headset, and mo
 2. **Install.** Create a **`vr`** folder beside your game's **`Hod2.exe`**. Extract the ZIP's contents into `vr`.
 3. **Connect your headset and controllers.** Start your usual PC VR software and make sure the headset is ready.
 4. **Start the mod.** Open `vr` and double-click **`HOTD2VR.exe`**. It finds and starts the game automatically.
-5. **Start playing.** Put on the headset, face forward, choose **Arcade mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
+5. **Start playing.** Put on the headset, face forward, choose **Arcade or Original mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
 
 ### Buttons you need
 
@@ -60,9 +60,9 @@ Defaults below apply to a fresh installation. Toggle values appear as **ON/OFF**
 
 | Action | What it does |
 | --- | --- |
-| **Save game** | Saves the current Arcade chapter and scene, including while paused. Loading restarts that scene; health, enemies and exact timing are not saved. |
-| **Load game** | Restarts the saved scene, including from the title/menu. Shares one save slot with Autosave; the footer shows its destination. |
-| **Stage select** | Choose a stage, then a scene, and confirm to start there. Some scenes depend on earlier events and may not work correctly in isolation. |
+| **Save game** | Saves the current Arcade or Original chapter and scene, including while paused. Each mode has its own checkpoint. Equipment and exact game state are not saved. |
+| **Load game** | Choose Arcade or Original, then load that mode's checkpoint. Original opens native item selection before restarting the saved scene. |
+| **Stage select** | Choose Arcade or Original, then a chapter and scene. Original opens native item selection before the chosen destination. Training and Boss retain their normal game selectors. |
 | **Reset defaults** | Restores all menu defaults and turns cheats off. |
 | **Return to title** | Ends the run and returns to the title screen. Saves settings and keeps the checkpoint. |
 | **Quit game** | Saves settings and closes the game and VR viewer. |
@@ -72,7 +72,7 @@ Defaults below apply to a fresh installation. Toggle values appear as **ON/OFF**
 | Option | Default | What it does |
 | --- | --- | --- |
 | **Skip startup logos** | On | Skips the SEGA/Empire boot logos. Game restart required. |
-| **Autosave** | Off | Saves scene progress during Arcade play and resumes it on the next new Arcade start. Uses the Save game slot. |
+| **Autosave** | Off | Saves scene progress separately for Arcade and Original, then resumes the matching mode on its next new start. Uses each mode's Save game slot. |
 
 ### Display
 
@@ -248,7 +248,7 @@ With both outputs enabled, the preview uses the existing independent desktop cam
 
 See [Buttons you need](#buttons-you-need) for controller bindings.
 
-Trigger supplies native Start and Fire; A/X supplies Start and Pause. The pause reader accepts A/X press edges and ignores synthetic trigger Start, preserving native pause eligibility, player ownership and device-disconnect behavior. Physical Enter/Tab retain native Start/Pause. Matching protocol-24 bridge/viewer builds are required.
+Trigger supplies native Start and Fire; A/X supplies Start and Pause. The pause reader accepts A/X press edges and ignores synthetic trigger Start, preserving native pause eligibility, player ownership and device-disconnect behavior. Physical Enter/Tab retain native Start/Pause. Matching protocol-25 bridge/viewer builds are required.
 
 Gesture reload uses the tracked gun's direction relative to the headset: up **50°**, down **45°**, or sideways **60°**, then trigger. Scripted camera motion and recenter offsets do not change these thresholds. Each pull stays a shot or reload until release; tracking loss disarms it until release. Two signature-checked weapon reads separate Grip Reload from B/Y Skip/Cancel while preserving native reload rules and physical Ctrl behavior.
 
@@ -258,27 +258,42 @@ Gesture reload uses the tracked gun's direction relative to the headset: up **50
 
 Set `swap_player_hud=0` or use `--no-swap-player-hud` to retain the native layout. `--swap-player-hud` enables it. The last CLI switch wins. The flag works independently of `akimbo` and never changes controller/player assignments.
 
-Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol-24 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
+Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol-25 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
 
 #### Experimental Save game and scene selection
 
-To start a new Arcade game at another chapter, use `./HOTD2VR.exe --start-stage 6`. `--start-stage` accepts 1–6. Optional `--start-scene 3` selects the native zero-based scene ID within that stage; omitted scene uses the chapter entrance (scene 7 for chapter 3, scene 0 for the others). These options change the next **new Arcade start after the normal menus**, rather than jumping immediately from the title. Original, Training, Boss and attract modes keep their native behavior.
+Save game records the active **Arcade or Original** mode. Load game and Stage select first offer **Arcade / Original**; Stage select then offers chapter and scene. The mode chooser preselects the active supported mode during gameplay, otherwise Arcade. Browsing does not change the running game; confirming Load or a scene starts the transition. Training and Boss use their native selectors and cannot create mod checkpoints.
 
-Enable `[vr] continue_game=1` to record the latest Arcade stage/scene and resume it on subsequent new Arcade starts. Default is `0`. Switches `--continue-game` / `--no-continue-game` override this for one launch. Explicit `--start-stage` / `--start-scene` take priority over the saved location. With recording enabled, subsequent scene changes update the checkpoint even after an explicit jump.
+Original always starts through native item selection. Choose equipment again, then the game enters the requested scene. Equipment is neither saved nor restored by the mod. The pending transition does not time out while choosing items; VR Settings closes so it cannot block that selection.
 
-Load and Stage select rebuild through native mode/task/resource initialization, resuming native pause when necessary. They override startup stage/scene options and preserve joined players; loading from a menu joins P1, or both players with Akimbo enabled.
+CLI checkpoint commands default to **Arcade**. Use `--game-mode original` explicitly for Original:
+
+```bat
+HOTD2VR.exe --start-stage 4 --start-scene 0
+HOTD2VR.exe --game-mode original --start-stage 4 --start-scene 0
+HOTD2VR.exe --save
+HOTD2VR.exe --game-mode original --save
+HOTD2VR.exe --load
+HOTD2VR.exe --game-mode original --load
+```
+
+`--save` requires a running injected game of the requested mode. Load and stage commands start the game if needed; against an existing bridge they send one command, wait for its result and exit without opening another renderer or taking over input, audio or cheats. Do not combine Save/Load with stage selection. Omitted `--start-scene` uses the chapter entrance (scene 7 for chapter 3, scene 0 otherwise). Invalid modes and destinations are rejected. A plain launch still uses the normal game menus; `--game-mode` identifies checkpoint commands, independently of VR output flags.
+
+Enable `[vr] continue_game=1` to record and resume each mode's latest scene on subsequent native starts. Default is `0`. `--continue-game` / `--no-continue-game` override this for one launch. Explicit stage/scene selection takes priority over Autosave. Autosave excludes Original's item-selection screen.
+
+Load and Stage select rebuild through native mode/task/resource initialization, resuming native pause when necessary. They preserve joined players; loading from a menu joins P1, or both players with Akimbo enabled.
 
 **Game Settings > Autosave** updates `continue_game` live. Save/Load destinations refresh while the menu is open; requests show progress until the bridge acknowledges a result. Missing or invalid saves leave the current game intact. Manual Save/Load work with Autosave disabled.
 
-The checkpoint API uses `checkpoint_action` (`HOTD_CHECKPOINT_SAVE`, `HOTD_CHECKPOINT_LOAD`, `HOTD_CHECKPOINT_TITLE` or `HOTD_CHECKPOINT_SELECT`) and an incremented nonzero `checkpoint_request`, published after a memory barrier. SELECT also supplies `checkpoint_target_stage` and `checkpoint_target_scene`. Wait for the matching `checkpoint_response` before reading the result and destination. The legacy `HOTD_CHECKPOINT_NEW` command remains accepted for compatibility. Serialize callers; companion previews map the frame read-only. The game thread handles file writes and transitions while the viewer polls. Load acknowledgment waits for destination activation, with a 30-second bridge timeout. The viewer reports an unknown result after 45 seconds without releasing request ownership. Heartbeat-owned `checkpoint_autosave` uses 0 for launch configuration, 1 for off and 2 for on; disconnect restores launch configuration.
+The checkpoint API uses `checkpoint_action` (`HOTD_CHECKPOINT_SAVE`, `HOTD_CHECKPOINT_LOAD`, `HOTD_CHECKPOINT_TITLE` or `HOTD_CHECKPOINT_SELECT`) and an incremented nonzero `checkpoint_request`, published after a memory barrier. SAVE/LOAD/SELECT supply `checkpoint_target_mode` (0 Arcade, 1 Original); SELECT also supplies `checkpoint_target_stage` and `checkpoint_target_scene`. Replies include `checkpoint_mode`. `checkpoint_waiting_items` reports native Original item selection. Wait for the matching `checkpoint_response` before reading the result and destination. The legacy `HOTD_CHECKPOINT_NEW` command remains accepted for compatibility. Serialize callers; companion previews map the frame read-only. The game thread handles file writes and transitions while the viewer polls. Load acknowledgment waits for destination activation, with a 30-second bridge timeout, suspended during Original item selection. The viewer reports an unknown result after 45 seconds outside item selection without releasing request ownership. Heartbeat-owned `checkpoint_autosave` uses 0 for launch configuration, 1 for off and 2 for on; disconnect restores launch configuration.
 
-The bridge stores `[checkpoint] version=1`, `stage=1..6` and `scene=0..255` in `HOTD2VR.checkpoint.ini` beside its DLL, separate from both configuration and native game saves. It writes only when the location changes during active Arcade gameplay, using a flushed temporary file and atomic replacement. No player health, score, inventory, enemy state, route history or exact script position is saved. Resume restarts the selected scene. Disabling the feature retains the file; deleting it starts normally until another checkpoint is recorded.
+The bridge stores `[checkpoint] version=2`, `mode=arcade|original`, `stage=1..6` and `scene=0..255` beside its DLL. **`HOTD2VR.checkpoint.ini`** holds Arcade; **`HOTD2VR.original.checkpoint.ini`** holds Original. Existing version-1 saves remain readable as Arcade. The files are separate from configuration and native game saves. Each write uses a flushed temporary file and atomic replacement. Autosave writes only when the supported mode/scene changes. Player health, score, equipment, inventory, enemies, route history and exact script position are not saved. Disabling Autosave retains both files; manual Save/Load remain available.
 
-Direct launcher equivalents: `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. `HOTD2VR.exe` accepts the same stage/scene and Autosave flags. `--native-window` skips bridge injection and cannot be combined with a checkpoint request. Stage/scene choices are launch options or menu actions; only Autosave is stored as an INI preference.
+Direct launcher equivalents: `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. Add `--game-mode original` for a native Original startup destination. Unlike the executable's live stage command, helper startup flags apply at the next new game through the normal menus. `--native-window` skips bridge injection and cannot be combined with a checkpoint request. Stage/scene choices are launch options or menu actions; only Autosave is stored as an INI preference.
 
 Both executables reject missing or invalid stage/scene values before starting a process.
 
-This is a debugging checkpoint facility, **not a full save state**. Scene IDs are script boundaries, not labeled or validated checkpoints. Startup Arcade-script entries are checked before use; unavailable startup entries fall back to a normal chapter-1 start and log rejection. Live Load validates the saved destination against bounded, relocated native event tables on disk before requesting a transition; invalid destinations report failure without unloading the current scene. Mid-scene starts run the scene's native variant-0 setup script before its variant-1 gameplay script when available, loading its section/resources through the normal event system. Chapter entrances retain the native variant choice. Valid scripts can still depend on earlier flags, actors or route choices, or lack complete setup. Those prerequisites and full chapter/scene coverage need runtime qualification. Failed writes retain the previous file and retry after five seconds; startup and save results appear in `HOTD2Bridge.log`.
+This is a debugging checkpoint facility, **not a full save state**. Scene IDs are script boundaries, not labeled or validated checkpoints. Startup scene entries are checked before use; unavailable startup entries fall back to a normal chapter-1 start and log rejection. Live Load validates the saved destination against bounded, relocated native event tables on disk before requesting a transition; invalid destinations report failure without unloading the current scene. Mid-scene starts run the scene's native variant-0 setup script before its variant-1 gameplay script when available, loading its section/resources through the normal event system. Chapter entrances retain the native variant choice. Valid scripts can still depend on earlier flags, actors or route choices, or lack complete setup. Those prerequisites and full chapter/scene coverage need runtime qualification. Failed writes retain the previous file and retry after five seconds; startup and save results appear in `HOTD2Bridge.log`.
 
 #### Pausing
 
@@ -302,7 +317,7 @@ Keyboard input works while the native game or viewer has focus. In addition to t
 
 The panel renders in the native window, desktop preview and headset. Disabling both outputs also disables capture and Settings while retaining checkpoint, cheat and audio services. Native composition happens after capture to avoid a duplicate panel in framebuffer views.
 
-Matching protocol-24 bridge/viewer builds are required. Protocol 24 assigns command 3 to Return to title and command 4 to Stage select, rejecting older conflicting assignments. See [menu integration](docs/vr-menu.md) and [protocol/pause notes](docs/pause.md).
+Matching protocol-25 bridge/viewer builds are required. Protocol 25 retains command 3 to Return to title and command 4 to Stage select, rejecting older conflicting assignments. See [menu integration](docs/vr-menu.md) and [protocol/pause notes](docs/pause.md).
 
 #### Two hands and akimbo
 
@@ -461,7 +476,7 @@ For native graphics with no graphics hooks:
 .\HOTD2VR.exe --no-graphics-hooks --start-stage 4 --start-scene 0 --no-continue-game
 ```
 
-Start a new Arcade game through the normal menus to enter the selected scene. Native keyboard/mouse controls remain available. Existing cheat and volume flags still work; ammo, lives, invincibility and free-play controls do not require conversion rendering. Rapid fire remains tied to VR trigger input and supplies no physical mouse auto-fire in this mode.
+The executable starts the selected Arcade scene; add `--game-mode original` to use Original and choose items first. Native keyboard/mouse controls remain available. Existing cheat and volume flags still work; ammo, lives, invincibility and free-play controls do not require conversion rendering. Rapid fire remains tied to VR trigger input and supplies no physical mouse auto-fire in this mode.
 
 `--no-graphics-hooks` forces both conversion outputs off regardless of INI/output flags. Services run from the native input update, with no presentation, DirectDraw/Direct3D, model/texture, culling, lighting, pause-renderer hooks or framebuffer readback. The normal native windowed selection and optional CD/splash startup patches still apply. The existing `--no-window --no-vrwindow` combination uses the same services path.
 
@@ -547,7 +562,7 @@ This diagnostic build reuses the RE project's autoplay selector and gun calibrat
 
 ### Removal and rollback
 
-Close the viewer and game, then remove the `vr` folder to uninstall. Keep `vr\HOTD2VR.ini` and `vr\HOTD2VR.checkpoint.ini` if you want to preserve settings and saved progress. Hooks and startup changes disappear with the game process; the original `Hod2.exe` and `Hod2.ini` remain unchanged.
+Close the viewer and game, then remove the `vr` folder to uninstall. Keep `vr\HOTD2VR.ini`, `vr\HOTD2VR.checkpoint.ini` and `vr\HOTD2VR.original.checkpoint.ini` if you want to preserve settings and saved progress. Hooks and startup changes disappear with the game process; the original `Hod2.exe` and `Hod2.ini` remain unchanged.
 
 ## Credits
 

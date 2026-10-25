@@ -100,7 +100,9 @@ int wmain(int argc,wchar_t **argv) {
 
     def test_viewer_rejects_invalid_startup_options(self):
         for flags in (['--start-scene', '0'], ['--start-stage', '7'], ['--start-scene', '-1'],
-                      ['--start-stage', '4x'], ['--game-exe'], ['--start-stage']):
+                      ['--start-stage', '4x'], ['--game-exe'], ['--start-stage'], ['--game-mode'],
+                      ['--game-mode', 'training'], ['--game-mode', '2'], ['--save', '--load'],
+                      ['--save', '--start-stage', '2'], ['--load', '--start-stage', '2']):
             result = subprocess.run([str(BUILD / 'HOTD2VR.exe'), *flags], capture_output=True,
                                     timeout=5, creationflags=subprocess.CREATE_NO_WINDOW)
             self.assertEqual(result.returncode, 2, (flags, result.stdout, result.stderr))

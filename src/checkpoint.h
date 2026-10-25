@@ -8,7 +8,11 @@
 #include <wchar.h>
 
 #define HOTD_CHECKPOINT_MAX_SCENE 255
-typedef struct { int stage,scene; } HotdCheckpoint;
+typedef struct { int stage,scene,mode; } HotdCheckpoint;
+static inline int hotd_checkpoint_mode(const char *text)
+{return !strcmp(text,"arcade")?0:!strcmp(text,"original")?1:-1;}
+static inline const char *hotd_checkpoint_mode_name(unsigned mode)
+{return mode==0?"ARCADE":mode==1?"ORIGINAL":"UNAVAILABLE";}
 
 static inline int hotd_checkpoint_number(const wchar_t *text,int minimum,int maximum,int *out)
 {
@@ -29,7 +33,7 @@ static inline int hotd_checkpoint_first_scene(int stage)
 }
 static inline int hotd_checkpoint_valid(HotdCheckpoint point)
 {
-    return point.stage>=1 && point.stage<=6 && point.scene>=0 && point.scene<=HOTD_CHECKPOINT_MAX_SCENE;
+    return point.mode>=0 && point.mode<=1 && point.stage>=1 && point.stage<=6 && point.scene>=0 && point.scene<=HOTD_CHECKPOINT_MAX_SCENE;
 }
 static inline int hotd_checkpoint_read(const char *path,HotdCheckpoint *point)
 {
@@ -39,9 +43,14 @@ static inline int hotd_checkpoint_read(const char *path,HotdCheckpoint *point)
         DWORD n=GetPrivateProfileStringA("checkpoint",keys[i],"",value,sizeof(value),path);
         if(!n || n>=sizeof(value)-1)return 0;
         for(unsigned j=0;j<=n;j++)wide[j]=(unsigned char)value[j];
-        if(!hotd_checkpoint_number(wide,i==2?0:1,i==0?1:i==1?6:HOTD_CHECKPOINT_MAX_SCENE,&numbers[i]))return 0;
+        if(!hotd_checkpoint_number(wide,i==2?0:1,i==0?2:i==1?6:HOTD_CHECKPOINT_MAX_SCENE,&numbers[i]))return 0;
     }
-    *point=(HotdCheckpoint){numbers[1],numbers[2]};return 1;
+    int mode=0;
+    if(numbers[0]==2) {
+        DWORD n=GetPrivateProfileStringA("checkpoint","mode","",value,sizeof(value),path);
+        if(!n || n>=sizeof(value)-1 || (mode=hotd_checkpoint_mode(value))<0)return 0;
+    }
+    *point=(HotdCheckpoint){numbers[1],numbers[2],mode};return 1;
 }
 static inline int hotd_checkpoint_table_word(const BYTE *tables,const unsigned lengths[2],uint32_t address,uint32_t *word)
 {
@@ -95,7 +104,7 @@ static inline int hotd_checkpoint_write(const char *path,HotdCheckpoint point)
     char temporary[MAX_PATH],text[128];DWORD written,error;HANDLE file;int ok,n;
     if(!hotd_checkpoint_valid(point) || strlen(path)+5>=sizeof(temporary))return 0;
     snprintf(temporary,sizeof(temporary),"%s.tmp",path);
-    n=snprintf(text,sizeof(text),"[checkpoint]\r\nversion=1\r\nstage=%d\r\nscene=%d\r\n",point.stage,point.scene);
+    n=snprintf(text,sizeof(text),"[checkpoint]\r\nversion=2\r\nmode=%s\r\nstage=%d\r\nscene=%d\r\n",point.mode?"original":"arcade",point.stage,point.scene);
     file=CreateFileA(temporary,GENERIC_WRITE,0,NULL,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,NULL);
     if(file==INVALID_HANDLE_VALUE)return 0;
     ok=WriteFile(file,text,n,&written,NULL) && written==(DWORD)n && FlushFileBuffers(file);

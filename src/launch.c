@@ -11,7 +11,7 @@
 #include "checkpoint.h"
 
 typedef struct {
-    int wait,native_window,capture,skip_splash,launchfix,start_stage,start_scene,continue_game;
+    int wait,native_window,capture,skip_splash,launchfix,start_stage,start_scene,continue_game,game_mode;
     const wchar_t *invalid_kind,*invalid_value;
 } LaunchOptions;
 
@@ -37,6 +37,13 @@ static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOp
         else if(!wcscmp(argv[i],L"--show-splash"))options->skip_splash=0;
         else if(!wcscmp(argv[i],L"--continue-game"))options->continue_game=1;
         else if(!wcscmp(argv[i],L"--no-continue-game"))options->continue_game=0;
+        else if(!wcscmp(argv[i],L"--game-mode")) {
+            const wchar_t *value=++i<argc?argv[i]:NULL;
+            if(!value || (wcscmp(value,L"arcade") && wcscmp(value,L"original"))) {
+                options->invalid_kind=L"game mode";options->invalid_value=value;return 0;
+            }
+            options->game_mode=!wcscmp(value,L"original");
+        }
         else if(!wcscmp(argv[i],L"--start-stage")) {
             const wchar_t *value=++i<argc?argv[i]:NULL;
             if(!hotd_checkpoint_number(value,1,6,&options->start_stage)) {
@@ -58,8 +65,8 @@ static int readLaunchOptions(int argc,wchar_t **argv,const wchar_t *ini,LaunchOp
 
 static BOOL setCheckpointEnvironment(const LaunchOptions *options)
 {
-    const wchar_t *keys[]={L"HOTD2VR_START_STAGE",L"HOTD2VR_START_SCENE",L"HOTD2VR_CONTINUE_GAME",L"HOTD2VR_CAPTURE"};
-    int values[]={options->start_stage?options->start_stage:-1,options->start_scene,options->continue_game,options->capture};
+    const wchar_t *keys[]={L"HOTD2VR_START_STAGE",L"HOTD2VR_START_SCENE",L"HOTD2VR_CONTINUE_GAME",L"HOTD2VR_CAPTURE",L"HOTD2VR_GAME_MODE"};
+    int values[]={options->start_stage?options->start_stage:-1,options->start_scene,options->continue_game,options->capture,options->game_mode};
     wchar_t text[16];
     for(unsigned i=0;i<sizeof(keys)/sizeof(*keys);i++) {
         if(values[i]>=0)swprintf(text,16,L"%d",values[i]);
@@ -122,7 +129,7 @@ int wmain(int argc,wchar_t **argv)
             fwprintf(stderr,L"Invalid %ls%ls%ls\n",options.invalid_kind,
                 options.invalid_value?L" ":L"",options.invalid_value?options.invalid_value:L"");return 2;
         }
-        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--wait] [--native-window | --no-graphics-hooks] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
+        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--game-mode arcade|original] [--wait] [--native-window | --no-graphics-hooks] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
     }
     native_window=options.native_window;
     module=GetFullPathNameW(argv[1],MAX_PATH,game,NULL);

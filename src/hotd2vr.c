@@ -3803,6 +3803,7 @@ int main(int argc, char **argv)
 
     int stereo = 0, seconds = 0, i;
     int startStage=0,startScene=-1,skipSplash=-1,noGraphics=0;
+    int gameMode=0,checkpointAction=-1;
     wchar_t gamePath[MAX_PATH]={0},viewerPath[MAX_PATH],launchOptions[256];
     DesktopPreview preview={0};
     g_previewOnly=0;
@@ -3819,6 +3820,15 @@ int main(int argc, char **argv)
         else if (!strcmp(argv[i], "--show-splash")) skipSplash=0;
         else if (!strcmp(argv[i], "--continue-game")) {g_cfgContinueGame=1;g_cfgContinueEdited=1;}
         else if (!strcmp(argv[i], "--no-continue-game")) {g_cfgContinueGame=0;g_cfgContinueEdited=1;}
+        else if (!strcmp(argv[i], "--game-mode")) {
+            if(++i>=argc || (gameMode=hotd_checkpoint_mode(argv[i]))<0) {
+                note("--game-mode requires arcade or original.\n");return 2;
+            }
+        }
+        else if (!strcmp(argv[i], "--save") || !strcmp(argv[i], "--load")) {
+            if(checkpointAction>=0) {note("Choose one of --save or --load.\n");return 2;}
+            checkpointAction=!strcmp(argv[i],"--save")?HOTD_CHECKPOINT_SAVE:HOTD_CHECKPOINT_LOAD;
+        }
         else if (!strcmp(argv[i], "--game-exe")) {
             int wideCount=0;wchar_t **wide=CommandLineToArgvW(GetCommandLineW(),&wideCount);
             if(++i>=argc || !wide || i>=wideCount || wcslen(wide[i])>=MAX_PATH || !wide[i][0]) {
@@ -3875,19 +3885,22 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--game-exe PATH] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game] [--skip-splash | --show-splash] [--no-graphics-hooks] [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--protect-rescue-npcs] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--game-mode arcade|original] [--save | --load] [--game-exe PATH] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game] [--skip-splash | --show-splash] [--no-graphics-hooks] [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--protect-rescue-npcs] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     if(startScene>=0 && !startStage) {note("--start-scene requires --start-stage.\n");return 2;}
+    if(checkpointAction>=0 && startStage) {note("--save/--load cannot be combined with --start-stage.\n");return 2;}
     if(noGraphics) {g_cfgWindow=0;g_cfgVrWindow=0;stereo=0;}
     if(g_previewOnly) { g_cfgWindow=1;g_cfgVrWindow=0;stereo=0;g_cfgFocus=0; }
     int rendering=stereo || g_cfgWindow || g_cfgVrWindow;
     if(!rendering)g_vrMenuEnabled=0;
-    int fontReady=!g_vrMenuEnabled || vrMenuLoadFont();
     openShare();
     if(g_frame && gameExited()) {
         UnmapViewOfFile(g_frame);CloseHandle(g_map);CloseHandle(g_gameProc);
         g_frame=NULL;g_map=NULL;g_gameProc=NULL;
     }
+    int commandOnly=!g_previewOnly && g_frame && (checkpointAction>=0 || startStage);
+    if(!g_previewOnly && checkpointAction==HOTD_CHECKPOINT_SAVE && !g_frame) {note("--save requires a running injected game.\n");return 1;}
+    int fontReady=!g_vrMenuEnabled || commandOnly || vrMenuLoadFont();
     if(!g_previewOnly && (!g_frame || !fontReady)) {
         DWORD n=GetModuleFileNameW(NULL,viewerPath,MAX_PATH);
         if(!n || n>=MAX_PATH)return 1;
@@ -3904,6 +3917,7 @@ int main(int argc, char **argv)
             g_cfgContinueEdited?(g_cfgContinueGame?L"--continue-game":L"--no-continue-game"):L"");
         if(startStage)swprintf(launchOptions+wcslen(launchOptions),256-wcslen(launchOptions),L" --start-stage %d",startStage);
         if(startScene>=0)swprintf(launchOptions+wcslen(launchOptions),256-wcslen(launchOptions),L" --start-scene %d",startScene);
+        swprintf(launchOptions+wcslen(launchOptions),256-wcslen(launchOptions),L" --game-mode %ls",gameMode?L"original":L"arcade");
         const char *error=hotdPrepareGame(viewerPath,gamePath[0]?gamePath:NULL,launchOptions,!g_frame,!fontReady);
         if(error) {
             note("%s\n",error);
@@ -3916,17 +3930,46 @@ int main(int argc, char **argv)
     if(!fontReady) {
         note("Settings menu disabled: menu-font.rgba missing or invalid.\n");g_vrMenuEnabled=0;
     }
-    note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
-    note("Player HUD: swap=%d (akimbo=%d)\n",g_cfgSwapPlayerHud,g_cfgAkimbo);
-    note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
-    note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
-    note("Scene brightness: %d%%\n",g_cfgBrightness);
-    note("Audio volume: master=%u%% music=%u%% effects/voices=%u%%\n",g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
-    note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
-    note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
-    note("HOTD2 PC2VR - waiting for injected game bridge\n");
+    if(!commandOnly) {
+        note("Outputs: desktop preview=%d headset=%d%s\n",g_cfgWindow,g_cfgVrWindow,g_previewOnly?" (read-only preview)":"");
+        note("Player HUD: swap=%d (akimbo=%d)\n",g_cfgSwapPlayerHud,g_cfgAkimbo);
+        note("Aim indicators: laser=%d crosshair=%d\n",g_cfgLaser,g_cfgCrosshair);
+        note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
+        note("Scene brightness: %d%%\n",g_cfgBrightness);
+        note("Audio volume: master=%u%% music=%u%% effects/voices=%u%%\n",g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
+        note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
+        note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
+        note("HOTD2 PC2VR - waiting for injected game bridge\n");
+    }
     for (i = 0; i < 100 && !g_frame && !openShare(); i++) Sleep(100);
     if (!g_frame) { note("No HOTD2 bridge. Check HOTD2Bridge.log and matching mod binaries.\n"); return 1; }
+    if(!g_previewOnly && (checkpointAction>=0 || startStage)) {
+        for(i=0;i<450 && (g_frame->checkpoint_game_phase<3 || g_frame->checkpoint_game_phase>12) && !gameExited();i++) {
+            if(!commandOnly) {gameFocus();g_focusDone=0;}
+            Sleep(100);
+        }
+        g_vrMenuMode=(unsigned)gameMode;
+        if(!commandOnly)g_frame->akimbo=(unsigned)g_cfgAkimbo;
+        vrMenuCheckpoint(checkpointAction>=0?(unsigned)checkpointAction:HOTD_CHECKPOINT_SELECT,
+            (unsigned)startStage,(unsigned)(startScene>=0?startScene:hotd_checkpoint_first_scene(startStage)));
+        if(commandOnly) {
+            int itemsReported=0;unsigned sent=g_vrMenuRequest;
+            while(g_vrMenuRequest && !gameExited()) {
+                vrMenuCheckpointPoll();
+                if(g_frame->checkpoint_waiting_items && !itemsReported) {
+                    note("Choose Original items in the game to continue.\n");itemsReported=1;
+                }
+                Sleep(10);
+            }
+            int ok=sent && g_frame->checkpoint_response==sent && !g_vrMenuError && g_frame->checkpoint_result==HOTD_SAVE_OK;
+            note("%s\n",g_vrMenuError?g_vrMenuError:g_vrMenuStatus[0]?g_vrMenuStatus:"Game closed before command completion.");
+            if(g_gameProc)CloseHandle(g_gameProc);
+            UnmapViewOfFile(g_frame);CloseHandle(g_map);g_frame=NULL;g_map=NULL;g_gameProc=NULL;
+            return ok?0:1;
+        }
+        if(!g_vrMenuRequest) {note("%s\n",g_vrMenuError?g_vrMenuError:"Checkpoint request unavailable.");return 1;}
+        note("%s %s queued.\n",hotd_checkpoint_mode_name((unsigned)gameMode),checkpointAction==HOTD_CHECKPOINT_LOAD?"load":"stage selection");
+    }
     vrMenuInit();
     if (seconds > 0) g_stopAt = GetTickCount() + (DWORD)seconds*1000;
     note("Bridge connected; input profile %s\n", g_frame->input_supported ? "verified" : "unavailable");
@@ -3940,7 +3983,7 @@ int main(int argc, char **argv)
             note("Desktop preview unavailable; headset continues.\n");
         runVR();
     } else if(g_cfgWindow)runWindow();
-    else while(!gameExited()) { vrMenuKeyboard();pushCheats();Sleep(10); }
+    else while(!gameExited()) { vrMenuCheckpointPoll();vrMenuKeyboard();pushCheats();Sleep(10); }
     closeDesktopPreview(&preview);
     if(g_vrMenuEnabled)vrMenuSave();
     g_cheatFlags=0;

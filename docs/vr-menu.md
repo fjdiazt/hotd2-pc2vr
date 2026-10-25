@@ -65,6 +65,16 @@ Save only user-edited settings to the active mod INI, with a backup before its
 first change. Opening the menu must not save unrelated CLI overrides or enable
 cheats. Native game files and saved settings remain outside this menu's writes.
 
+## Mode checkpoints
+
+Save game uses the active Arcade or Original mode. Load game opens a two-row mode chooser with a saved-location preview. Stage select opens the same mode choice, then chapter and scene lists; Back returns through those levels without starting anything. During gameplay the mode chooser starts on the active supported mode; at title or in other modes it starts on Arcade.
+
+Original Load/Stage select goes through native item selection before entering the destination. The panel closes while that selection is active, including for externally issued CLI requests. Request timeouts pause during item selection. The mod stores only mode, chapter and scene, with independent Arcade/Original checkpoint files. Equipment persistence is deferred; Training and Boss keep their native selectors.
+
+The executable accepts `--game-mode arcade|original` (default Arcade), `--save`, `--load`, and the existing chapter/scene flags. Commands against a running bridge reuse the same request and acknowledgement path and exit without taking over the renderer or control heartbeat. `--save` never starts a game.
+
+Protocol 25 appends mode, phase, response/request mode, item-selection progress and per-mode save previews after the native menu pixels. Older field offsets and command numbers remain unchanged; bridge and viewer must still match protocol versions.
+
 ## Validation
 
 Initial UI validation checked native-font placement over live captured geometry
@@ -164,8 +174,8 @@ contains live Autosave (`continue_game`), persisted on close
 with existing atomic INI backups. Opening settings reflects the effective startup
 CLI value and never changes it.
 
-Save works during active or paused Arcade gameplay, independently of Autosave.
-Load also works from title/menu and restarts the saved Arcade scene. Stage select
+Save works during active or paused Arcade/Original gameplay, independently of Autosave.
+Load chooses a mode and also works from title/menu. Original opens native item selection before restarting its saved scene. Stage select
 chooses an available stage/scene without deleting the save. Enabled Autosave can
 later replace that slot. Existing players remain joined; menu loads start P1, or both
 when akimbo is enabled. Controller/player assignments stay unchanged.
@@ -181,7 +191,7 @@ Protocol 20 appends an action and heartbeat-owned Autosave override to protocol
 bounded native event files before changing the game, then queues the native mode
 transition for task/resource cleanup and reuses fresh Arcade/variant-0 setup.
 Paused loads use the native pause predicate/routine, preserving its sound handling.
-Initialization failure times out after 30 seconds. This restarts a scene; actor,
+Initialization failure times out after 30 seconds, excluding Original item selection. This restarts a scene; actor,
 script, player, route and exact moment state are not restored.
 
 Native desktop smoke tests exercise paused Save/Load, cross-chapter Load, New game,
@@ -191,6 +201,7 @@ no other game/viewer session running:
 
 ```powershell
 python tests/test_checkpoint_runtime.py 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe'
+python tests/test_checkpoint_modes_runtime.py 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe'
 ```
 
 No VR launch occurs. Headset menu integration and full scene prerequisites still
@@ -198,10 +209,10 @@ need runtime confirmation.
 
 
 Before selecting Save game, the caption shows the live current stage, chapter
-name and scene, for example SAVE STAGE 3 DARKNESS SCENE 7. Load game shows the
-saved destination instead. The bridge publishes both read-only locations under
+name and scene, for example SAVE ARCADE STAGE 3 DARKNESS SCENE 7. The Load game mode chooser shows the
+selected mode's saved destination instead. The bridge publishes both read-only locations under
 the frame seqlock (protocol 21); inspecting captions never submits commands or
-writes saves. No active Arcade game and missing/invalid-format save files get
+writes saves. No active supported game and missing/invalid-format save files get
 explicit unavailable captions. Saved-file metadata refreshes at most once per
 second and immediately after bridge saves, with disk reads outside the seqlock.
 Current-location previews are suppressed during a pending native transition.
@@ -253,11 +264,11 @@ both restart types, paused capture, errors, action status and read-only preview.
 
 ## Stage select
 
-Stage select immediately follows Load game. Select one of six named stages,
+Stage select immediately follows Load game. Choose Arcade or Original, then one of six named stages,
 then a native scene/checkpoint ID, then Trigger/Enter to start that scene.
 Stage 3 initially highlights scene 7; other stages highlight their entrance
 when present. Lists retain native zero-based scene IDs and page six rows.
-B/Backspace returns from scenes to stages, then to the root without changing
+B/Backspace returns from scenes to stages, then modes, then the root without changing
 the game. Browsing also works in read-only previews; starting does not.
 
 The bridge enumerates available Arcade scripts from bounded, relocated event
@@ -278,7 +289,7 @@ prerequisites. Native desktop selection and invalid-target tests pass; headset s
 Stage select follows Load game, ahead of Game Settings. The current
 Controls order, Akimbo label, per-option help, Return to Title, HUD ownership and
 rescue-NPC protection remain intact. Stage select uses command 4; Return to Title
-retains command 3. Matching protocol-24 bridge/viewer builds are mandatory because
+retains command 3. Matching protocol-25 bridge/viewer builds are mandatory because
 older protocol-23 feature builds used command 3 for Stage select. The appended
 scene catalogs and native menu canvas retain their protocol-23 field layout.
 
