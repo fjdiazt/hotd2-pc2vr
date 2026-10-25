@@ -4,8 +4,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
-if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) {
-    Write-Warning 'Unrecognized HOTD2 executable SHA256; attempting font extraction.'
+$actualHash = (Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash
+if ($actualHash -ne $expected) {
+    Write-Warning "Unrecognized HOTD2 executable SHA256; attempting font extraction.`nSHA256: $actualHash"
 }
 $exe = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $GameExe).Path)
 $pe = [BitConverter]::ToUInt32($exe, 60)

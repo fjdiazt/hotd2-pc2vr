@@ -111,6 +111,7 @@ int wmain(int argc,wchar_t **argv) {
             result = subprocess.run(automatic, env=env, capture_output=True, text=True, timeout=15)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("Unrecognized HOTD2 executable SHA256", result.stdout + result.stderr)
+            self.assertIn('SHA256: ' + hashlib.sha256(nearby.read_bytes()).hexdigest().upper(), result.stdout + result.stderr)
             self.assertEqual(log.read_text().splitlines(), [str(nearby)])
             log.unlink(); viewer_log.unlink()
             result = subprocess.run(automatic + ["-GameExe", str(fixture / "missing.exe")],

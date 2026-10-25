@@ -69,6 +69,7 @@ class MenuFontTest(unittest.TestCase):
         result = self.run_extractor()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('unrecognized hotd2 executable sha256', (result.stdout + result.stderr).lower())
+        self.assertIn('SHA256: ' + hashlib.sha256(self.game.read_bytes()).hexdigest().upper(), result.stdout + result.stderr)
         self.assertEqual(self.output.read_bytes()[:4], self.magic)
 
     def test_invalid_executable_preserves_existing_output(self):

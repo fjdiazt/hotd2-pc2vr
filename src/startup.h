@@ -63,17 +63,17 @@ static unsigned char *hotdReadFile(const wchar_t *path,size_t *length)
     fclose(file);*length=(size_t)n;return data;
 }
 
-static int hotdGameHash(const unsigned char *data,size_t length,const char *expected)
+static int hotdGameHash(const unsigned char *data,size_t length,char hex[65])
 {
     BCRYPT_ALG_HANDLE algorithm=NULL;BCRYPT_HASH_HANDLE hash=NULL;
-    unsigned char digest[32];char hex[65];int ok=0;
+    unsigned char digest[32];int ok=0;hex[0]=0;
     if(BCryptOpenAlgorithmProvider(&algorithm,BCRYPT_SHA256_ALGORITHM,NULL,0)<0)goto done;
     if(BCryptCreateHash(algorithm,&hash,NULL,0,NULL,0,0)<0 ||
        BCryptHashData(hash,(PUCHAR)data,(ULONG)length,0)<0 ||
        BCryptFinishHash(hash,digest,sizeof(digest),0)<0)goto done;
     for(int i=0;i<32;i++) {hex[i*2]="0123456789ABCDEF"[digest[i]>>4];hex[i*2+1]="0123456789ABCDEF"[digest[i]&15];}
     hex[64]=0;
-    ok=!strcmp(hex,expected);
+    ok=1;
 done:
     if(hash)BCryptDestroyHash(hash);
     if(algorithm)BCryptCloseAlgorithmProvider(algorithm,0);
@@ -242,8 +242,9 @@ static const char *hotdPrepareGame(const wchar_t *viewer,const wchar_t *explicit
     if(!exe || !length) {
         free(exe);return "Could not read HOTD2 executable, or file is empty. Game not started.";
     }
-    if(!hotdGameHash(exe,length,HOTD_GAME_SHA256))
-        fputs("Warning: unrecognized HOTD2 executable SHA256; continuing with unverified compatibility. Include your executable SHA256 when reporting issues.\n",stderr);
+    char hash[65];
+    if(!hotdGameHash(exe,length,hash) || strcmp(hash,HOTD_GAME_SHA256))
+        fprintf(stderr,"Warning: unrecognized HOTD2 executable SHA256; continuing with unverified compatibility.\nSHA256: %s\nInclude this SHA256 when reporting issues.\n",hash[0]?hash:"unavailable");
     int ready=!font || hotdEnsureFont(game,viewer,exe,length);free(exe);
     if(!ready)return "Menu asset extraction failed. Check tex/scr_opt_moji05.bin, tex/scr_item.bin and write access to the mod folder.";
     if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check injector.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";

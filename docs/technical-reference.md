@@ -42,7 +42,7 @@ SHA256 C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A
 MD5    97C9E516A287AAB33A455A396DADAA45
 ```
 
-An unrecognized SHA256 prints a warning and continues startup; no override flag is needed. Other original Windows game versions are unverified. Report the game version, executable SHA256 and symptoms if you encounter issues. Native instruction checks and asset validation remain: incompatible hook sites can still stop startup or disable the affected feature. The Remake and emulated versions are outside the supported target.
+An unrecognized SHA256 prints a warning with the executable's actual SHA256 and continues startup; no override flag is needed. Other original Windows game versions are unverified. Copy that SHA256 when reporting the game version and symptoms. Native instruction checks and asset validation remain: incompatible hook sites can still stop startup or disable the affected feature. The Remake and emulated versions are outside the supported target.
 
 ## Download and run
 

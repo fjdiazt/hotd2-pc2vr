@@ -10,13 +10,14 @@ int wmain(int argc,wchar_t **argv)
         wprintf(L"%ls\n",game);return 0;
     }
     if(argc==6 && !wcscmp(argv[1],L"font")) {
-        size_t length=0;unsigned char *exe=hotdReadFile(argv[2],&length);char hash[65];
+        size_t length=0;unsigned char *exe=hotdReadFile(argv[2],&length);char hash[65],actual[65];
         if(wcslen(argv[5])!=64)return 2;
         for(int i=0;i<=64;i++)hash[i]=(char)argv[5][i];
         if(!exe || !length) {
             free(exe);fputs("Could not read HOTD2 executable\n",stderr);return 1;
         }
-        if(!hotdGameHash(exe,length,hash))fputs("Warning: unrecognized HOTD2 executable SHA256\n",stderr);
+        if(!hotdGameHash(exe,length,actual) || strcmp(actual,hash))
+            fprintf(stderr,"Warning: unrecognized HOTD2 executable SHA256\nSHA256: %s\n",actual[0]?actual:"unavailable");
         int ok=hotdEnsureFont(argv[2],argv[3],exe,length);free(exe);
         if(!ok)fputs("Unexpected decompressed font size or invalid font data\n",stderr);
         return ok?0:1;

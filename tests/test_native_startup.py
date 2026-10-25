@@ -1,5 +1,6 @@
 """Native setup, including synthetic font data; no game or headset sessions."""
 from pathlib import Path
+import hashlib
 import os
 import subprocess
 import tempfile
@@ -52,6 +53,7 @@ class NativeFontTest(test_menu_font.MenuFontTest):
         result = run('prepare-font', self.output.parent / 'HOTD2VR.exe', self.game)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('unverified compatibility', result.stderr)
+        self.assertIn('SHA256: ' + self.identity, result.stderr)
         self.assertEqual(self.output.read_bytes()[:4], self.magic)
 
     def test_corruption_preserves_previous_font(self):
@@ -210,6 +212,7 @@ int wmain(int argc,wchar_t **argv) {
                                     cwd=root, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn('unverified compatibility', result.stderr)
+            self.assertIn('SHA256: ' + hashlib.sha256(game.read_bytes()).hexdigest().upper(), result.stderr)
             self.assertEqual((root / 'args.txt').read_text(encoding='utf-16-le').splitlines(), [str(game)])
             result = subprocess.run([str(DRIVER), 'start', str(root / 'HOTD2VR.exe'), str(game), '--show-splash'],
                                     cwd=root, capture_output=True, timeout=10)
