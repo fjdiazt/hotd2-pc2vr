@@ -35,7 +35,7 @@ typedef struct {
 #define MI(label,key,help,target,lo,hi,step,kind,flags,def) {label,key,help,target,lo,hi,step,kind,flags,0,0,0,def}
 #define MB(label,key,help,target,def) MI(label,key,help,target,0,1,1,MENU_INT,0,def)
 #define MC(label,key,help,mask) {label,key,help,NULL,0,1,1,MENU_CHEAT,0,mask,0,0,0}
-static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][11]={
+static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][12]={
     {MI("Skip startup logos","skip_splash","SKIP SEGA AND EMPIRE LOGOS",NULL,0,1,1,MENU_BRIDGE,MENU_RESTART_GAME,1),
      MB("Autosave","continue_game","SAVE AND RESUME SCENES",&g_cfgContinueGame,0)},
     {MI("Brightness percent","brightness","ADJUST SCENE AND GUN BRIGHTNESS",&g_cfgBrightness,25,400,5,MENU_INT,MENU_SHADER,90),
@@ -51,6 +51,7 @@ static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][11]={
      MI("MSAA","msaa","SMOOTH JAGGED EDGES",&g_cfgMsaa,1,8,1,MENU_INT,MENU_RESTART_VIEWER|MENU_POWER2,4),
      MB("Sharp HUD","hudsharp","MAKE HUD ICONS CRISPER",&g_cfgHudSharp,0),
      MI("Native lighting","native_lighting","USE GAME LIGHTS AND FOG",&g_cfgNativeLighting,0,1,1,MENU_INT,MENU_CAPTURE,1),
+     MI("Ambient light percent","ambient_light","ADJUST FILL LIGHT   NEEDS NATIVE LIGHTING",&g_cfgAmbientLight,0,100,5,MENU_UNSIGNED,MENU_CAPTURE,100),
      MI("Expand meshes","expand_meshes","KEEP ACTORS VISIBLE AT VIEW EDGES",&g_cfgExpandMeshes,0,1,1,MENU_INT,MENU_CAPTURE,1),
      MI("Expand world","expand_world","EXPERIMENTAL WIDER SCENERY",&g_cfgExpandWorld,0,1,1,MENU_INT,MENU_CAPTURE,1),
      MI("Depth mode","depth","CONTROL WHICH SURFACES SHOW IN FRONT",&g_cfgDepth,0,2,1,MENU_INT,MENU_RESTART_VIEWER,2),
@@ -78,7 +79,7 @@ static VrMenuItem vrMenuItems[MENU_GROUP_COUNT][11]={
 #undef MI
 #undef MB
 #undef MC
-static const unsigned vrMenuCounts[]={2,7,11,3,8,7};
+static const unsigned vrMenuCounts[]={2,7,12,3,8,7};
 static const char *g_vrMenuError;
 static int vrMenuClose(void);
 #define MENU_TOGGLE 0x80000000u

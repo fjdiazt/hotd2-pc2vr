@@ -11,7 +11,7 @@ static HotdLighting state(void)
 {
     HotdLighting s={0};
     s.world._11=s.world._22=s.world._33=s.world._44=1;
-    s.view=s.world;s.lighting=1;s.local_viewer=1;
+    s.view=s.world;s.lighting=1;s.local_viewer=1;s.ambient_strength=1;
     s.material.diffuse=rgba(1,1,1,.4f);
     s.material.ambient=rgba(1,1,1,1);
     s.material.specular=rgba(.5f,.5f,.5f,1);s.material.power=4;
@@ -40,6 +40,28 @@ int main(void)
     hotd_lighting_prepare(&s);hotd_light_vertex(&s,p,back,0,0,fvf,&v);
     near_value(v.diffuse[0],.3f);near_value(v.diffuse[1],.4f);near_value(v.diffuse[2],.5f);
     hotd_light_vertex(&s,p,NULL,0,0,D3DFVF_XYZ,&v);near_value(v.diffuse[0],.3f);
+
+    /* Scale global and per-light ambient, retaining direct light, emission, alpha, specular and fog. */
+    s.specular_enable=1;s.lights[0].dcvDiffuse=rgba(.2f,.2f,.2f,1);
+    s.fog_enable=1;s.fog_table_mode=D3DFOG_LINEAR;s.fog_end=8;
+    HotdLitVertex original,dimmed;
+    hotd_light_vertex(&s,p,front,0,0,fvf,&original);
+    near_value(original.diffuse[0],.5f);near_value(original.specular[0],.4f);
+    s.ambient_strength=.5f;hotd_light_vertex(&s,p,front,0,0,fvf,&dimmed);
+    for(unsigned k=0;k<3;k++) {
+        near_value(dimmed.diffuse[k],original.diffuse[k]-.1f);
+        near_value(dimmed.specular[k],original.specular[k]);
+    }
+    near_value(dimmed.diffuse[3],original.diffuse[3]);near_value(dimmed.fog,original.fog);
+    assert(dimmed.fog_mode==original.fog_mode);
+    s.ambient_strength=0;hotd_light_vertex(&s,p,front,0,0,fvf,&v);near_value(v.diffuse[0],.3f);
+    hotd_light_vertex(&s,p,back,0,0,fvf,&v);near_value(v.diffuse[0],.1f);
+    s.lighting=0;hotd_light_vertex(&s,p,front,0x80402010,0,fvf|D3DFVF_DIFFUSE,&original);
+    s.ambient_strength=1;hotd_light_vertex(&s,p,front,0x80402010,0,fvf|D3DFVF_DIFFUSE,&v);
+    assert(!memcmp(&v,&original,sizeof(v))); /* Unlit textures retain their native colors. */
+    s.lighting=1;hotd_light_vertex(&s,p,NULL,0x80402010,0,D3DFVF_XYZRHW|D3DFVF_DIFFUSE,&original);
+    s.ambient_strength=0;hotd_light_vertex(&s,p,NULL,0x80402010,0,D3DFVF_XYZRHW|D3DFVF_DIFFUSE,&v);
+    assert(!memcmp(&v,&original,sizeof(v))); /* Prelit UI is unchanged. */
 
     s=state();s.specular_enable=1;hotd_lighting_prepare(&s);
     hotd_light_vertex(&s,p,front,0,0,fvf,&v);near_value(v.specular[0],.4f);

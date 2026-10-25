@@ -84,6 +84,7 @@ static int visibility_hooks_ready,visibility_ready;
 static const BYTE *visibility_submit_record;
 static int visibility_submit_stage;
 static DWORD visibility_frame_flags;
+static unsigned ambient_light_latched=100;
 static int visibility_flags_latched;
 static unsigned visibility_queue_drops;
 static unsigned visibility_pressure;
@@ -233,7 +234,7 @@ static void update_audio_levels(void)
         if(!buffer){audio_applied[i].buffer=NULL;audio_applied[i].attempted=0;}
     }
 }
-static unsigned audio_ini_volume(const char *key)
+static unsigned ini_percent(const char *key)
 {
     char text[32];unsigned value;
     DWORD n=GetPrivateProfileStringA("vr",key,"100",text,sizeof(text),ini_path);
@@ -991,6 +992,8 @@ static void read_lighting(IDirect3DDevice7 *device,DWORD fvf)
 {
     HotdLighting *s=&draw_lighting;
     memset(s,0,sizeof(*s));s->world=world;s->view=view;
+    unsigned ambient=visibility_flags_latched?ambient_light_latched:frame?frame->ambient_light_percent:100;
+    s->ambient_strength=(ambient<=100?ambient:100)/100.0f;
     s->material.diffuse.r=s->material.diffuse.g=s->material.diffuse.b=s->material.diffuse.a=1;
     if((fvf&D3DFVF_POSITION_MASK)!=D3DFVF_XYZRHW)IDirect3DDevice7_GetMaterial(device,&s->material);
 #define READ(field,state,value) s->field=read_state(device,D3DRENDERSTATE_##state,value)
@@ -1625,6 +1628,7 @@ static HRESULT WINAPI native_present(void *self,DWORD flags)
 static HRESULT WINAPI begin_scene(IDirect3DDevice7 *self)
 {
     if(!visibility_flags_latched) {
+        ambient_light_latched=frame?frame->ambient_light_percent:100;
         visibility_frame_flags=frame?frame->render_flags:0;visibility_flags_latched=1;
     }
     active_device=self;update_input();update_audio_levels();return original_begin(self);
@@ -1849,8 +1853,9 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     if(!frame)return FALSE;
     memset(frame,0,sizeof(*frame));frame->magic=VC2_SHARE_MAGIC;frame->version=VC2_SHARE_VERSION;
     frame->game_pid=GetCurrentProcessId();
-    frame->audio_levels=hotd_pack_audio(audio_ini_volume("master_volume"),
-        audio_ini_volume("music_volume"),audio_ini_volume("effects_volume"));
+    frame->audio_levels=hotd_pack_audio(ini_percent("master_volume"),
+        ini_percent("music_volume"),ini_percent("effects_volume"));
+    frame->ambient_light_percent=ini_percent("ambient_light");
     frame->render_flags=GetPrivateProfileIntA("vr","native_lighting",1,ini_path)?0:HOTD_RENDER_UNLIT;
     if(!GetPrivateProfileIntA("vr","expand_meshes",1,ini_path))frame->render_flags|=HOTD_RENDER_NATIVE_MESH_CULLING;
     if(GetPrivateProfileIntA("vr","expand_world",1,ini_path))frame->render_flags|=HOTD_RENDER_EXPAND_WORLD;

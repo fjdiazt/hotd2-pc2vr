@@ -384,6 +384,9 @@ int main(void)
     g_cheatFlags=HOTD_CHEAT_MASK;pushCheats();
     assert(g_frame->cheat_flags==HOTD_CHEAT_MASK && !g_frame->aim_seq && !g_frame->aim_buttons);
     assert(g_frame->rapid_fire_rate==4 && g_frame->render_flags==HOTD_RENDER_EXPAND_WORLD);
+    assert(g_frame->ambient_light_percent==100);
+    g_cfgAmbientLight=35;pushCheats();assert(g_frame->ambient_light_percent==35);
+    g_cfgAmbientLight=100;
     g_cfgNativeLighting=0;pushCheats();assert(g_frame->render_flags==(HOTD_RENDER_UNLIT|HOTD_RENDER_EXPAND_WORLD));
     g_cfgNativeLighting=1;pushCheats();assert(g_frame->render_flags==HOTD_RENDER_EXPAND_WORLD);
     g_cfgExpandMeshes=0;g_cfgExpandWorld=1;pushCheats();

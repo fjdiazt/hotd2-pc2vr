@@ -37,10 +37,10 @@ static void pure_checks(void)
     assert(hotd_audio_sanitize(0xFFFFFFFFu)==HOTD_AUDIO_DEFAULT);
     {
         char temp[MAX_PATH],file[MAX_PATH];GetTempPathA(sizeof(temp),temp);assert(GetTempFileNameA(temp,"hva",0,file));strcpy(ini_path,file);
-        assert(audio_ini_volume("master_volume")==100);
-        assert(WritePrivateProfileStringA("vr","master_volume","25",file)&&audio_ini_volume("master_volume")==25);
-        assert(WritePrivateProfileStringA("vr","master_volume","101",file)&&audio_ini_volume("master_volume")==100);
-        assert(WritePrivateProfileStringA("vr","master_volume","00000000000000000000000000000000000000001x",file)&&audio_ini_volume("master_volume")==100);
+        assert(ini_percent("master_volume")==100);
+        assert(WritePrivateProfileStringA("vr","master_volume","25",file)&&ini_percent("master_volume")==25);
+        assert(WritePrivateProfileStringA("vr","master_volume","101",file)&&ini_percent("master_volume")==100);
+        assert(WritePrivateProfileStringA("vr","master_volume","00000000000000000000000000000000000000001x",file)&&ini_percent("master_volume")==100);
         assert(DeleteFileA(file));
     }
 }

@@ -234,7 +234,9 @@ int main(void)
         native_submit_alt_original=submit_alternate;native_sprite_submit_original=submit_sprite;}
     /* Policy remains coherent across a frame's opaque and transparent passes. */
     reset_capture(HOTD_RENDER_EXPAND_WORLD|HOTD_RENDER_NATIVE_MESH_CULLING);task[0]=(DWORD)(ULONG_PTR)(game_base+0x1260);
-    begin_scene(&device);frame->render_flags=HOTD_RENDER_NATIVE_MESH_CULLING;begin_scene(&device);
+    frame->ambient_light_percent=100;begin_scene(&device);
+    frame->ambient_light_percent=0;frame->render_flags=HOTD_RENDER_NATIVE_MESH_CULLING;begin_scene(&device);
+    assert(ambient_light_latched==100);
     native_submit(record);copy=queued(0);native_model(copy,1);assert(sphere_seen==0&&stage_records.accepted==1);
     game_window=GetDesktopWindow();publish_frame();assert(!visibility_flags_latched&&!stage_records.count);
     begin_scene(&device);native_model(record,0);assert(sphere_seen==sphere_result);visibility_flags_latched=0;

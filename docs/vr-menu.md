@@ -43,7 +43,7 @@ Right click recenters. F8 toggles the panel in the native window, headset or des
 | --- | --- |
 | Game Settings | Skip startup logos and live Autosave. This is the first group after Stage select. |
 | Display | Brightness, gamma, player-HUD swap, desktop/headset outputs, native windowed mode and initial game focus. |
-| Rendering | World scale, units per metre, resolution, MSAA, Sharp HUD, native lighting, mesh/world expansion, depth mode/bias and background rendering, in that order. |
+| Rendering | World scale, units per metre, resolution, MSAA, Sharp HUD, native lighting, ambient light, mesh/world expansion, depth mode/bias and background rendering, in that order. |
 | Audio | Master, music and effects volumes. |
 | Controls | Akimbo, arcade gun colors, laser, crosshair, reload duration, haptics, gun scale and aiming reach, in that order. |
 | Cheats | Infinite ammo/lives/continues, invincibility, rescue NPC protection, rapid fire and its rate. |
@@ -75,6 +75,8 @@ The executable accepts `--game-mode arcade|original` (default Arcade), `--save`,
 
 Protocol 25 appends mode, phase, response/request mode, item-selection progress and per-mode save previews after the native menu pixels. Older field offsets and command numbers remain unchanged; bridge and viewer must still match protocol versions.
 
+Protocol 26 appends `ambient_light_percent` (0–100, default 100) after those previews. **Rendering > Ambient light percent** updates it through the existing control heartbeat. The bridge scales only ambient contributions and latches the setting for each captured frame; it needs Native lighting, applies after resume while paused, and uses the standard menu save/reset path. Direct light, specular, emission, fog and unlit/prelit artwork retain their native values. See [lighting configuration](technical-reference.md#advanced-graphics).
+
 ## Validation
 
 Initial UI validation checked native-font placement over live captured geometry
@@ -93,7 +95,7 @@ success does not establish headset readability or comfort.
 
 ## Settings wiring
 
-The viewer presents 38 numeric/boolean options
+The viewer presents 39 numeric/boolean options
 from its effective launch configuration, grouped and paginated. Live options
 update their existing variables/heartbeat; brightness/gamma swap their three
 affected pixel shaders as one successful set. Resource/startup settings stage
@@ -293,7 +295,7 @@ prerequisites. Native desktop selection and invalid-target tests pass; headset s
 Stage select follows Load game, ahead of Game Settings. The current
 Controls order, Akimbo label, per-option help, Return to Title, HUD ownership and
 rescue-NPC protection remain intact. Stage select uses command 4; Return to Title
-retains command 3. Matching protocol-25 bridge/viewer builds are mandatory because
+retains command 3. Matching protocol-26 bridge/viewer builds are mandatory because
 older protocol-23 feature builds used command 3 for Stage select. The appended
 scene catalogs and native menu canvas retain their protocol-23 field layout.
 

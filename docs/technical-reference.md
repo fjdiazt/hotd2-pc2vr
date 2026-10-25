@@ -123,7 +123,7 @@ With both outputs enabled, the preview uses the existing independent desktop cam
 
 See [Buttons you need](../README.md#buttons-you-need) for controller bindings.
 
-Trigger supplies native Start and Fire; A/X supplies Start and Pause. The pause reader accepts A/X press edges and ignores synthetic trigger Start, preserving native pause eligibility, player ownership and device-disconnect behavior. Physical Enter/Tab retain native Start/Pause. Matching protocol-25 bridge/viewer builds are required.
+Trigger supplies native Start and Fire; A/X supplies Start and Pause. The pause reader accepts A/X press edges and ignores synthetic trigger Start, preserving native pause eligibility, player ownership and device-disconnect behavior. Physical Enter/Tab retain native Start/Pause. Matching protocol-26 bridge/viewer builds are required.
 
 Gesture reload uses the tracked gun's direction relative to the headset: up **50°**, down **45°**, or sideways **60°**, then trigger. Scripted camera motion and recenter offsets do not change these thresholds. Each pull stays a shot or reload until release; tracking loss disarms it until release. Two signature-checked weapon reads separate Grip Reload from B/Y Skip/Cancel while preserving native reload rules and physical Ctrl behavior.
 
@@ -133,7 +133,7 @@ Gesture reload uses the tracked gun's direction relative to the headset: up **50
 
 Set `swap_player_hud=0` or use `--no-swap-player-hud` to retain the native layout. `--swap-player-hud` enables it. The last CLI switch wins. The flag works independently of `akimbo` and never changes controller/player assignments.
 
-Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol-25 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
+Ownership comes from the native player ammo/lives draw routines and gameplay credit-line routine, including deferred sprite copies. The global attract-screen PRESS START prompt, shared artwork elsewhere, captions, menus, world geometry and briefing-book geometry are retained. This change affects converted HUD geometry in the headset/desktop preview. The native game window and native framebuffer panels keep their original pixels and layout. Matching protocol-26 bridge/viewer builds are required. Ammo/lives placement with akimbo and the gameplay join/credits swap are user-confirmed in VR. Full mode, transition and authored-HUD coverage remains unverified.
 
 ### Save game and scene selection
 
@@ -192,7 +192,7 @@ Keyboard input works while the native game or viewer has focus. In addition to t
 
 The panel renders in the native window, desktop preview and headset. Disabling both outputs also disables capture and Settings while retaining checkpoint, cheat and audio services. Native composition happens after capture to avoid a duplicate panel in framebuffer views.
 
-Matching protocol-25 bridge/viewer builds are required. Protocol 25 retains command 3 to Return to title and command 4 to Stage select, rejecting older conflicting assignments. See [menu integration](vr-menu.md) and [protocol/pause notes](pause.md).
+Matching protocol-26 bridge/viewer builds are required. Protocol 26 retains command 3 to Return to title and command 4 to Stage select, rejecting older conflicting assignments. See [menu integration](vr-menu.md) and [protocol/pause notes](pause.md).
 
 ### Two hands and akimbo
 
@@ -275,6 +275,10 @@ Session overrides (INI remains unchanged):
 ```
 
 Use `--native-lighting` to enable it. Rebuild and restart both bridge and viewer when upgrading the capture format.
+
+**Rendering > Ambient light percent** scales the global and per-light ambient contribution from 0–100%. Default `100` preserves native lighting; lower values deepen shaded areas while retaining direct diffuse light, specular highlights, emissive colors, opacity and fog. It requires Native lighting and affects captured 3D geometry, leaving unlit/prelit artwork, UI, controller guns and the ordinary native rendering unchanged. Textures with baked-in shading are not relit. This adjusts fill light; it does not create cast shadows or identify a shadow mask.
+
+Set `[vr] ambient_light=60` or use `HOTD2VR.exe --ambient-light 60` for a launch override. Missing/invalid INI values use 100; invalid CLI values are rejected. The menu changes it live in 5% steps, saves edits and removes the override on Reset defaults. The bridge latches one value per captured frame; paused scenes update after resuming. Protocol 26 appends `ambient_light_percent` at byte 88,614,108, making the frame 88,614,112 bytes; all earlier offsets are unchanged. Upgrade bridge and viewer together. Headset appearance and performance still require testing.
 
 Lighting adds CPU work; VR frame-time cost remains unmeasured.
 

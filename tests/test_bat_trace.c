@@ -40,7 +40,7 @@ int main(void)
     assert(!bat_trace_scope(record,1).model);*(short *)(game_base+0x5A2BC0)=0;
     IDirect3DDevice7Vtbl vt={.GetTexture=no_texture};IDirect3DDevice7 device={.lpVtbl=&vt};
     float input[300][8]={0};Vc2Vertex output[900]={0};
-    input[0][0]=12;output[0].x=34;draw_lighting.material.power=8;
+    input[0][0]=12;output[0].x=34;draw_lighting.material.power=8;draw_lighting.ambient_strength=.5f;
     char prefix[MAX_PATH-32];strcpy(prefix,bat_trace.path);
     for(unsigned sample=0;sample<4;sample++) {
         frame_no=sample*15;bat_scope=bat_trace_scope(record,1);
@@ -50,6 +50,7 @@ int main(void)
         HotdBatRecord *r=bat_trace.records+sample;
         assert(r->model==0x1B02 && r->input_count==256 && r->output_count==768 && r->truncated);
         assert(r->input[0][0]==12 && r->output[0].x==34 && r->lighting.material.power==8);
+        assert(r->lighting.ambient_strength==.5f);
         frame_no++;bat_trace_draw(&device,D3DPT_TRIANGLESTRIP,0x112,input,3,output,3,0);
         assert(bat_trace.count==sample+1);frame->frame=frame_no;
         frame->screen_frame=999;frame->screen_ok=1;frame->screen_w=frame->screen_h=1;frame->screen[0]=0xFF123456;
@@ -64,6 +65,8 @@ int main(void)
     snprintf(path,sizeof(path),"%s.json",prefix);file=fopen(path,"rb");assert(file);
     char metadata[4096]={0};assert(fread(metadata,1,sizeof(metadata)-1,file)>0 && !fclose(file));
     assert(strstr(metadata,"\"count\":4") && strstr(metadata,"\"stage\":4"));
+    char ambient_offset[64];snprintf(ambient_offset,sizeof(ambient_offset),"\"ambient_strength\":%u",(unsigned)offsetof(HotdLighting,ambient_strength));
+    assert(strstr(metadata,ambient_offset));
     strcpy(slash+1,"bat-trace-fixture.json");assert(CopyFileA(path,fixture,FALSE) && DeleteFileA(path));
     for(unsigned sample=0;sample<4;sample++) {
         snprintf(path,sizeof(path),"%s-frame-%u.bmp",prefix,sample*15+1);file=fopen(path,"rb");assert(file);

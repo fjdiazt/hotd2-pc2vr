@@ -19,7 +19,7 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-SIZE = 88614108
+SIZE = 88614112
 MODE = 88614072
 REQUEST = 87385016
 NATIVE_SAVES = ('pol/bg_adv19.bin', 'tex/scr_tod_itm_itamidome2.bin', 'pol/komono_0.bin', 'pol/tv2.bin', 'Hod2.ini')
@@ -82,7 +82,7 @@ def main():
         process = kernel.OpenProcess(0x100011, False, pid)
         assert process
         memory = mmap.mmap(-1, SIZE, tagname=name, access=mmap.ACCESS_WRITE)
-        assert memory[4:12] == struct.pack('<2I', 0x32544F48, 25)
+        assert memory[4:12] == struct.pack('<2I', 0x32544F48, 26)
 
         def text(window):
             value = c.create_unicode_buffer(1024)

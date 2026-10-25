@@ -97,6 +97,7 @@ Defaults below apply to a fresh installation. Toggle values appear as **ON/OFF**
 | **MSAA** | 4 | Smooths jagged edges. Choices: 1 (off), 2, 4 or 8. Viewer restart required. |
 | **Sharp HUD** | Off | Makes HUD sprites crisper. |
 | **Native lighting** | On | Uses the game's lighting, highlights and fog. |
+| **Ambient light percent** | 100% | Reduces fill light to deepen shaded areas. Range: 0–100%; 100% keeps the original lighting. Requires Native lighting. |
 | **Expand meshes** | On | Keeps character parts visible beyond the original screen edges. |
 | **Expand world** | On | Captures more loaded scenery beside and behind you. Experimental; may add glitches and PC load. |
 | **Depth mode** | 2 | Surface ordering: 0 uses draw order, 1 uses game sorting values, 2 uses 3D depth. Viewer restart required. |

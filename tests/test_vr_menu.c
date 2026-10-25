@@ -68,6 +68,21 @@ static void check_config_defaults(void)
     assert(strstr(g_cfgGun,"gun.obj"));
     for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++)
         assert(vrMenuItems[g][r].value==vrMenuItems[g][r].defaults);
+    assert(g_cfgAmbientLight==100);
+    assert(WritePrivateProfileStringA("vr","ambient_light","45",g_vrIniPath));
+    loadCfg();vrMenuInit();assert(g_cfgAmbientLight==45);
+    vrMenuChange(&vrMenuItems[MENU_RENDERING][6],-1);
+    assert(g_cfgAmbientLight==40 && vrMenuSave());
+    loadCfg();assert(g_cfgAmbientLight==40);
+    const char *badAmbient[]={"-1","101","50x","1.5",""};
+    for(unsigned i=0;i<sizeof(badAmbient)/sizeof(*badAmbient);i++) {
+        assert(WritePrivateProfileStringA("vr","ambient_light",badAmbient[i],g_vrIniPath));
+        loadCfg();assert(g_cfgAmbientLight==100);
+    }
+    assert(WritePrivateProfileStringA("vr","ambient_light","0",g_vrIniPath));
+    loadCfg();vrMenuInit();assert(!g_cfgAmbientLight);
+    vrMenuResetDefaults();assert(g_cfgAmbientLight==100 && vrMenuSave());
+    assert(GetPrivateProfileIntA("vr","ambient_light",-1,g_vrIniPath)==-1);
     assert(WritePrivateProfileStringA("vr","hudsharp","1",g_vrIniPath));
     loadCfg();vrMenuInit();assert(g_cfgHudSharp && vrMenuSave());
     assert(GetPrivateProfileIntA("vr","hudsharp",-1,g_vrIniPath)==1);
@@ -99,15 +114,15 @@ static void check_menu_layout(void)
 {
     vrMenuInit();
     const char *groups[]={"GAME SETTINGS","DISPLAY","RENDERING","AUDIO","CONTROLS","CHEATS"};
-    const char *keys[6][11]={
+    const char *keys[6][12]={
         {"skip_splash","continue_game"},
         {"brightness","gamma","swap_player_hud","window","vrwindow","windowed","focusgame"},
-        {"worldscale","units_per_metre","supersample","msaa","hudsharp","native_lighting","expand_meshes","expand_world","depth","depthbias","background"},
+        {"worldscale","units_per_metre","supersample","msaa","hudsharp","native_lighting","ambient_light","expand_meshes","expand_world","depth","depthbias","background"},
         {"master_volume","music_volume","effects_volume"},
         {"akimbo","arcade_gun_colors","laser","crosshair","reloadms","haptic","gunscale","aimreach"},
         {"infinite_ammo","infinite_lives","invincibility","protect_rescue_npcs","infinite_continues","rapid_fire","rapid_fire_rate"}
     };
-    const unsigned counts[]={2,7,11,3,8,7};
+    const unsigned counts[]={2,7,12,3,8,7};
     assert(vrMenuRootCount==12);
     g_vrMenuEnabled=g_vrMenuOpen=1;g_vrMenuArmed=g_vrMenuBlock=g_vrMenuPrevious=0;
     for(unsigned g=0;g<6;g++) {
@@ -181,6 +196,7 @@ static void check_menu_help(void)
     lstrcpyA(g_vrMenuStatus,"SAVED ARCADE A PRELUDE SCENE 4");check_footer("PLAY WITH TWO GUNS",g_vrMenuStatus);
     g_vrMenuStatus[0]=0;g_vrMenuPage=MENU_RENDERING;g_vrMenuRow=5;g_nativePaused=1;
     check_footer("USE GAME LIGHTS AND FOG","APPLIES WHEN GAME RESUMES");
+    g_vrMenuRow=6;check_footer("ADJUST FILL LIGHT   NEEDS NATIVE LIGHTING","APPLIES WHEN GAME RESUMES");
     g_nativePaused=0;g_vrMenuPage=-1;g_vrMenuRow=0;memset(g_vrMenuFont,0,sizeof(g_vrMenuFont));
 }
 static void check_keyboard(void)

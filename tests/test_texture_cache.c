@@ -159,12 +159,23 @@ int main(void)
     capture_kind=0;
     assert((vertex.style&HOTD_DIFFUSE_ALPHA) && (vertex.style&HOTD_ALPHA_TEST));
     /* Exercise live state/material/light capture, including sparse highest native light slot. */
-    lighting_fixture=1;light_queries=0;source[5]=-1;
+    lighting_fixture=1;light_queries=0;source[5]=-1;frame->ambient_light_percent=100;
     DrawStyle lit_style=read_draw_style(&device,0x112);
     assert(light_queries==16 && draw_lighting.light_count==1);
     assert(convert_vertex((const BYTE *)source,0x112,NULL,lit_style,&vertex));
     assert(vertex.colour==0x806C6C6Cu && vertex.specular==0x00202020u);
     assert(vertex.fog_colour==0x01332211u && fabsf(vertex.fog-.5f)<.0001f);
+    frame->ambient_light_percent=0;lit_style=read_draw_style(&device,0x112);
+    assert(convert_vertex((const BYTE *)source,0x112,NULL,lit_style,&vertex));
+    assert(vertex.colour==0x80606060u && vertex.specular==0x00202020u && vertex.fog_colour==0x01332211u);
+    frame->ambient_light_percent=50;lit_style=read_draw_style(&device,0x112);
+    assert(convert_vertex((const BYTE *)source,0x112,NULL,lit_style,&vertex) && vertex.colour==0x80666666u);
+    ambient_light_latched=50;visibility_flags_latched=1;frame->ambient_light_percent=0;
+    lit_style=read_draw_style(&device,0x112);
+    assert(draw_lighting.ambient_strength==.5f); /* One value throughout the captured frame. */
+    visibility_flags_latched=0;frame->ambient_light_percent=101;lit_style=read_draw_style(&device,0x112);
+    assert(draw_lighting.ambient_strength==1); /* Invalid shared input retains native lighting. */
+    frame->ambient_light_percent=100;
     frame->render_flags=HOTD_RENDER_UNLIT;light_queries=0;
     DrawStyle unlit_style=read_draw_style(&device,0x112);
     assert(!light_queries && !unlit_style.lighting); /* Off skips light queries and normal preparation. */

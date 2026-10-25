@@ -10,16 +10,16 @@ int main(void)
     assert(g_cfgLaser && g_cfgCrosshair);
     assert(GetTempPathA(MAX_PATH,temp) && GetTempFileNameA(temp,"hai",0,ini));
     assert(g_cfgMasterVolume==100 && g_cfgMusicVolume==100 && g_cfgEffectsVolume==100);
-    assert(readAudioVolume(ini,"master_volume")==100);
-    assert(readAudioVolume(ini,"music_volume")==100);
+    assert(readPercent(ini,"master_volume")==100);
+    assert(readPercent(ini,"music_volume")==100);
     assert(WritePrivateProfileStringA("vr","music_volume","0",ini));
-    assert(readAudioVolume(ini,"music_volume")==0 && readAudioVolume(ini,"effects_volume")==100);
+    assert(readPercent(ini,"music_volume")==0 && readPercent(ini,"effects_volume")==100);
     assert(WritePrivateProfileStringA("vr","music_volume","75",ini));
-    assert(readAudioVolume(ini,"music_volume")==75);
+    assert(readPercent(ini,"music_volume")==75);
     const char *bad_volumes[]={"", "101", "-1", "50.5", "+25", "25x", "999999999999999999999", "00000000000000000000000000000000000000001x"};
     for(unsigned v=0;v<sizeof(bad_volumes)/sizeof(*bad_volumes);v++) {
         assert(WritePrivateProfileStringA("vr","music_volume",bad_volumes[v],ini));
-        assert(readAudioVolume(ini,"music_volume")==100);
+        assert(readPercent(ini,"music_volume")==100);
     }
     int brightness=0;
     assert(readBrightness(ini,&brightness) && brightness==90);
@@ -67,10 +67,18 @@ int main(void)
     assert(viewer_application_main(10,volumes)==2 && g_cfgMasterVolume==60 && !g_cfgMusicVolume && g_cfgEffectsVolume==35);
     for(unsigned v=0;v<sizeof(bad_volumes)/sizeof(*bad_volumes);v++) {
         char *invalid[]={"viewer","--music-volume",(char *)bad_volumes[v],"--stop-before-bridge"};
-        assert(viewer_application_main(4,invalid)==2 && g_cfgMusicVolume==readAudioVolume(g_vrIniPath,"music_volume"));
+        assert(viewer_application_main(4,invalid)==2 && g_cfgMusicVolume==readPercent(g_vrIniPath,"music_volume"));
     }
     char *missing_volume[]={"viewer","--effects-volume"};
     assert(viewer_application_main(2,missing_volume)==2);
+    char *ambient[]={"viewer","--ambient-light","0","--ambient-light","60","--stop-before-bridge"};
+    assert(viewer_application_main(6,ambient)==2 && g_cfgAmbientLight==60);
+    for(unsigned v=0;v<sizeof(bad_volumes)/sizeof(*bad_volumes);v++) {
+        char *invalid[]={"viewer","--ambient-light",(char *)bad_volumes[v],"--stop-before-bridge"};
+        assert(viewer_application_main(4,invalid)==2 && g_cfgAmbientLight==readPercent(g_vrIniPath,"ambient_light"));
+    }
+    char *missing_ambient[]={"viewer","--ambient-light"};
+    assert(viewer_application_main(2,missing_ambient)==2);
     g_frame=calloc(1,sizeof(*g_frame));assert(g_frame);
     g_cfgMasterVolume=80;g_cfgMusicVolume=25;g_cfgEffectsVolume=40;pushCheats();
     assert(g_frame->audio_levels==hotd_pack_audio(80,25,40));free(g_frame);g_frame=NULL;

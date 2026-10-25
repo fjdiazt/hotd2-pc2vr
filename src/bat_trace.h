@@ -93,13 +93,14 @@ static int bat_trace_write(void)
     ok=fprintf(file,"{\"version\":1,\"stage\":4,\"scene\":0,\"count\":%u,\"frames\":%u,\"record_size\":%u,"
         "\"offsets\":{\"native_record\":%u,\"projection\":%u,\"lighting\":%u,\"input\":%u,\"output\":%u},"
         "\"lighting_offsets\":{\"material\":%u,\"world\":%u,\"view\":%u,\"lights\":%u,\"light_count\":%u,"
-        "\"ambient\":%u,\"normal_matrix\":%u},\"light_size\":%u}\n",
+        "\"ambient\":%u,\"normal_matrix\":%u,\"ambient_strength\":%u},\"light_size\":%u}\n",
         bat_trace.count,bat_trace.frames,(unsigned)sizeof(HotdBatRecord),
         (unsigned)offsetof(HotdBatRecord,native_record),(unsigned)offsetof(HotdBatRecord,projection),
         (unsigned)offsetof(HotdBatRecord,lighting),(unsigned)offsetof(HotdBatRecord,input),(unsigned)offsetof(HotdBatRecord,output),
         (unsigned)offsetof(HotdLighting,material),(unsigned)offsetof(HotdLighting,world),(unsigned)offsetof(HotdLighting,view),
         (unsigned)offsetof(HotdLighting,lights),(unsigned)offsetof(HotdLighting,light_count),
-        (unsigned)offsetof(HotdLighting,ambient),(unsigned)offsetof(HotdLighting,normal_matrix),(unsigned)sizeof(D3DLIGHT7))>0;
+        (unsigned)offsetof(HotdLighting,ambient),(unsigned)offsetof(HotdLighting,normal_matrix),
+        (unsigned)offsetof(HotdLighting,ambient_strength),(unsigned)sizeof(D3DLIGHT7))>0;
     if(fclose(file))ok=0;
     for(unsigned i=0;i<bat_trace.frames && ok;i++)if(bat_trace.screen_w[i]) {
         BITMAPFILEHEADER header={0};BITMAPINFOHEADER info={0};

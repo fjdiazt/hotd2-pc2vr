@@ -15,7 +15,7 @@ typedef struct {
     DWORD diffuse_source,ambient_source,specular_source,emissive_source;
     DWORD specular_enable,local_viewer,normalize_normals;
     DWORD fog_enable,fog_vertex_mode,fog_table_mode,range_fog;
-    float fog_start,fog_end,fog_density;
+    float fog_start,fog_end,fog_density,ambient_strength;
     float camera_world[16],normal_matrix[9];
     float camera_light_position[HOTD_MAX_LIGHTS][3],camera_light_direction[HOTD_MAX_LIGHTS][3];
 } HotdLighting;
@@ -120,7 +120,7 @@ static inline void hotd_light_vertex(const HotdLighting *s,const float *position
             if(s->normalize_normals)hotd_light_normalize(n);
         }
         if(s->local_viewer) { eye[0]=-p[0];eye[1]=-p[1];eye[2]=-p[2];hotd_light_normalize(eye); }
-        for(k=0;k<3;k++)out->diffuse[k]=me[k]+ma[k]*((const float *)&ambient)[k];
+        for(k=0;k<3;k++)out->diffuse[k]=me[k]+ma[k]*((const float *)&ambient)[k]*s->ambient_strength;
         out->diffuse[3]=hotd_light_clamp(d.a);
         for(i=0;i<s->light_count && i<HOTD_MAX_LIGHTS;i++) {
             const D3DLIGHT7 *l=s->lights+i;
@@ -149,7 +149,7 @@ static inline void hotd_light_vertex(const HotdLighting *s,const float *position
                 shine=powf(hotd_light_clamp(nh),s->material.power);
             }
             for(k=0;k<3;k++) {
-                out->diffuse[k]+=atten*spot*(ma[k]*((const float *)&l->dcvAmbient)[k]+md[k]*((const float *)&l->dcvDiffuse)[k]*(ndl>0 ? ndl : 0));
+                out->diffuse[k]+=atten*spot*(ma[k]*((const float *)&l->dcvAmbient)[k]*s->ambient_strength+md[k]*((const float *)&l->dcvDiffuse)[k]*(ndl>0 ? ndl : 0));
                 out->specular[k]+=atten*spot*ms[k]*((const float *)&l->dcvSpecular)[k]*shine;
             }
         }

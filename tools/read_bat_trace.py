@@ -58,7 +58,10 @@ def read_trace(path):
                         "white_specular_vertices": sum((v[13] & 0xFFFFFF) == 0xFFFFFF for v in captured),
                         "material": {"diffuse": material[:4], "ambient": material[4:8], "specular": material[8:12],
                                      "emissive": material[12:16], "power": material[16]},
-                        "ambient": hex(flags[0]), "lighting": flags[1], "colorvertex": flags[2],
+                        "ambient": hex(flags[0]),
+                        "ambient_strength": values("f", state + lighting_offsets["ambient_strength"])[0]
+                            if "ambient_strength" in lighting_offsets else 1.0,
+                        "lighting": flags[1], "colorvertex": flags[2],
                         "material_sources": flags[3:7], "specular_enabled": flags[7],
                         "local_viewer": flags[8], "normalize_normals": flags[9], "fog_states": flags[10:],
                         "world": world, "view": view,

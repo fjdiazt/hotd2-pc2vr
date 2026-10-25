@@ -184,6 +184,7 @@ static int g_cfgMsaa = 4;         /* 1 / 2 / 4 / 8 */
 static int g_cfgSuper = 100;      /* eye buffer scale in percent */
 static float g_cfgWorldScale = 1.25f; /* world size multiplier; 1 preserves the native unit conversion */
 static int g_cfgNativeLighting = 1;
+static unsigned g_cfgAmbientLight = 100;
 static int g_cfgExpandMeshes = 1;
 static int g_cfgExpandWorld = 1;
 static int g_cfgLaser = 1;
@@ -223,7 +224,7 @@ static int  g_cfgReloadMs = 180;  /* reload flick, ms */
 static unsigned g_cheatFlags;
 static unsigned g_cfgRapidRate=4;
 static unsigned g_cfgMasterVolume=100,g_cfgMusicVolume=100,g_cfgEffectsVolume=100;
-static unsigned readAudioVolume(const char *path,const char *key)
+static unsigned readPercent(const char *path,const char *key)
 {
     char text[32];unsigned volume;
     DWORD n=GetPrivateProfileStringA("vr",key,"100",text,sizeof(text),path);
@@ -239,6 +240,7 @@ static void readGraphicsFlags(const char *path)
     g_cfgWindow=GetPrivateProfileIntA("vr","window",0,path)!=0;
     g_cfgVrWindow=GetPrivateProfileIntA("vr","vrwindow",1,path)!=0;
     g_cfgNativeLighting=GetPrivateProfileIntA("vr","native_lighting",1,path)!=0;
+    g_cfgAmbientLight=readPercent(path,"ambient_light");
     g_cfgExpandMeshes=GetPrivateProfileIntA("vr","expand_meshes",1,path)!=0;
     g_cfgExpandWorld=GetPrivateProfileIntA("vr","expand_world",1,path)!=0;
 }
@@ -306,9 +308,9 @@ static void loadCfg(void)
     g_vrMenuEnabled=GetPrivateProfileIntA("vr","menu",1,path)!=0;
     g_cfgContinueGame=GetPrivateProfileIntA("vr","continue_game",0,path)!=0;
     g_cheatFlags=readCheats(path);
-    g_cfgMasterVolume=readAudioVolume(path,"master_volume");
-    g_cfgMusicVolume=readAudioVolume(path,"music_volume");
-    g_cfgEffectsVolume=readAudioVolume(path,"effects_volume");
+    g_cfgMasterVolume=readPercent(path,"master_volume");
+    g_cfgMusicVolume=readPercent(path,"music_volume");
+    g_cfgEffectsVolume=readPercent(path,"effects_volume");
     if(!readBrightness(path,&g_cfgBrightness)) {
         note("Invalid brightness; using 90%% (allowed 25..400).\n");g_cfgBrightness=90;
     }
@@ -401,6 +403,7 @@ static void pushCheats(void)
     g_frame->render_flags=(g_cfgNativeLighting?0:HOTD_RENDER_UNLIT) |
         (g_cfgExpandMeshes?0:HOTD_RENDER_NATIVE_MESH_CULLING) |
         (g_cfgExpandWorld?HOTD_RENDER_EXPAND_WORLD:0);
+    g_frame->ambient_light_percent=g_cfgAmbientLight;
     g_frame->rapid_fire_rate=g_cfgRapidRate;
     g_frame->audio_levels=hotd_pack_audio(g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
     g_frame->cheat_flags=g_cheatFlags;
@@ -3891,9 +3894,9 @@ int main(int argc, char **argv)
                 note("--brightness requires an integer from 25 to 400 (percent).\n");return 2;
             }
         }
-        else if(!strcmp(argv[i],"--master-volume") || !strcmp(argv[i],"--music-volume") || !strcmp(argv[i],"--effects-volume")) {
+        else if(!strcmp(argv[i],"--master-volume") || !strcmp(argv[i],"--music-volume") || !strcmp(argv[i],"--effects-volume") || !strcmp(argv[i],"--ambient-light")) {
             const char *option=argv[i];
-            unsigned *volume=!strcmp(option,"--master-volume")?&g_cfgMasterVolume:
+            unsigned *volume=!strcmp(option,"--ambient-light")?&g_cfgAmbientLight:!strcmp(option,"--master-volume")?&g_cfgMasterVolume:
                 !strcmp(option,"--music-volume")?&g_cfgMusicVolume:&g_cfgEffectsVolume;
             if(i+1>=argc || !hotd_parse_volume(argv[++i],volume)) {
                 note("%s requires an integer from 0 to 100 (percent).\n",option);return 2;
@@ -3910,7 +3913,7 @@ int main(int argc, char **argv)
             }
         }
         else if(cheat)g_cheatFlags|=cheat;
-        else { note("usage: HOTD2VR [--game-mode arcade|original] [--save | --load] [--game-exe PATH] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game] [--skip-splash | --show-splash] [--no-graphics-hooks] [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--protect-rescue-npcs] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
+        else { note("usage: HOTD2VR [--game-mode arcade|original] [--save | --load] [--game-exe PATH] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game] [--skip-splash | --show-splash] [--no-graphics-hooks] [--menu | --no-menu] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--swap-player-hud | --no-swap-player-hud] [--seconds N] [--world-scale N] [--brightness N] [--ambient-light N] [--master-volume N] [--music-volume N] [--effects-volume N] [--native-lighting | --no-native-lighting] [--expand-meshes | --no-expand-meshes] [--expand-world | --no-expand-world] [--laser | --no-laser] [--crosshair | --no-crosshair] [--infinite-ammo] [--infinite-lives] [--invincibility] [--protect-rescue-npcs] [--infinite-continues] [--rapid-fire] [--rapid-fire-rate N]\n"); return 2; }
     }
     if(startScene>=0 && !startStage) {note("--start-scene requires --start-stage.\n");return 2;}
     if(checkpointAction>=0 && startStage) {note("--save/--load cannot be combined with --start-stage.\n");return 2;}
@@ -3962,7 +3965,7 @@ int main(int argc, char **argv)
         note("Capture expansion: meshes=%s world=%s\n",g_cfgExpandMeshes?"on":"off",g_cfgExpandWorld?"on":"off");
         note("Scene brightness: %d%%\n",g_cfgBrightness);
         note("Audio volume: master=%u%% music=%u%% effects/voices=%u%%\n",g_cfgMasterVolume,g_cfgMusicVolume,g_cfgEffectsVolume);
-        note("Native lighting: %s (lights, specular, fog)\n",g_cfgNativeLighting?"on":"off");
+        note("Native lighting: %s (lights, specular, fog); ambient %u%%\n",g_cfgNativeLighting?"on":"off",g_cfgAmbientLight);
         note("World scale: %gx (1 = original size)\n",g_cfgWorldScale);
         note("HOTD2 PC2VR - waiting for injected game bridge\n");
     }
