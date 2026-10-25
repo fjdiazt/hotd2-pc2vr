@@ -52,8 +52,8 @@ jobs:
         with:
           name: HOTD2-PC2VR-windows-x64
           path: |
-            build/releases/*.zip
-            build/releases/*.sha256
+            build-artifacts/releases/*.zip
+            build-artifacts/releases/*.sha256
           if-no-files-found: error
           retention-days: 7
       - name: Attach package to release
@@ -63,6 +63,6 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          $files = @(Get-ChildItem build/releases -File | ForEach-Object FullName)
+          $files = @(Get-ChildItem build-artifacts/releases -File | ForEach-Object FullName)
           gh release upload $env:RELEASE_TAG @files
           if ($LASTEXITCODE) { throw 'Release asset upload failed.' }

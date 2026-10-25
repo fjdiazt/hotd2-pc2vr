@@ -6,8 +6,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 if (!$BuildDirectory) { $BuildDirectory = Join-Path $PSScriptRoot 'build' }
-if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot 'build\releases' }
-if (!$LoaderPackage) { $LoaderPackage = Join-Path $PSScriptRoot 'build\release-deps\OpenXR.Loader.1.1.65.nupkg' }
+if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot 'build-artifacts\releases' }
+if (!$LoaderPackage) { $LoaderPackage = Join-Path $PSScriptRoot 'build-artifacts\release-deps\OpenXR.Loader.1.1.65.nupkg' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 function Assert-PeMachine([string]$Path, [int]$Machine) {
     $image = [IO.File]::ReadAllBytes($Path)

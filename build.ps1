@@ -1,8 +1,9 @@
 param()
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
-$out = Join-Path $root 'build'
-New-Item -ItemType Directory -Path $out -Force | Out-Null
+$out = Join-Path $root 'build-artifacts'
+$runtime = Join-Path $root 'build'
+New-Item -ItemType Directory -Path $out, $runtime -Force | Out-Null
 $gcc = (Get-Command gcc -ErrorAction Stop).Source
 if ((& $gcc -dumpmachine) -ne 'i686-w64-mingw32') { throw '32-bit MinGW GCC required for game bridge.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -shared -static-libgcc '-Wl,--kill-at' -o "$out\HOTD2Bridge.dll" "$root\src\bridge.c" -ldxguid -luser32 -lkernel32
@@ -97,8 +98,12 @@ if ($LASTEXITCODE) { throw 'Aim indicator test failed.' }
 if ($LASTEXITCODE) { throw 'Effect shader test failed.' }
 & "$out\test_output_modes.exe"
 if ($LASTEXITCODE) { throw 'Output mode test failed.' }
-Copy-Item "$root\assets\gun\*" -Destination $out -Force
-if (!(Test-Path "$out\HOTD2VR.ini")) { Copy-Item "$root\HOTD2VR.ini" $out }
-$loader = 'N:\games\systems\pcvr\bin\VirtuaCop2VR\VR\openxr_loader.dll'
-if (!(Test-Path "$out\openxr_loader.dll") -and (Test-Path $loader)) { Copy-Item $loader $out }
-Write-Output "Build and offline checks passed: $out"
+foreach ($name in 'HOTD2VR.exe', 'HOTD2Launch.exe', 'HOTD2Bridge.dll') {
+    Copy-Item -LiteralPath (Join-Path $out $name) -Destination $runtime -Force
+}
+Copy-Item "$root\assets\gun\*" -Destination $runtime -Force
+if (!(Test-Path "$runtime\HOTD2VR.ini")) { Copy-Item "$root\HOTD2VR.ini" $runtime }
+$loader = Join-Path $out 'openxr_loader.dll'
+if (!(Test-Path $loader)) { $loader = 'N:\games\systems\pcvr\bin\VirtuaCop2VR\VR\openxr_loader.dll' }
+if (!(Test-Path "$runtime\openxr_loader.dll") -and (Test-Path $loader)) { Copy-Item $loader $runtime }
+Write-Output "Build and offline checks passed. Runtime: $runtime; compiler/tests: $out"

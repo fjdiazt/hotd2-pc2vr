@@ -55,7 +55,7 @@ def main():
     if existing:
         kernel.CloseHandle(existing)
         raise SystemExit('Existing bridge; no test launched.')
-    stage = Path(tempfile.mkdtemp(prefix='mode-runtime-', dir=ROOT / 'build'))
+    stage = Path(tempfile.mkdtemp(prefix='mode-runtime-', dir=ROOT / 'build-artifacts'))
     print('Evidence:', stage, flush=True)
     for filename in ('HOTD2Launch.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'openxr_loader.dll'):
         shutil.copy2(ROOT / 'build' / filename, stage / filename)

@@ -198,7 +198,7 @@ From the repository root:
 
 Replace the example path with your game location when running from a separate source checkout.
 
-The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun assets and `HOTD2VR.ini` under `build\`. It runs offline checks before reporting success. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
+The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun assets and `HOTD2VR.ini` under `build\`. Compiler outputs, test executables and diagnostic images stay under `build-artifacts\`. It runs offline checks before publishing the runtime files. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
 
 Close any existing game session before launching. Keep the bridge and viewer from the same build together; their shared-memory formats must match.
 
@@ -214,7 +214,7 @@ To package a local build:
 .\package.ps1 -Version v1.0.0
 ```
 
-The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256, checks binary architectures, and writes to `build\releases\`. It packages only listed runtime files and fresh repository defaults; local INI edits, generated fonts, checkpoints, logs and test executables are excluded. Offline/CI checks do not prove headset rendering or controller behavior.
+The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256, checks binary architectures, and writes to `build-artifacts\releases\`. It packages only listed runtime files and fresh repository defaults; local INI edits, generated fonts, checkpoints, logs and test executables are excluded. Offline/CI checks do not prove headset rendering or controller behavior.
 
 #### Desktop previews and reconnecting
 
@@ -550,15 +550,15 @@ python .\tests\test_live.py
 python .\tests\test_live.py --input
 ```
 
-Close the viewer before the `--input` check. It briefly drives both aim coordinates without firing, then checks watchdog expiry and the native axis-write instructions. Logs and diagnostic images stay under ignored `build\`.
+Close the viewer before the `--input` check. It briefly drives both aim coordinates without firing, then checks watchdog expiry and the native axis-write instructions. Logs and diagnostic images stay under ignored `build-artifacts\`.
 
 For the chapter-4/scene-0 bat comparison, close game/viewer/VR sessions, then run:
 
 ```powershell
-python tools/capture_bats.py --game 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe' --re-source 'C:\src\gaming\hotd2-re' --runtime build/bat-trace-stage/build
+python tools/capture_bats.py --game 'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe' --re-source 'C:\src\gaming\hotd2-re' --runtime build-artifacts/bat-trace-stage/build
 ```
 
-This diagnostic build reuses the RE project's autoplay selector and gun calibration. It shoots opening enemies through normal gun input, permanently stops firing when live bats appear, and captures at a nearest-bat distance of 30 game units. It runs native graphics and desktop conversion separately with `launchfix=1`, never enables OpenXR, and closes its own game/viewers afterward. Native mode explicitly uses `--no-graphics-hooks` and takes its screenshot externally, without pausing or reading the game's D3D device. That screenshot can follow the actor snapshot by several game frames; it is not an exact-frame comparison. Each run has an isolated INI/checkpoint under `build/bat-bot-*`; normal builds and game configuration stay untouched. Output includes native actor records/transforms, desktop screenshots, and converted-frame/atlas evidence. Both modes reached the bat capture in desktop testing; see [findings](docs/findings.md#bounded-bat-autoplay-diagnostic-2026-10-22).
+This diagnostic build reuses the RE project's autoplay selector and gun calibration. It shoots opening enemies through normal gun input, permanently stops firing when live bats appear, and captures at a nearest-bat distance of 30 game units. It runs native graphics and desktop conversion separately with `launchfix=1`, never enables OpenXR, and closes its own game/viewers afterward. Native mode explicitly uses `--no-graphics-hooks` and takes its screenshot externally, without pausing or reading the game's D3D device. That screenshot can follow the actor snapshot by several game frames; it is not an exact-frame comparison. Each run has an isolated INI/checkpoint under `build-artifacts/bat-bot-*`; normal builds and game configuration stay untouched. Output includes native actor records/transforms, desktop screenshots, and converted-frame/atlas evidence. Both modes reached the bat capture in desktop testing; see [findings](docs/findings.md#bounded-bat-autoplay-diagnostic-2026-10-22).
 
 ### Removal and rollback
 

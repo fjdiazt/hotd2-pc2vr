@@ -7,7 +7,7 @@ import unittest
 import test_menu_font
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD = Path(os.environ.get('HOTD2_TEST_BUILD_DIR', ROOT / 'build'))
+BUILD = Path(os.environ.get('HOTD2_TEST_BUILD_DIR', ROOT / 'build-artifacts'))
 DRIVER = BUILD / 'test_native_startup.exe'
 
 

@@ -292,22 +292,22 @@ int main(void)
     assert(GetPrivateProfileIntA("vr","continue_game",-1,g_vrIniPath)==-1);
     int font=vrMenuLoadFont();
     if(font) {
-        image("build/menu-root.bmp");
+        image("build-artifacts/menu-root.bmp");
         const char *names[]={"game-settings","display","rendering","audio","controls","cheats"};
         for(unsigned group=0;group<MENU_GROUP_COUNT;group++)for(unsigned row=0;row<vrMenuCounts[group];row+=6) {
             char path[96];g_vrMenuPage=group;g_vrMenuRow=row;
-            snprintf(path,sizeof(path),"build/menu-%s-page%u.bmp",names[group],row/6+1);image(path);
+            snprintf(path,sizeof(path),"build-artifacts/menu-%s-page%u.bmp",names[group],row/6+1);image(path);
         }
-        g_vrMenuPage=-1;g_vrMenuRow=8;image("build/menu-root-page2.bmp");g_vrMenuRow=0;
+        g_vrMenuPage=-1;g_vrMenuRow=8;image("build-artifacts/menu-root-page2.bmp");g_vrMenuRow=0;
     }
     /* Pre-action captions show current Save location and independent saved Load destination. */
     g_frame->checkpoint_current_stage=3;g_frame->checkpoint_current_scene=7;
     g_frame->checkpoint_mode_saves[0][0]=2;g_frame->checkpoint_mode_saves[0][1]=8;
     vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"SAVE ARCADE STAGE 3 DARKNESS SCENE 7"));
-    if(font)image("build/menu-save-destination.bmp");
+    if(font)image("build-artifacts/menu-save-destination.bmp");
     g_vrMenuPage=MENU_LOAD_MODES;g_vrMenuRow=0;vrMenuDestination();
     assert(!strcmp(g_vrMenuDestination,"LOAD ARCADE STAGE 2 MUDDY SCENE 8"));
-    if(font)image("build/menu-load-destination.bmp");
+    if(font)image("build-artifacts/menu-load-destination.bmp");
     g_frame->checkpoint_mode_saves[0][0]=0;vrMenuDestination();assert(!strcmp(g_vrMenuDestination,"NO SAVED GAME"));
     g_vrMenuPage=-1;g_vrMenuRow=MENU_SAVE_GAME;g_frame->checkpoint_current_stage=0;vrMenuDestination();
     assert(strstr(g_vrMenuDestination,"UNAVAILABLE"));
@@ -327,15 +327,15 @@ int main(void)
     press(VC2_BTN_START);
     assert(g_vrMenuPage==MENU_STAGES && g_vrMenuRow==2 && g_frame->checkpoint_request==4);
     check_footer("SELECT STAGE TO CHOOSE ITS SCENE",NULL);
-    if(font)image("build/menu-stage-select.bmp");
+    if(font)image("build-artifacts/menu-stage-select.bmp");
     assert(vrMenuControl(VC2_BTN_START)==1 && vrMenuControl(VC2_BTN_START)==1 && vrMenuControl(0)==1);
     assert(g_vrMenuPage==MENU_SCENES && g_vrMenuStage==3 && g_vrMenuRow==1 && vrMenuCount()==10);
     check_footer("START STAGE 3 DARKNESS SCENE 7",NULL);
     assert(g_vrMenuScenes[0]==0 && g_vrMenuScenes[4]==35 && g_frame->checkpoint_request==4);
     press(VC2_BTN_UP);assert(g_vrMenuRow==0);press(VC2_BTN_DOWN);press(VC2_BTN_DOWN);
-    assert(g_vrMenuScenes[g_vrMenuRow]==9);if(font)image("build/menu-scene-select.bmp");
+    assert(g_vrMenuScenes[g_vrMenuRow]==9);if(font)image("build-artifacts/menu-scene-select.bmp");
     for(int i=0;i<4;i++)press(VC2_BTN_DOWN);
-    assert(g_vrMenuRow==6 && g_vrMenuScenes[g_vrMenuRow]==40);if(font)image("build/menu-scene-select-page2.bmp");
+    assert(g_vrMenuRow==6 && g_vrMenuScenes[g_vrMenuRow]==40);if(font)image("build-artifacts/menu-scene-select-page2.bmp");
     for(int i=0;i<4;i++)press(VC2_BTN_UP);
     g_previewOnly=1;press(VC2_BTN_START);g_previewOnly=0;
     assert(g_frame->checkpoint_request==4 && !g_frame->checkpoint_target_stage);
@@ -387,7 +387,7 @@ int main(void)
     assert(vrMenuItems[MENU_RENDERING][0].value==original+10); /* Held direction changes only once. */
     assert(vrMenuControl(0)==1);
     for(int i=0;i<6;i++)press(VC2_BTN_DOWN);
-    assert(g_vrMenuRow==6);if(font)image("build/menu-settings-page2.bmp");
+    assert(g_vrMenuRow==6);if(font)image("build-artifacts/menu-settings-page2.bmp");
     press(VC2_BTN_BACK);assert(g_vrMenuPage==-1);
     for(int i=0;i<MENU_CHEATS-MENU_RENDERING;i++)press(VC2_BTN_DOWN);
     press(VC2_BTN_START);assert(g_vrMenuPage==MENU_CHEATS);
@@ -395,7 +395,7 @@ int main(void)
     assert(g_frame->cheat_flags==HOTD_CHEAT_AMMO);
     press(VC2_BTN_START);assert(vrMenuItems[MENU_CHEATS][0].value==0);
     assert(!g_cheatFlags && !g_frame->cheat_flags);
-    if(font)image("build/menu-cheats.bmp");
+    if(font)image("build-artifacts/menu-cheats.bmp");
     vrMenuChange(&vrMenuItems[MENU_AUDIO][0],-1);
     assert(g_cfgMasterVolume==95 && g_frame->audio_levels==hotd_pack_audio(95,100,100));
     int msaa=g_cfgMsaa;vrMenuChange(&vrMenuItems[MENU_RENDERING][3],1);
@@ -477,7 +477,7 @@ int main(void)
     assert(g_cfgMsaa==2 && vrMenuItems[MENU_RENDERING][3].value==4); /* Resource setting waits for restart. */
     assert(!g_cfgArcadeGunColors);
     assert(GetPrivateProfileIntA("vr","laser",-1,g_vrIniPath)==0); /* Save only on close. */
-    if(font)image("build/menu-reset-defaults.bmp");
+    if(font)image("build-artifacts/menu-reset-defaults.bmp");
     char shipped[MAX_PATH];assert(GetFullPathNameA("HOTD2VR.ini",sizeof(shipped),shipped,NULL));
     assert(GetFileAttributesA(shipped)!=INVALID_FILE_ATTRIBUTES);
     for(unsigned g=0;g<6;g++)for(unsigned r=0;r<vrMenuCounts[g];r++) {
@@ -500,7 +500,7 @@ int main(void)
     g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=MENU_QUIT-1;
     g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;
     assert(!strcmp(vrMenuRootLabels[g_vrMenuRow],"RETURN TO TITLE"));
-    if(font)image("build/menu-return-to-title.bmp");
+    if(font)image("build-artifacts/menu-return-to-title.bmp");
     unsigned request=g_frame->checkpoint_request;
     g_previewOnly=1;press(VC2_BTN_START);g_previewOnly=0;
     assert(g_frame->checkpoint_request==request && g_vrMenuOpen);
@@ -525,7 +525,7 @@ int main(void)
     g_vrMenuOpen=1;g_vrMenuPage=-1;g_vrMenuRow=MENU_QUIT-1;
     g_vrMenuBlock=g_vrMenuArmed=0;g_vrMenuPrevious=0;
     press(VC2_BTN_DOWN);assert(g_vrMenuRow==MENU_QUIT && !strcmp(vrMenuRootLabels[MENU_QUIT],"QUIT GAME"));
-    if(font)image("build/menu-quit-game.bmp");
+    if(font)image("build-artifacts/menu-quit-game.bmp");
     g_frame->game_hwnd=(DWORD)(ULONG_PTR)gameWindow;g_frame->game_pid=GetCurrentProcessId();
     g_previewOnly=1;press(VC2_BTN_START);g_previewOnly=0;
     assert(g_vrMenuOpen && !PeekMessageA(&message,gameWindow,WM_CLOSE,WM_CLOSE,PM_REMOVE));

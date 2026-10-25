@@ -64,12 +64,12 @@ class PackageTest(unittest.TestCase):
 
     def test_default_paths_work_in_windows_powershell(self):
         shutil.copytree(self.build, self.root / 'build')
-        cache = self.root / 'build/release-deps/OpenXR.Loader.1.1.65.nupkg'
-        cache.parent.mkdir()
+        cache = self.root / 'build-artifacts/release-deps/OpenXR.Loader.1.1.65.nupkg'
+        cache.parent.mkdir(parents=True)
         shutil.copyfile(self.loader, cache)
         result = self.run_package(defaults=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.root / 'build/releases/HOTD2-PC2VR-v1.2.3-windows-x64.zip').is_file())
+        self.assertTrue((self.root / 'build-artifacts/releases/HOTD2-PC2VR-v1.2.3-windows-x64.zip').is_file())
 
     def test_release_allowlist_and_checksum(self):
         result = self.run_package()

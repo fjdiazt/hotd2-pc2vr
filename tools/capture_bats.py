@@ -267,7 +267,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--game', type=Path, default=Path(r'N:\games\systems\pcvr\bin\TheHouseOfTheDead2\Hod2.exe'))
     parser.add_argument('--re-source', type=Path, default=Path(r'C:\src\gaming\hotd2-re'))
-    parser.add_argument('--runtime', type=Path, default=ROOT / 'build/bat-trace-stage/build')
+    parser.add_argument('--runtime', type=Path, default=ROOT / 'build-artifacts/bat-trace-stage/build')
     parser.add_argument('--mode', choices=('both', 'native', 'converted'), default='both')
     args = parser.parse_args()
     live = processes()
@@ -275,7 +275,7 @@ def main():
         raise RuntimeError('Existing game/viewer/VR runtime found; preserved. Close before diagnostic run.')
     if hashlib.sha256(args.game.read_bytes()).hexdigest() != EXPECTED:
         raise ValueError('Unsupported game executable')
-    stage = ROOT / 'build' / time.strftime('bat-bot-%Y%m%d-%H%M%S')
+    stage = ROOT / 'build-artifacts' / time.strftime('bat-bot-%Y%m%d-%H%M%S')
     stage.mkdir()
     print(f'Desktop-only evidence: {stage}', flush=True)
     build(stage, args.re_source)
