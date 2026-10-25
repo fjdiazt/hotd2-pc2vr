@@ -28,7 +28,7 @@ class PackageTest(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix='hotd2-package-')
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        for name in ('HOTD2VR.ini', 'README.md', 'LICENSE',
+        for name in ('HOTD2VR.ini', 'README.md', 'LICENSE', 'start.bat',
                      'THIRD-PARTY.md',
                      'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md',
                      'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png'):
@@ -37,7 +37,7 @@ class PackageTest(unittest.TestCase):
             shutil.copyfile(ROOT / name, target)
         self.build = self.root / 'built files'
         self.build.mkdir()
-        for name, machine in (('HOTD2Launch.exe', 0x14C), ('HOTD2Bridge.dll', 0x14C), ('HOTD2VR.exe', 0x8664)):
+        for name, machine in (('injector.exe', 0x14C), ('HOTD2Bridge.dll', 0x14C), ('HOTD2VR.exe', 0x8664)):
             (self.build / name).write_bytes(pe(machine))
         for name in ('gun.obj', 'gun.mtl', 'gun.bmp'):
             shutil.copyfile(ROOT / 'assets/gun' / name, self.build / name)
@@ -77,12 +77,13 @@ class PackageTest(unittest.TestCase):
         archive = self.output / 'HOTD2-PC2VR-v1.2.3-windows-x64.zip'
         with zipfile.ZipFile(archive) as package:
             paths = {name.replace('\\', '/') for name in package.namelist() if not name.endswith('/')}
-            self.assertFalse(any(name.startswith(('vr/', 'build/', 'third_party/')) or name.endswith(('.bat', '.ps1')) for name in paths), paths)
+            self.assertFalse(any(name.startswith(('vr/', 'build/', 'third_party/')) or name.endswith('.ps1') or
+                                 (name.endswith('.bat') and name != 'start.bat') for name in paths), paths)
             files = paths
             self.assertEqual(files, {
-                'README.md', 'LICENSE', 'THIRD-PARTY.md',
+                'README.md', 'LICENSE', 'THIRD-PARTY.md', 'start.bat',
                 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
-                'docs/findings.md', 'HOTD2Launch.exe', 'HOTD2Bridge.dll',
+                'docs/findings.md', 'injector.exe', 'HOTD2Bridge.dll',
                 'HOTD2VR.exe', 'HOTD2VR.ini', 'openxr_loader.dll',
                 'gun.obj', 'gun.mtl', 'gun.bmp',
                 'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png',

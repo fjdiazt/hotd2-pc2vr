@@ -129,7 +129,7 @@ int wmain(int argc,wchar_t **argv)
             fwprintf(stderr,L"Invalid %ls%ls%ls\n",options.invalid_kind,
                 options.invalid_value?L" ":L"",options.invalid_value?options.invalid_value:L"");return 2;
         }
-        fwprintf(stderr,L"usage: HOTD2Launch.exe path-to-game.exe [--game-mode arcade|original] [--wait] [--native-window | --no-graphics-hooks] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
+        fwprintf(stderr,L"usage: injector.exe path-to-game.exe [--game-mode arcade|original] [--wait] [--native-window | --no-graphics-hooks] [--window | --no-window] [--vrwindow | --no-vrwindow] [--stereo] [--skip-splash | --show-splash] [--start-stage 1..6 [--start-scene 0..255]] [--continue-game | --no-continue-game]\n");return 2;
     }
     native_window=options.native_window;
     module=GetFullPathNameW(argv[1],MAX_PATH,game,NULL);

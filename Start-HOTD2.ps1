@@ -53,7 +53,7 @@ if ($PSBoundParameters.ContainsKey('StartStage') -and ($StartStage -lt 1 -or $St
 if ($PSBoundParameters.ContainsKey('StartScene') -and ($StartScene -lt 0 -or $StartScene -gt 255)) { throw "Invalid scene $StartScene" }
 if ($PSBoundParameters.ContainsKey('StartScene') -and !$PSBoundParameters.ContainsKey('StartStage')) { throw '-StartScene requires -StartStage.' }
 $out = Join-Path $PSScriptRoot 'build'
-if (!(Test-Path -LiteralPath "$out\HOTD2Launch.exe" -PathType Leaf) -or !(Test-Path -LiteralPath "$out\HOTD2Bridge.dll" -PathType Leaf) -or !(Test-Path -LiteralPath "$out\HOTD2VR.exe" -PathType Leaf)) { throw 'Mod runtime missing. Extract the complete release ZIP, or build the source checkout with build.ps1.' }
+if (!(Test-Path -LiteralPath "$out\injector.exe" -PathType Leaf) -or !(Test-Path -LiteralPath "$out\HOTD2Bridge.dll" -PathType Leaf) -or !(Test-Path -LiteralPath "$out\HOTD2VR.exe" -PathType Leaf)) { throw 'Mod runtime missing. Extract the complete release ZIP, or build the source checkout with build.ps1.' }
 if (!$PSBoundParameters.ContainsKey('GameExe')) {
     $gameDirectory = [IO.DirectoryInfo]$PSScriptRoot
     while ($gameDirectory) {
@@ -87,7 +87,7 @@ if ($NoWindow) { $viewerArgs += '--no-window' }
 if ($VrWindow) { $viewerArgs += '--vrwindow' }
 if ($NoVrWindow) { $viewerArgs += '--no-vrwindow' }
 if ($NoGraphicsHooks) { $viewerArgs = @('--no-window', '--no-vrwindow') }
-& "$out\HOTD2Launch.exe" @launchArgs @viewerArgs
+& "$out\injector.exe" @launchArgs @viewerArgs
 if ($LASTEXITCODE) { throw 'Game injection failed.' }
 if ($Seconds -gt 0) { $viewerArgs += '--seconds', "$Seconds" }
 if ($InfiniteAmmo) { $viewerArgs += '--infinite-ammo' }

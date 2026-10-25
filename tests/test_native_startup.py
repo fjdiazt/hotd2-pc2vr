@@ -120,6 +120,36 @@ class NativeFontTest(test_menu_font.MenuFontTest):
 
 
 class NativeStartupTest(unittest.TestCase):
+    def test_start_bat_uses_sibling_app_and_forwards_arguments(self):
+        with tempfile.TemporaryDirectory(prefix='hotd2 start & [1] ') as temporary:
+            root = Path(temporary)
+            unrelated = root / 'other cwd'
+            unrelated.mkdir()
+            (root / 'start.bat').write_bytes((ROOT / 'start.bat').read_bytes())
+            source = root / 'stub.c'
+            source.write_text('''#include <stdio.h>
+#include <stdlib.h>
+#include <wchar.h>
+int wmain(int argc,wchar_t **argv) {
+    FILE *out=_wfopen(_wgetenv(L"HOTD2_TEST_START_ARGS"),L"wb");
+    if(!out)return 99;
+    for(int i=1;i<argc;i++)fprintf(out,"%ls\\n",argv[i]);
+    fclose(out);
+    return atoi(getenv("HOTD2_TEST_START_EXIT"));
+}
+''')
+            subprocess.run(['gcc', '-municode', '-static-libgcc', '-o', str(root / 'HOTD2VR.exe'),
+                            str(source)], check=True, capture_output=True, timeout=30)
+            output = root / 'args.txt'
+            game = root / 'game & spaces/Hod2.exe'
+            command = f'"{os.environ["COMSPEC"]}" /d /s /c ""{root / "start.bat"}" --game-exe "{game}" --no-vrwindow"'
+            for expected in (0, 7):
+                env = dict(os.environ, HOTD2_TEST_START_ARGS=str(output), HOTD2_TEST_START_EXIT=str(expected))
+                result = subprocess.run(command, cwd=unrelated, env=env, input='', capture_output=True,
+                                        text=True, timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                self.assertEqual(output.read_text().splitlines(), ['--game-exe', str(game), '--no-vrwindow'])
+
     def test_nearest_game_and_explicit_override(self):
         with tempfile.TemporaryDirectory(prefix='hotd2 native & [1] ') as temporary:
             root = Path(temporary)
@@ -158,7 +188,7 @@ int wmain(int argc,wchar_t **argv) {
     return argc>2 && !wcscmp(argv[2],L"--show-splash")?7:0;
 }
 ''')
-            subprocess.run(['gcc', '-municode', '-static-libgcc', '-o', str(root / 'HOTD2Launch.exe'),
+            subprocess.run(['gcc', '-municode', '-static-libgcc', '-o', str(root / 'injector.exe'),
                             str(source)], check=True, capture_output=True, timeout=30)
             # The helper inherits cwd; shell metacharacters must remain literal.
             game = root / 'game & [1].exe'

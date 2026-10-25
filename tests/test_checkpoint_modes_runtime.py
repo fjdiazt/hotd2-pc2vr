@@ -57,7 +57,7 @@ def main():
         raise SystemExit('Existing bridge; no test launched.')
     stage = Path(tempfile.mkdtemp(prefix='mode-runtime-', dir=ROOT / 'build-artifacts'))
     print('Evidence:', stage, flush=True)
-    for filename in ('HOTD2Launch.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'openxr_loader.dll'):
+    for filename in ('injector.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'openxr_loader.dll'):
         shutil.copy2(ROOT / 'build' / filename, stage / filename)
     (stage / 'HOTD2VR.ini').write_text('[bridge]\nlaunchfix=1\nskip_splash=1\nwindowed=1\n'
                                       '[vr]\nwindow=0\nvrwindow=0\ncontinue_game=0\nakimbo=0\n'
@@ -76,7 +76,7 @@ def main():
     children = []
     report = []
     try:
-        launch = subprocess.run([str(stage / 'HOTD2Launch.exe'), str(game), '--no-graphics-hooks', '--no-continue-game'],
+        launch = subprocess.run([str(stage / 'injector.exe'), str(game), '--no-graphics-hooks', '--no-continue-game'],
                                 capture_output=True, text=True, check=True, timeout=25)
         pid = int(re.search(r'game PID (\d+)', launch.stdout).group(1))
         process = kernel.OpenProcess(0x100011, False, pid)

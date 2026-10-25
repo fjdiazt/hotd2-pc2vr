@@ -10,7 +10,7 @@ import unittest
 
 class LaunchOptionsTest(unittest.TestCase):
     def test_splash_flags_reach_game_validation(self):
-        launcher = Path(os.environ.get("HOTD2_TEST_BUILD_DIR", Path(__file__).resolve().parents[1] / "build")) / "HOTD2Launch.exe"
+        launcher = Path(os.environ.get("HOTD2_TEST_BUILD_DIR", Path(__file__).resolve().parents[1] / "build")) / "injector.exe"
         for flags in (("--skip-splash",), ("--show-splash",),
                       ("--wait", "--skip-splash"),
                       ("--native-window", "--show-splash"),
@@ -54,9 +54,9 @@ int wmain(int argc,wchar_t **argv) {
 }
 ''')
             subprocess.run(["gcc", "-municode", "-static-libgcc", "-o",
-                            str(build / "HOTD2Launch.exe"), str(shim)], check=True,
+                            str(build / "injector.exe"), str(shim)], check=True,
                            capture_output=True, text=True, timeout=30)
-            shutil.copyfile(build / "HOTD2Launch.exe", build / "HOTD2VR.exe")
+            shutil.copyfile(build / "injector.exe", build / "HOTD2VR.exe")
             log = fixture / "args.txt"
             viewer_log = fixture / "viewer-args.txt"
             env = dict(os.environ, HOTD2_TEST_LAUNCH_ARGS=str(log), HOTD2_TEST_VIEWER_ARGS=str(viewer_log))

@@ -16,10 +16,10 @@ function Assert-PeMachine([string]$Path, [int]$Machine) {
     if ([long]$pe + 6 -gt $image.Length -or [BitConverter]::ToUInt32($image, $pe) -ne 0x4550) { throw "Invalid PE header: $Path" }
     if ([BitConverter]::ToUInt16($image, $pe + 4) -ne $Machine) { throw "Wrong PE architecture: $Path" }
 }
-foreach ($name in 'HOTD2Launch.exe', 'HOTD2Bridge.dll') { Assert-PeMachine (Join-Path $BuildDirectory $name) 0x14C }
+foreach ($name in 'injector.exe', 'HOTD2Bridge.dll') { Assert-PeMachine (Join-Path $BuildDirectory $name) 0x14C }
 Assert-PeMachine (Join-Path $BuildDirectory 'HOTD2VR.exe') 0x8664
-$runtime = @('HOTD2Launch.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'gun.obj', 'gun.mtl', 'gun.bmp')
-$sources = @('README.md', 'LICENSE', 'THIRD-PARTY.md',
+$runtime = @('injector.exe', 'HOTD2Bridge.dll', 'HOTD2VR.exe', 'gun.obj', 'gun.mtl', 'gun.bmp')
+$sources = @('README.md', 'LICENSE', 'THIRD-PARTY.md', 'start.bat',
     'docs\vr-menu.md', 'docs\cheats.md', 'docs\pause.md', 'docs\findings.md',
     'docs\screenshots\gameplay-vr-animated.png', 'docs\screenshots\vr-settings.png')
 foreach ($name in $runtime) {

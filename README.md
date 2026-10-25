@@ -11,7 +11,7 @@ You need your own installed Windows PC copy of the game, a PC VR headset, and mo
 1. **Get the mod.** Download the Windows ZIP from [Releases](https://github.com/fjdiazt/hotd2-pc2vr/releases). If no ZIP is available, see [Build from source](#build-from-source).
 2. **Install.** Create a **`vr`** folder beside your game's **`Hod2.exe`**. Extract the ZIP's contents into `vr`.
 3. **Connect your headset and controllers.** Start your usual PC VR software and make sure the headset is ready.
-4. **Start the mod.** Open `vr` and double-click **`HOTD2VR.exe`**. It finds and starts the game automatically.
+4. **Start the mod.** Open `vr` and double-click **`start.bat`** to launch **`HOTD2VR.exe`**. It finds and starts the game automatically.
 5. **Start playing.** Put on the headset, face forward, choose **Arcade or Original mode** with a thumbstick, and press **A/X** to confirm. The game moves you through the level; aim your guns and pull the triggers to shoot.
 
 ### Buttons you need
@@ -198,7 +198,7 @@ From the repository root:
 
 Replace the example path with your game location when running from a separate source checkout.
 
-The build produces `HOTD2Launch.exe`, `HOTD2Bridge.dll`, `HOTD2VR.exe`, the gun assets and `HOTD2VR.ini` under `build\`. Compiler outputs, test executables and diagnostic images stay under `build-artifacts\`. It runs offline checks before publishing the runtime files. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
+The build produces `HOTD2VR.exe`, `start.bat`, `injector.exe`, `HOTD2Bridge.dll`, the gun assets and `HOTD2VR.ini` under `build\`. Compiler outputs, test executables and diagnostic images stay under `build-artifacts\`. It runs offline checks before publishing the runtime files. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
 
 Close any existing game session before launching. Keep the bridge and viewer from the same build together; their shared-memory formats must match.
 
@@ -289,7 +289,7 @@ The checkpoint API uses `checkpoint_action` (`HOTD_CHECKPOINT_SAVE`, `HOTD_CHECK
 
 The bridge stores `[checkpoint] version=2`, `mode=arcade|original`, `stage=1..6` and `scene=0..255` beside its DLL. **`HOTD2VR.checkpoint.ini`** holds Arcade; **`HOTD2VR.original.checkpoint.ini`** holds Original. Existing version-1 saves remain readable as Arcade. The files are separate from configuration and native game saves. Each write uses a flushed temporary file and atomic replacement. Autosave writes only when the supported mode/scene changes. Player health, score, equipment, inventory, enemies, route history and exact script position are not saved. Disabling Autosave retains both files; manual Save/Load remain available.
 
-Direct launcher equivalents: `HOTD2Launch.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. Add `--game-mode original` for a native Original startup destination. Unlike the executable's live stage command, helper startup flags apply at the next new game through the normal menus. `--native-window` skips bridge injection and cannot be combined with a checkpoint request. Stage/scene choices are launch options or menu actions; only Autosave is stored as an INI preference.
+Direct launcher equivalents: `injector.exe path-to-Hod2.exe --start-stage 6 --start-scene 3 --continue-game`; `--no-continue-game` disables recording/resume. Add `--game-mode original` for a native Original startup destination. Unlike the executable's live stage command, helper startup flags apply at the next new game through the normal menus. `--native-window` skips bridge injection and cannot be combined with a checkpoint request. Stage/scene choices are launch options or menu actions; only Autosave is stored as an INI preference.
 
 Both executables reject missing or invalid stage/scene values before starting a process.
 
@@ -458,7 +458,7 @@ The [shipped INI](HOTD2VR.ini) contains no overrides. Relative gun-model paths r
 
 #### Startup splashes and native window
 
-`[bridge] skip_splash=1` starts at the title, skipping SEGA/Empire logos. Use `skip_splash=0` or `HOTD2VR.exe --show-splash` to restore them; `--skip-splash` enables the bypass. The internal `HOTD2Launch.exe` helper also accepts these flags with `--wait` and `--native-window`.
+`[bridge] skip_splash=1` starts at the title, skipping SEGA/Empire logos. Use `skip_splash=0` or `HOTD2VR.exe --show-splash` to restore them; `--skip-splash` enables the bypass. The internal `injector.exe` helper also accepts these flags with `--wait` and `--native-window`.
 
 Optional `[bridge] launchfix=1` bypasses the supported game's CD check in memory before startup. The launcher checks the original instruction signature, changes one branch displacement, restores memory protection and verifies the result. Unsupported code stops launch. The default is off; set it in `HOTD2VR.ini` beside the executables to enable. `Hod2.exe` stays unchanged; setting `launchfix=0` restores the original check on the next launch. Installed game data is still required.
 
@@ -467,7 +467,7 @@ The launcher validates the startup instruction and changes one byte while the pr
 For a native windowed comparison with the original splash sequence, without the capture bridge or viewer:
 
 ```powershell
-.\HOTD2Launch.exe "C:\Games\TheHouseOfTheDead2\Hod2.exe" --native-window --show-splash
+.\injector.exe "C:\Games\TheHouseOfTheDead2\Hod2.exe" --native-window --show-splash
 ```
 
 For native graphics with no graphics hooks:
@@ -482,7 +482,7 @@ The executable starts the selected Arcade scene; add `--game-mode original` to u
 
 Use `--continue-game` to resume the saved checkpoint. The shared-memory checkpoint API also works in this mode, but Settings is unavailable. Close the existing game before launching another session.
 
-Direct bridge launch: `HOTD2Launch.exe path-to-Hod2.exe --no-graphics-hooks --start-stage 4 --start-scene 0 --no-continue-game`; attach `HOTD2VR.exe --no-window --no-vrwindow` to publish configured cheats/audio. `--native-window` remains the separate comparison mode without any bridge injection.
+Direct bridge launch: `injector.exe path-to-Hod2.exe --no-graphics-hooks --start-stage 4 --start-scene 0 --no-continue-game`; attach `HOTD2VR.exe --no-window --no-vrwindow` to publish configured cheats/audio. `--native-window` remains the separate comparison mode without any bridge injection.
 
 For the bat-wing investigation, optional `[bridge] trace_bats=1` records only chapter 4, scene 0 bat models `0x1B01..0x1B09` while unpaused. It buffers four frames at least 15 game frames apart, capped at 256 draw records, then writes `HOTD2BatTrace-<pid>-<tick>.bin` plus layout metadata `.json` and matching native-frame BMPs beside the bridge. Pause or scene exit flushes an already started partial trace. Each draw retains the native model record, matrices, material/lights, up to 256 input vertices and 768 converted vertices; truncation is marked. Capture-disabled launches install no trace. Default is off; no rendering state is changed by the trace. The final bounded write can cause a brief hitch, so this is diagnostic output rather than a performance benchmark. Inspect it with `python tools/read_bat_trace.py path-to-trace.json`.
 

@@ -8,7 +8,7 @@ $gcc = (Get-Command gcc -ErrorAction Stop).Source
 if ((& $gcc -dumpmachine) -ne 'i686-w64-mingw32') { throw '32-bit MinGW GCC required for game bridge.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -shared -static-libgcc '-Wl,--kill-at' -o "$out\HOTD2Bridge.dll" "$root\src\bridge.c" -ldxguid -luser32 -lkernel32
 if ($LASTEXITCODE) { throw 'Bridge build failed.' }
-& $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\HOTD2Launch.exe" "$root\src\launch.c"
+& $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\injector.exe" "$root\src\launch.c"
 if ($LASTEXITCODE) { throw 'Launcher build failed.' }
 & $gcc -std=c11 -O2 -Wall -Wextra -municode -static-libgcc -o "$out\test_native_startup.exe" "$root\tests\test_native_startup.c" -lbcrypt
 if ($LASTEXITCODE) { throw 'Native startup test driver build failed.' }
@@ -98,10 +98,14 @@ if ($LASTEXITCODE) { throw 'Aim indicator test failed.' }
 if ($LASTEXITCODE) { throw 'Effect shader test failed.' }
 & "$out\test_output_modes.exe"
 if ($LASTEXITCODE) { throw 'Output mode test failed.' }
-foreach ($name in 'HOTD2VR.exe', 'HOTD2Launch.exe', 'HOTD2Bridge.dll') {
+foreach ($name in 'HOTD2VR.exe', 'injector.exe', 'HOTD2Bridge.dll') {
     Copy-Item -LiteralPath (Join-Path $out $name) -Destination $runtime -Force
 }
 Copy-Item "$root\assets\gun\*" -Destination $runtime -Force
+Copy-Item -LiteralPath "$root\start.bat" -Destination $runtime -Force
+if (Test-Path -LiteralPath "$runtime\HOTD2Launch.exe" -PathType Leaf) {
+    Remove-Item -LiteralPath "$runtime\HOTD2Launch.exe"
+}
 if (!(Test-Path "$runtime\HOTD2VR.ini")) { Copy-Item "$root\HOTD2VR.ini" $runtime }
 $loader = Join-Path $out 'openxr_loader.dll'
 if (!(Test-Path $loader)) { $loader = 'N:\games\systems\pcvr\bin\VirtuaCop2VR\VR\openxr_loader.dll' }

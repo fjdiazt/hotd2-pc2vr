@@ -83,7 +83,7 @@ def build(stage, re_source):
                     str(stage / 'bridge.o'), str(ROOT / 'tools/bat_bot.cpp'), str(stage / 'calibration.cpp'),
                     '-ldxguid', '-luser32', '-lkernel32'], check=True)
     subprocess.run(['gcc', '-std=c11', '-O2', '-Wall', '-Wextra', '-municode', '-static-libgcc',
-                    '-o', str(stage / 'HOTD2Launch.exe'), str(ROOT / 'src/launch.c')], check=True)
+                    '-o', str(stage / 'injector.exe'), str(ROOT / 'src/launch.c')], check=True)
     manifest = {'autoplay_sha256': hashlib.sha256(autoplay.encode()).hexdigest(),
                 'calibration_sha256': hashlib.sha256(calibration.encode()).hexdigest()}
     (stage / 'build-inputs.json').write_text(json.dumps(manifest, indent=2))
@@ -93,7 +93,7 @@ def run_case(mode, stage, game, runtime):
     from PIL import Image, ImageGrab
     folder = stage / mode
     folder.mkdir()
-    for name in ('HOTD2Bridge.dll', 'HOTD2Launch.exe'):
+    for name in ('HOTD2Bridge.dll', 'injector.exe'):
         shutil.copy2(stage / name, folder / name)
     for path in runtime.iterdir():
         if path.is_file() and path.name in ('HOTD2VR.exe', 'openxr_loader.dll', 'gun.obj', 'gun.mtl', 'gun.bmp', 'menu-font.rgba'):
@@ -113,7 +113,7 @@ def run_case(mode, stage, game, runtime):
     flags = ['--window' if mode == 'converted' else '--no-window', '--no-vrwindow', '--start-stage', '4', '--start-scene', '0', '--no-continue-game']
     if mode == 'native':
         flags.append('--no-graphics-hooks')
-    launched = subprocess.run([str(folder / 'HOTD2Launch.exe'), str(game), *flags], env=env,
+    launched = subprocess.run([str(folder / 'injector.exe'), str(game), *flags], env=env,
                               capture_output=True, text=True, timeout=25)
     (folder / 'launch.log').write_text(launched.stdout + launched.stderr)
     launched.check_returncode()

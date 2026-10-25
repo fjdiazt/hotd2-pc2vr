@@ -222,7 +222,7 @@ static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsign
 static int hotdStartGame(const wchar_t *viewer,const wchar_t *game,const wchar_t *options)
 {
     wchar_t helper[MAX_PATH],command[2048];STARTUPINFOW startup={0};PROCESS_INFORMATION process={0};
-    if(!hotdSibling(helper,viewer,L"HOTD2Launch.exe") || wcschr(game,L'"') ||
+    if(!hotdSibling(helper,viewer,L"injector.exe") || wcschr(game,L'"') ||
        swprintf(command,2048,L"\"%ls\" \"%ls\" %ls",helper,game,options)<0)return 0;
     startup.cb=sizeof(startup);
     if(!CreateProcessW(helper,command,NULL,NULL,FALSE,0,NULL,NULL,&startup,&process))return 0;
@@ -244,7 +244,7 @@ static const char *hotdPrepareGame(const wchar_t *viewer,const wchar_t *explicit
     }
     int ready=!font || hotdEnsureFont(game,viewer,exe,length);free(exe);
     if(!ready)return "Menu asset extraction failed. Check tex/scr_opt_moji05.bin, tex/scr_item.bin and write access to the mod folder.";
-    if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check HOTD2Launch.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";
+    if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check injector.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";
     return NULL;
 }
 #endif

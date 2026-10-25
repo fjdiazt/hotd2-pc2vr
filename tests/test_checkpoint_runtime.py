@@ -34,7 +34,7 @@ ini = (build / "HOTD2VR.ini").read_bytes()
 
 
 def session(from_menu=False):
-    command = [str(build / "HOTD2Launch.exe"), str(Path(sys.argv[1]).resolve()), "--no-continue-game"]
+    command = [str(build / "injector.exe"), str(Path(sys.argv[1]).resolve()), "--no-continue-game"]
     if not from_menu:
         command += ["--start-stage", "1", "--start-scene", "4"]
     launched = subprocess.run(command, cwd=build, text=True, capture_output=True, check=True)
