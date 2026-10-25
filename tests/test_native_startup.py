@@ -47,6 +47,13 @@ class NativeFontTest(test_menu_font.MenuFontTest):
         self.output.parent.mkdir(parents=True, exist_ok=True)
         return run('font', self.game, self.output.parent / 'HOTD2VR.exe', self.output, self.identity)
 
+    def test_prepare_accepts_unknown_hash(self):
+        self.output.parent.mkdir()
+        result = run('prepare-font', self.output.parent / 'HOTD2VR.exe', self.game)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('unverified compatibility', result.stderr)
+        self.assertEqual(self.output.read_bytes()[:4], self.magic)
+
     def test_corruption_preserves_previous_font(self):
         self.output.parent.mkdir()
         self.output.write_bytes(b'old font')
@@ -171,7 +178,7 @@ int wmain(int argc,wchar_t **argv) {
             self.assertEqual(Path(run('find', viewer).stdout.strip()), beside)
             result = run('prepare', viewer, beside)
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn('SHA256 mismatch', result.stderr)
+            self.assertIn('file is empty', result.stderr)
             self.assertFalse((mod / 'menu-font.rgba').exists())
 
     def test_native_helper_receives_literal_paths_and_flags(self):
@@ -197,6 +204,13 @@ int wmain(int argc,wchar_t **argv) {
                                     cwd=root, capture_output=True, text=True, timeout=10)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((root / 'args.txt').read_text(encoding='utf-16-le').splitlines(), [str(game), *options.split()])
+            game.write_bytes(b'Unknown game hash; helper fixture never executes game code.')
+            (root / 'menu-font.rgba').write_bytes(b'H2P2' + bytes(128 * 32 * 32 * 4))
+            result = subprocess.run([str(DRIVER), 'prepare', str(root / 'HOTD2VR.exe'), str(game)],
+                                    cwd=root, capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('unverified compatibility', result.stderr)
+            self.assertEqual((root / 'args.txt').read_text(encoding='utf-16-le').splitlines(), [str(game)])
             result = subprocess.run([str(DRIVER), 'start', str(root / 'HOTD2VR.exe'), str(game), '--show-splash'],
                                     cwd=root, capture_output=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)

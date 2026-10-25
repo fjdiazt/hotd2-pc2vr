@@ -151,7 +151,7 @@ To back up progress, copy `HOTD2VR.checkpoint.ini` (Arcade) and `HOTD2VR.origina
 
 ## Troubleshooting
 
-- **Unsupported executable:** only one original Windows game build is supported. See the [supported executable](docs/technical-reference.md#requirements).
+- **Unrecognized executable:** different game versions can attempt startup. If yours has issues, report the game version, executable SHA256 and symptoms. See the [tested executable](docs/technical-reference.md#requirements).
 - **Game does not start or reports a bridge mismatch:** close the game and viewer, then run `start.bat`. Keep the files from the same mod release together.
 - **Headset unavailable:** check that your PC VR software is running, the headset is connected, and its OpenXR runtime is active.
 - **Unexpected settings:** check `vr\HOTD2VR.ini`, or use **Reset defaults** in VR Settings.

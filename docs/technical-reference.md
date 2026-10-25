@@ -5,7 +5,7 @@ This reference covers command-line use, configuration and implementation details
 Run command examples from the mod folder unless the section says otherwise.
 Build scripts and developer tests require a source checkout.
 
-- [Requirements and supported executable](#requirements)
+- [Requirements and tested executable](#requirements)
 - [Launching from another location](#download-and-run)
 - [Building and packaging](#build-from-source)
 - [Desktop previews and reconnecting](#desktop-previews-and-reconnecting)
@@ -35,14 +35,14 @@ Your existing game installation stays in place. No HOTD2 game files are included
 - Release ZIPs need no PowerShell, Python or compilers.
 - The x64 `openxr_loader.dll` beside the viewer (included in release ZIPs).
 
-Only this `Hod2.exe` build is currently supported:
+This is the `Hod2.exe` build used for development and testing:
 
 ```text
 SHA256 C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A
 MD5    97C9E516A287AAB33A455A396DADAA45
 ```
 
-The launcher checks the SHA256 before starting a game; native hooks also check their instruction signatures. Other executable layouts, the Remake, and emulated versions are outside the supported target.
+An unrecognized SHA256 prints a warning and continues startup; no override flag is needed. Other original Windows game versions are unverified. Report the game version, executable SHA256 and symptoms if you encounter issues. Native instruction checks and asset validation remain: incompatible hook sites can still stop startup or disable the affected feature. The Remake and emulated versions are outside the supported target.
 
 ## Download and run
 
@@ -50,7 +50,7 @@ Follow [How to play](../README.md#how-to-play) for installation. Each release ZI
 
 `HOTD2VR.exe` validates the game and extracts the settings font on first run. No scripts are needed to play. Keep the packaged runtime files together.
 
-Game discovery starts beside the launcher and checks each parent folder for `Hod2.exe`, choosing the nearest copy. It does not depend on the terminal's current folder. An unsupported nearest executable stops launch rather than falling back to another installation.
+Game discovery starts beside the launcher and checks each parent folder for `Hod2.exe`, choosing the nearest copy. It does not depend on the terminal's current folder. An unrecognized hash still uses that nearest copy, without falling back to another installation.
 
 For a mod installed elsewhere, supply the path explicitly:
 
@@ -397,7 +397,7 @@ Implementation and test evidence: [docs/cheats.md](cheats.md).
 
 ## How it works
 
-1. `HOTD2VR.exe` finds and validates the game, extracts the menu font if needed, and invokes the x86 launcher. The launcher creates `Hod2.exe` suspended, applies selected startup changes, injects `HOTD2Bridge.dll`, then resumes the game.
+1. `HOTD2VR.exe` finds the game, warns for unrecognized executable hashes, extracts the menu font if needed, and invokes the x86 launcher. The launcher creates `Hod2.exe` suspended, applies selected startup changes, injects `HOTD2Bridge.dll`, then resumes the game.
 2. The HOTD2 bridge hooks DirectDraw/Direct3D7 submissions. It captures geometry, textures and the live projection, reconstructs pretransformed vertices, and retains native material, blending, alpha-test and culling information.
 3. Coherent frames and a texture atlas pass through shared memory to the separate x64 Direct3D11/OpenXR viewer.
 4. The viewer renders the scene for both eyes. Controller rays intersect world geometry; the hit projects through HOTD2's camera back into each player's native gun input. HUD and shot-effect geometry are excluded from aim intersections.
@@ -410,7 +410,7 @@ Texture capture preserves each material's independent U/V wrap, mirror and clamp
 
 ## Troubleshooting and current limits
 
-- **Unsupported executable:** compare the game's hash with the supported build above. This is an exact-build integration.
+- **Unrecognized executable:** the hash warning does not stop launch. If startup or gameplay fails, report the game version, SHA256 and symptoms; the tested build is listed above. Instruction-signature failures remain actionable compatibility limits.
 - **No bridge / protocol mismatch:** close stale game/viewer sessions and start `HOTD2VR.exe`. Keep bridge and viewer builds together; close an already running unmodified game first.
 - **OpenXR fails but desktop preview works:** check the active runtime, headset connection and x64 loader beside the viewer.
 - **Unexpected settings:** check `HOTD2VR.ini` beside the running executable. Source builds use `build\HOTD2VR.ini`, separate from the root template. Rebuilding preserves existing values.

@@ -66,7 +66,9 @@ if (!$PSBoundParameters.ContainsKey('GameExe')) {
 if ([string]::IsNullOrWhiteSpace($GameExe) -or !(Test-Path -LiteralPath $GameExe -PathType Leaf)) { throw "Game executable not found: $GameExe" }
 $GameExe = (Get-Item -LiteralPath $GameExe).FullName
 $expected = 'C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A'
-if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) { throw 'Unsupported HOTD2 executable; no process started.' }
+if ((Get-FileHash -LiteralPath $GameExe -Algorithm SHA256).Hash -ne $expected) {
+    Write-Warning 'Unrecognized HOTD2 executable SHA256; continuing with unverified compatibility. Include your executable SHA256 when reporting issues.'
+}
 if (!(Test-Path -LiteralPath "$out\menu-font.rgba" -PathType Leaf)) {
     & "$PSScriptRoot\tools\extract_menu_font.ps1" -GameExe $GameExe -Output "$out\menu-font.rgba"
 }

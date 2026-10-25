@@ -239,9 +239,11 @@ static const char *hotdPrepareGame(const wchar_t *viewer,const wchar_t *explicit
     if(!hotdFindGame(viewer,explicit_path,game))
         return "Hod2.exe not found. Place the mod in the game's vr folder, or use --game-exe PATH.";
     unsigned char *exe=hotdReadFile(game,&length);
-    if(!exe || !hotdGameHash(exe,length,HOTD_GAME_SHA256)) {
-        free(exe);return "Unsupported HOTD2 executable (SHA256 mismatch). Game not started.";
+    if(!exe || !length) {
+        free(exe);return "Could not read HOTD2 executable, or file is empty. Game not started.";
     }
+    if(!hotdGameHash(exe,length,HOTD_GAME_SHA256))
+        fputs("Warning: unrecognized HOTD2 executable SHA256; continuing with unverified compatibility. Include your executable SHA256 when reporting issues.\n",stderr);
     int ready=!font || hotdEnsureFont(game,viewer,exe,length);free(exe);
     if(!ready)return "Menu asset extraction failed. Check tex/scr_opt_moji05.bin, tex/scr_item.bin and write access to the mod folder.";
     if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check injector.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";

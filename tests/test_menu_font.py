@@ -64,13 +64,19 @@ class MenuFontTest(unittest.TestCase):
             expected[base+128:base+136] = bytes((17, 34, 51, 255, 68, 85, 102, 136))
         self.assertEqual(self.output.read_bytes(), expected)
 
-    def test_unsupported_executable_preserves_existing_output(self):
+    def test_changed_executable_hash_still_extracts(self):
+        self.game.write_bytes(self.game.read_bytes() + b'patched metadata')
+        result = self.run_extractor()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('unrecognized hotd2 executable sha256', (result.stdout + result.stderr).lower())
+        self.assertEqual(self.output.read_bytes()[:4], self.magic)
+
+    def test_invalid_executable_preserves_existing_output(self):
         self.game.write_bytes(b'unsupported')
         self.output.parent.mkdir()
         self.output.write_bytes(b'existing font')
         result = self.run_extractor()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn('Unsupported HOTD2 executable', result.stderr)
         self.assertEqual(self.output.read_bytes(), b'existing font')
 
     def test_corrupt_texture_writes_nothing(self):
