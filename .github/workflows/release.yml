@@ -37,6 +37,8 @@ jobs:
           if ($LASTEXITCODE) { throw 'Font extraction tests failed.' }
           python -m unittest discover -s tests -p test_native_startup.py
           if ($LASTEXITCODE) { throw 'Native startup tests failed.' }
+          python -m unittest discover -s tests -p test_data_paths.py
+          if ($LASTEXITCODE) { throw 'Data folder tests failed.' }
           python -m unittest discover -s tests -p test_launch_cli.py
           if ($LASTEXITCODE) { throw 'Launcher tests failed.' }
           python -m unittest discover -s tests -p test_package.py

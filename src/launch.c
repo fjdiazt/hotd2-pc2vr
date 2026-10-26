@@ -9,6 +9,7 @@
 #include <string.h>
 #include <wchar.h>
 #include "checkpoint.h"
+#include "data_paths.h"
 
 typedef struct {
     int wait,native_window,capture,skip_splash,launchfix,start_stage,start_scene,continue_game,game_mode;
@@ -122,8 +123,11 @@ int wmain(int argc,wchar_t **argv)
     LaunchOptions options;
     int result=1,resumed=0,native_window;
     module=GetModuleFileNameW(NULL,ini,MAX_PATH);if(!module || module>=MAX_PATH)return 2;
-    slash=wcsrchr(ini,L'\\');if(!slash || slash-ini>MAX_PATH-14)return 2;
-    wcscpy(slash+1,L"HOTD2VR.ini");
+    wchar_t data_ini[MAX_PATH];
+    if(!hotdDataFileW(ini,L"HOTD2VR.ini",data_ini)) {
+        fwprintf(stderr,L"Cannot prepare writable mod data (Windows error %lu). Check mod folder and Local AppData access.\n",GetLastError());return 1;
+    }
+    wcscpy(ini,data_ini);
     if(!readLaunchOptions(argc,argv,ini,&options)) {
         if(options.invalid_kind) {
             fwprintf(stderr,L"Invalid %ls%ls%ls\n",options.invalid_kind,

@@ -298,12 +298,12 @@ static unsigned cheatArg(const char *arg)
     return 0;
 }
 
-static void loadCfg(void)
+static int loadCfg(void)
 {
-    char *path = g_vrIniPath;
-    DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
-    while (n > 0 && path[n - 1] != '\\') n--;
-    lstrcpyA(path + n, "HOTD2VR.ini");
+    char module[MAX_PATH],*path=g_vrIniPath;
+    DWORD n=GetModuleFileNameA(NULL,module,MAX_PATH);
+    if(!n || n>=MAX_PATH || !hotdDataFileA(module,"HOTD2VR.ini",path))return 0;
+    while(n && module[n-1]!='\\')n--;
     readGraphicsFlags(path);
     g_vrMenuEnabled=GetPrivateProfileIntA("vr","menu",1,path)!=0;
     g_cfgContinueGame=GetPrivateProfileIntA("vr","continue_game",0,path)!=0;
@@ -351,9 +351,9 @@ static void loadCfg(void)
     if (g_cfgGunScale < 10)   g_cfgGunScale = 10;
     if (g_cfgGunScale > 1000) g_cfgGunScale = 1000;
     if (g_cfgGun[0] && g_cfgGun[1] != ':' && g_cfgGun[0] != '\\') {
-        /* relative to the exe, like the ini itself */
+        /* Assets remain relative to the executable, even with user-data settings. */
         char full[MAX_PATH];
-        lstrcpynA(full, path, (int)(n + 1));
+        lstrcpynA(full, module, (int)(n + 1));
         lstrcpynA(full + n, g_cfgGun, (int)(MAX_PATH - n));
         lstrcpyA(g_cfgGun, full);
     }
@@ -377,6 +377,7 @@ static void loadCfg(void)
     if (g_cfgMsaa > 8) g_cfgMsaa = 8;
     if (g_cfgSuper < 50)  g_cfgSuper = 50;
     if (g_cfgSuper > 250) g_cfgSuper = 250;
+    return 1;
 }
 static unsigned  g_scrSeqSeen;
 static int       g_scrFresh;        /* new pixels waiting to be uploaded */
@@ -3835,7 +3836,10 @@ int main(int argc, char **argv)
     wchar_t gamePath[MAX_PATH]={0},viewerPath[MAX_PATH],launchOptions[256];
     DesktopPreview preview={0};
     g_previewOnly=0;
-    loadCfg();
+    if(!loadCfg()) {
+        note("Cannot prepare writable mod data (Windows error %lu). Check mod folder and Local AppData access.\n",(unsigned long)GetLastError());return 1;
+    }
+    note("Settings file: %s\n",g_vrIniPath);
     for (i = 1; i < argc; i++) {
         unsigned cheat=cheatArg(argv[i]);
         if (!strcmp(argv[i], "--window")) g_cfgWindow = 1;

@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "hotd_share.h"
+#include "data_paths.h"
 #include "game_profile.h"
 #include "game_input.h"
 #include "texture_atlas.h"
@@ -1845,8 +1846,10 @@ BOOL WINAPI DllMain(HINSTANCE module,DWORD reason,void *reserved)
     if(reason!=DLL_PROCESS_ATTACH)return TRUE;
     DisableThreadLibraryCalls(module);
     GetModuleFileNameA(module,path,MAX_PATH);slash=strrchr(path,'\\');if(!slash)return FALSE;
-    strcpy(slash+1,"HOTD2Bridge.log");logfile=fopen(path,"w");
-    strcpy(slash+1,"HOTD2VR.ini");strcpy(ini_path,path);
+    char data_log[MAX_PATH];
+    if(!hotdDataFileA(path,"HOTD2VR.ini",ini_path) || !hotdDataFileA(path,"HOTD2Bridge.log",data_log))return FALSE;
+    logfile=fopen(data_log,"w");
+    logline("settings: %s",ini_path);
     trace_render_states=GetPrivateProfileIntA("bridge","trace_render_states",0,ini_path)!=0;
     trace_input=GetPrivateProfileIntA("bridge","trace_input",0,ini_path)!=0;
     game_base=(BYTE *)GetModuleHandleA(NULL);

@@ -147,7 +147,7 @@ Save game and Autosave share one checkpoint per mode. Saving again replaces that
 
 Checkpoints restart a scene; they do not restore health, score, equipment, inventory, enemies or exact progress within the scene. Original asks you to choose equipment again. Some scenes may rely on earlier events and may not work correctly when loaded directly; try the chapter entrance instead.
 
-To back up progress, copy `HOTD2VR.checkpoint.ini` (Arcade) and `HOTD2VR.original.checkpoint.ini` (Original) from `vr`. These are separate from the game's own saves.
+To back up progress, copy `HOTD2VR.checkpoint.ini` (Arcade) and `HOTD2VR.original.checkpoint.ini` (Original) from `vr`. If Windows blocks writes there, settings, saves and logs automatically use a folder under `%LOCALAPPDATA%\HOTD2VR` instead. The startup console shows the settings file's exact location. These saves are separate from the game's own saves.
 
 ## Troubleshooting
 
@@ -155,12 +155,12 @@ To back up progress, copy `HOTD2VR.checkpoint.ini` (Arcade) and `HOTD2VR.origina
 - **Game does not start or reports a bridge mismatch:** close the game and viewer, then run `start.bat`. Keep the files from the same mod release together.
 - **Menu asset extraction fails:** restore `menu-font.rgba` from the mod ZIP beside `HOTD2VR.exe`. If the error persists, follow its recovery instructions and include the displayed startup report when reporting the issue.
 - **Headset unavailable:** check that your PC VR software is running, the headset is connected, and its OpenXR runtime is active.
-- **Unexpected settings:** check `vr\HOTD2VR.ini`, or use **Reset defaults** in VR Settings.
+- **Unexpected settings:** use **Reset defaults** in VR Settings, or check the `HOTD2VR.ini` location shown at startup.
 - **Missing scenery when looking around:** some areas were never drawn by the original game. **Expand world** can reveal more loaded scenery, but may introduce glitches or reduce performance.
 
 ## Uninstall
 
-Close the game and viewer, then remove the `vr` folder. Keep `HOTD2VR.ini` and both checkpoint files if you want to preserve settings and saved progress. The original game executable and settings stay unchanged.
+Close the game and viewer, then remove the `vr` folder. Keep `HOTD2VR.ini` and both checkpoint files if you want to preserve settings and saved progress. If the mod used Local AppData, that installation's data folder remains there until you remove it. The original game executable and settings stay unchanged.
 
 ## Technical documentation
 

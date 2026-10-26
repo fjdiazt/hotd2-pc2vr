@@ -173,6 +173,34 @@ class NativeFontTest(test_menu_font.MenuFontTest):
         self.assertIn(expected, result.stderr)
         self.assertIn(expected, (self.output.parent / 'HOTD2VR-startup.log').read_text(encoding='utf-8'))
 
+    def test_protected_install_generates_font_and_report_in_user_data(self):
+        self.output.parent.mkdir()
+        local = self.root / 'local'
+        local.mkdir()
+        env = dict(os.environ, LOCALAPPDATA=str(local))
+        arguments = [str(DRIVER), 'prepare-font-protected',
+                     str(self.output.parent / 'HOTD2VR.exe'), str(self.game)]
+        result = subprocess.run(arguments, env=env, capture_output=True, text=True,
+                                encoding='utf-8', timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        fonts = list(local.glob('HOTD2VR/*/menu-font.rgba'))
+        self.assertEqual(len(fonts), 1)
+        self.assertEqual(fonts[0].read_bytes()[:4], self.magic)
+        self.assertFalse(self.output.exists())
+        before = (fonts[0].read_bytes(), fonts[0].stat().st_mtime_ns)
+        self.texture.unlink()
+        result = subprocess.run(arguments, env=env, capture_output=True, text=True,
+                                encoding='utf-8', timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((fonts[0].read_bytes(), fonts[0].stat().st_mtime_ns), before)
+        fonts[0].unlink()
+        result = subprocess.run(arguments, env=env, capture_output=True, text=True,
+                                encoding='utf-8', timeout=10, creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((fonts[0].parent / 'HOTD2VR-startup.log').is_file())
+        self.assertIn(str(fonts[0].parent / 'HOTD2VR-startup.log'), result.stderr)
+        self.assertEqual(list(self.output.parent.iterdir()), [])
+
     def test_corruption_preserves_previous_font(self):
         self.output.parent.mkdir()
         self.output.write_bytes(b'old font')

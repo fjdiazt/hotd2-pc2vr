@@ -318,15 +318,17 @@ static void vrMenuQuitGame(void)
 
 static int vrMenuLoadFont(void)
 {
-    char path[MAX_PATH];DWORD n=GetModuleFileNameA(NULL,path,sizeof(path));
-    if(!n || n>=sizeof(path))return 0;
-    while(n && path[n-1]!='\\')n--;
-    lstrcpynA(path+n,"menu-font.rgba",sizeof(path)-n);
-    FILE *file=fopen(path,"rb");if(!file)return 0;
-    char magic[4];
-    int ok=fread(magic,1,4,file)==4 && !memcmp(magic,HOTD_FONT_MAGIC,4) &&
-        fread(g_vrMenuFont,1,sizeof(g_vrMenuFont),file)==sizeof(g_vrMenuFont) && fgetc(file)==EOF;
-    fclose(file);return ok;
+    wchar_t module[MAX_PATH],path[MAX_PATH];DWORD n=GetModuleFileNameW(NULL,module,MAX_PATH);
+    if(!n || n>=MAX_PATH)return 0;
+    for(unsigned attempt=0;attempt<2;attempt++) {
+        if(!(attempt?hotdDataFileW(module,L"menu-font.rgba",path):hotdSibling(path,module,L"menu-font.rgba")))continue;
+        FILE *file=_wfopen(path,L"rb");if(!file)continue;
+        char magic[4];
+        int ok=fread(magic,1,4,file)==4 && !memcmp(magic,HOTD_FONT_MAGIC,4) &&
+            fread(g_vrMenuFont,1,sizeof(g_vrMenuFont),file)==sizeof(g_vrMenuFont) && fgetc(file)==EOF;
+        fclose(file);if(ok)return 1;
+    }
+    return 0;
 }
 
 /* Menu owns input only while open or waiting for the closing press to release. */

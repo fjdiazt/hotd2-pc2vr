@@ -69,6 +69,8 @@ $vs = & $vswhere -latest -property installationPath
 if (!$vs) { throw 'Visual Studio C++ tools required for x64 viewer.' }
 $batch = @"
 @call "$vs\VC\Auxiliary\Build\vcvars64.bat" >nul
+@cl /nologo /std:c11 /O2 /MT /utf-8 /W3 "$root\tests\test_native_startup.c" /Fo"$out\test_native_startup64.obj" /Fe"$out\test_native_startup64.exe" /link user32.lib
+@if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\src\hotd2vr.c" /Fo"$out\hotd2vr.obj" /Fe"$out\HOTD2VR.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib
 @if errorlevel 1 exit /b 1
 @cl /nologo /std:c11 /O2 /MT /utf-8 /W3 /I"$root\third_party" "$root\tests\test_vr_menu.c" /Fo"$out\test_vr_menu.obj" /Fe"$out\test_vr_menu.exe" /link d3d11.lib dxgi.lib d3dcompiler.lib dxguid.lib uuid.lib gdi32.lib user32.lib ole32.lib

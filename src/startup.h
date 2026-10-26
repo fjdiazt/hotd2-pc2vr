@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
+#include "data_paths.h"
 #ifdef _MSC_VER
 #pragma comment(lib,"bcrypt.lib")
 #endif
@@ -202,9 +203,15 @@ static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsign
 {
     wchar_t output[MAX_PATH],texture[MAX_PATH],temporary[MAX_PATH]={0};size_t length;
     unsigned char *data=NULL,*font=NULL,*pixels=NULL;int valid=0;
-    const char *write_help="Check free disk space and allow writes to the mod folder, or move the game/mod to a writable folder.";
+    const char *write_help="Check free disk space and write access to the displayed data folder.";
     if(!hotdSibling(output,viewer,L"menu-font.rgba")) {
         hotdFontError(error,viewer,"Mod folder path is too long","Move the game/mod to a shorter folder path.",ERROR_FILENAME_EXCED_RANGE);return 0;
+    }
+    data=hotdReadFile(output,&length);
+    valid=data && length==HOTD_FONT_SIZE && !memcmp(data,HOTD_FONT_MAGIC,4);free(data);data=NULL;
+    if(valid)return 1;
+    if(!hotdDataFileW(viewer,L"menu-font.rgba",output)) {
+        hotdFontError(error,viewer,"Cannot prepare writable mod data","Check write access to the mod folder and Local AppData.",GetLastError());return 0;
     }
     data=hotdReadFile(output,&length);
     valid=data && length==HOTD_FONT_SIZE && !memcmp(data,HOTD_FONT_MAGIC,4);free(data);data=NULL;
@@ -239,7 +246,7 @@ static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsign
     for(unsigned row=0;row<32;row++)memcpy(font+4+2*4096+row*128,font+4+4096+(31-row)*128,128);
     wchar_t directory[MAX_PATH];wcscpy(directory,output);*wcsrchr(directory,L'\\')=0;
     if(!GetTempFileNameW(directory,L"h2f",0,temporary)) {
-        hotdFontError(error,output,"Cannot create settings font in the mod folder",write_help,GetLastError());goto done;
+        hotdFontError(error,output,"Cannot create settings font in the data folder",write_help,GetLastError());goto done;
     }
     HANDLE file=CreateFileW(temporary,GENERIC_WRITE,0,NULL,OPEN_EXISTING,0,NULL);
     if(file==INVALID_HANDLE_VALUE) {
@@ -253,7 +260,7 @@ static int hotdEnsureFont(const wchar_t *game,const wchar_t *viewer,const unsign
     if(code) {hotdFontError(error,output,"Cannot write settings font",write_help,code);goto done;}
     if(!MoveFileExW(temporary,output,MOVEFILE_REPLACE_EXISTING|MOVEFILE_WRITE_THROUGH)) {
         hotdFontError(error,output,"Cannot replace menu-font.rgba",
-            "Allow writes to the mod folder and remove any read-only flag from menu-font.rgba, or move the game/mod to a writable folder.",GetLastError());goto done;
+            "Allow writes to the displayed data folder and remove any read-only flag from menu-font.rgba.",GetLastError());goto done;
     }
     valid=1;
 done:
@@ -311,7 +318,7 @@ static const char *hotdFontFailure(const HotdFontError *error,const wchar_t *gam
     }
     snprintf(message,sizeof(message),"Menu asset extraction failed: %s\nFile: %s\n%s%sWhat to do: %s\n",
         error->reason,failed,windows_error,windows_error[0]?"\n":"",error->action);
-    wchar_t report[MAX_PATH];int saved=hotdSibling(report,viewer,L"HOTD2VR-startup.log") &&
+    wchar_t report[MAX_PATH];int saved=hotdDataFileW(viewer,L"HOTD2VR-startup.log",report) &&
         hotdWriteFontReport(report,error,windows_error,game,viewer,hash);
     if(!saved) {
         wchar_t temporary[MAX_PATH];DWORD n=GetTempPathW(MAX_PATH,temporary);
