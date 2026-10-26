@@ -246,6 +246,24 @@ class NativeFontTest(test_menu_font.MenuFontTest):
 
 
 class NativeStartupTest(unittest.TestCase):
+    def test_bundled_font_skips_extraction_without_game_textures_or_tables(self):
+        import shutil
+        with tempfile.TemporaryDirectory(prefix='hotd2 bundled font ') as temporary:
+            root = Path(temporary)
+            game = root / 'Hod2.exe'
+            game.write_bytes(b'Fixture without any executable glyph tables; never executed.')
+            mod = root / 'vr'
+            mod.mkdir()
+            font = mod / 'menu-font.rgba'
+            shutil.copyfile(ROOT / 'assets/menu-font.rgba', font)
+            before = font.read_bytes(), font.stat().st_mtime_ns
+            self.assertEqual(len(before[0]), 524292)
+            self.assertEqual(before[0][:4], b'H2P2')
+            result = run('prepare-font', mod / 'HOTD2VR.exe', game)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((font.read_bytes(), font.stat().st_mtime_ns), before)
+            self.assertEqual(list(mod.iterdir()), [font])
+
     def test_start_bat_uses_sibling_app_and_forwards_arguments(self):
         with tempfile.TemporaryDirectory(prefix='hotd2 start & [1] ') as temporary:
             root = Path(temporary)

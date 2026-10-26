@@ -32,7 +32,8 @@ class PackageTest(unittest.TestCase):
                      'THIRD-PARTY.md',
                      'docs/technical-reference.md', 'docs/culling-review.md',
                      'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md', 'docs/findings.md',
-                     'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png'):
+                     'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png',
+                     'assets/menu-font.rgba'):
             target = self.root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
@@ -89,10 +90,11 @@ class PackageTest(unittest.TestCase):
                 'docs/vr-menu.md', 'docs/cheats.md', 'docs/pause.md',
                 'docs/findings.md', 'injector.exe', 'HOTD2Bridge.dll',
                 'HOTD2VR.exe', 'HOTD2VR.ini', 'openxr_loader.dll',
-                'gun.obj', 'gun.mtl', 'gun.bmp',
+                'gun.obj', 'gun.mtl', 'gun.bmp', 'menu-font.rgba',
                 'docs/screenshots/gameplay-vr-animated.png', 'docs/screenshots/vr-settings.png',
             })
             self.assertEqual(package.read('vr/HOTD2VR.ini'), (ROOT / 'HOTD2VR.ini').read_bytes())
+            self.assertEqual(package.read('vr/menu-font.rgba'), (ROOT / 'assets/menu-font.rgba').read_bytes())
             notices = package.read('vr/THIRD-PARTY.md').decode('utf-8').replace('\r\n', '\n')
             self.assertIn((ROOT / 'third_party/openxr/LICENSE').read_text(encoding='utf-8'), notices)
             self.assertNotIn('third_party/openxr/LICENSE', notices)
@@ -107,6 +109,13 @@ class PackageTest(unittest.TestCase):
         result = self.run_package()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('Wrong PE architecture', result.stderr)
+        self.assertFalse(list(self.output.glob('*.zip')))
+
+    def test_invalid_bundled_font_rejected(self):
+        (self.root / 'assets/menu-font.rgba').write_bytes(b'damaged font')
+        result = self.run_package()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Invalid bundled menu font', result.stderr)
         self.assertFalse(list(self.output.glob('*.zip')))
 
     def test_loader_integrity_rejected(self):

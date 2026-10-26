@@ -39,7 +39,9 @@ HOTD2 input locations and keyboard conventions were cross-checked against [Demul
 
 ## Game ownership
 
-The installed HOTD2 executable, game data and captured game imagery remain the user's own copy and are not included in this source distribution. No Virtua Cop 2 game files are included. The bundled revolver assets are the separate VC2VR assets described above.
+`assets/menu-font.rgba` contains native HOTD2 menu letters, digits and its item-selection arrow, with a vertically flipped copy for the opposite direction. It was generated from `tex/scr_opt_moji05.bin`, `tex/scr_item.bin` and the supported game's glyph tables. The 524,292-byte file is copied beside `HOTD2VR.exe` in builds and release ZIPs. Its SHA256 is `9048E4142428A3FE0F63E8804B17746D072871FF3F64238615FEBFEDCA39BCDD`.
+
+HOTD2 and its game imagery remain the property of their respective owners. The original game executable and complete game data are not included.
 
 ## OpenXR license
 

@@ -1,4 +1,4 @@
-/* Native first-run setup; no scripting runtime or game-derived release assets. */
+/* Native setup and optional font regeneration; no scripting runtime. */
 #ifndef HOTD_STARTUP_H
 #define HOTD_STARTUP_H
 #include <windows.h>

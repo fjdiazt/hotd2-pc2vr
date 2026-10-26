@@ -102,6 +102,7 @@ foreach ($name in 'HOTD2VR.exe', 'injector.exe', 'HOTD2Bridge.dll') {
     Copy-Item -LiteralPath (Join-Path $out $name) -Destination $runtime -Force
 }
 Copy-Item "$root\assets\gun\*" -Destination $runtime -Force
+Copy-Item -LiteralPath "$root\assets\menu-font.rgba" -Destination $runtime -Force
 Copy-Item -LiteralPath "$root\start.bat" -Destination $runtime -Force
 if (Test-Path -LiteralPath "$runtime\HOTD2Launch.exe" -PathType Leaf) {
     Remove-Item -LiteralPath "$runtime\HOTD2Launch.exe"

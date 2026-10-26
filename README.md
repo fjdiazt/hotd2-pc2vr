@@ -153,7 +153,7 @@ To back up progress, copy `HOTD2VR.checkpoint.ini` (Arcade) and `HOTD2VR.origina
 
 - **Unrecognized executable:** different game versions can attempt startup. If yours has issues, report the game version, SHA256 printed in the warning, and symptoms. See the [tested executable](docs/technical-reference.md#requirements).
 - **Game does not start or reports a bridge mismatch:** close the game and viewer, then run `start.bat`. Keep the files from the same mod release together.
-- **Menu asset extraction fails:** follow the error's file path and recovery instructions. Include the startup report shown in the error when reporting the issue.
+- **Menu asset extraction fails:** restore `menu-font.rgba` from the mod ZIP beside `HOTD2VR.exe`. If the error persists, follow its recovery instructions and include the displayed startup report when reporting the issue.
 - **Headset unavailable:** check that your PC VR software is running, the headset is connected, and its OpenXR runtime is active.
 - **Unexpected settings:** check `vr\HOTD2VR.ini`, or use **Reset defaults** in VR Settings.
 - **Missing scenery when looking around:** some areas were never drawn by the original game. **Expand world** can reveal more loaded scenery, but may introduce glitches or reduce performance.
@@ -176,4 +176,4 @@ Based on [NeuralF's Virtua Cop 2 VR (VC2VR)](https://github.com/NeuralF/Rea-Virt
 - **[The Khronos Group](https://github.com/KhronosGroup/OpenXR-SDK):** OpenXR headers and loader.
 - **[Argonlefou / DemulShooter](https://github.com/argonlefou/DemulShooter):** reference for HOTD2 controls. No DemulShooter code is included.
 
-Full component and asset notes: [THIRD-PARTY.md](THIRD-PARTY.md). The House of the Dead 2 and its game imagery belong to their respective owners; this independent fan mod is not affiliated with or endorsed by Sega. No HOTD2 or Virtua Cop 2 game files are distributed here.
+Full component and asset notes: [THIRD-PARTY.md](THIRD-PARTY.md). The House of the Dead 2 and its game imagery belong to their respective owners; this independent fan mod is not affiliated with or endorsed by Sega. The menu font is bundled; no game executable or complete game data is included.

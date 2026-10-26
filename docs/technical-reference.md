@@ -26,7 +26,7 @@ Build scripts and developer tests require a source checkout.
 - Configurable world size, picture settings and optional cheats.
 - Startup-logo bypass and native windowed startup through memory-only changes.
 
-Your existing game installation stays in place. No HOTD2 game files are included or changed on disk.
+Your existing game installation stays in place. The mod bundles its menu font, but no game executable or complete game data; installed game files are not changed on disk.
 
 ## Requirements
 
@@ -46,9 +46,9 @@ An unrecognized SHA256 prints a warning with the executable's actual SHA256 and 
 
 ## Download and run
 
-Follow [How to play](../README.md#how-to-play) for installation. Each release ZIP contains one `vr` folder with the matching executables, bridge, default settings, gun assets, x64 OpenXR loader, documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
+Follow [How to play](../README.md#how-to-play) for installation. Each release ZIP contains one `vr` folder with the matching executables, bridge, default settings, gun assets, menu font, x64 OpenXR loader, documentation and licenses. The `.zip.sha256` file contains the ZIP checksum.
 
-`HOTD2VR.exe` validates the game and extracts the settings font on first run. No scripts are needed to play. Keep the packaged runtime files together.
+`HOTD2VR.exe` uses the bundled `menu-font.rgba` beside it. A valid font skips extraction entirely, without reading the game's menu textures or glyph tables. If the file is missing or invalid, extraction from the installed game remains a fallback. No scripts are needed to play. Keep the packaged runtime files together.
 
 Font extraction failures identify the failing file and operation, include the Windows error when applicable, and suggest a recovery step. `HOTD2VR-startup.log` is saved beside the viewer; if that location cannot be written, a process-specific report is saved in `%TEMP%`. The error displays its exact path. Reports contain build time/architecture, game and viewer paths, SHA256 hashes, texture sizes/hashes and font-cache status. If neither location can be written, the error asks the user to copy the full message. Existing font files remain intact when extraction or replacement fails.
 
@@ -75,7 +75,7 @@ From the repository root:
 
 Replace the example path with your game location when running from a separate source checkout.
 
-The build produces `HOTD2VR.exe`, `start.bat`, `injector.exe`, `HOTD2Bridge.dll`, the gun assets and `HOTD2VR.ini` under `build\`. Compiler outputs, test executables and diagnostic images stay under `build-artifacts\`. It runs offline checks before publishing the runtime files. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
+The build produces `HOTD2VR.exe`, `start.bat`, `injector.exe`, `HOTD2Bridge.dll`, the gun assets, `menu-font.rgba` and `HOTD2VR.ini` under `build\`. Compiler outputs, test executables and diagnostic images stay under `build-artifacts\`. It runs offline checks before publishing the runtime files. It copies an OpenXR loader from the configured local VR installation when available; otherwise place the official x64 loader in `build\` yourself.
 
 Close any existing game session before launching. Keep the bridge and viewer from the same build together; their shared-memory formats must match.
 
@@ -91,7 +91,7 @@ To package a local build:
 .\package.ps1 -Version v1.0.0
 ```
 
-The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256, checks binary architectures, and writes to `build-artifacts\releases\`. It packages only listed runtime files and fresh repository defaults; local INI edits, generated fonts, checkpoints, logs and test executables are excluded. Offline/CI checks do not prove headset rendering or controller behavior.
+The packager downloads Khronos OpenXR.Loader 1.1.65, verifies its pinned SHA256, checks binary architectures, and writes to `build-artifacts\releases\`. It packages only listed runtime files, the repository's bundled menu font and fresh defaults; local INI edits, locally generated fonts, checkpoints, logs and test executables are excluded. The bundled font is taken from `assets/menu-font.rgba`, not from a development runtime's cache. Offline/CI checks do not prove headset rendering or controller behavior.
 
 ### Desktop previews and reconnecting
 
@@ -399,7 +399,7 @@ Implementation and test evidence: [docs/cheats.md](cheats.md).
 
 ## How it works
 
-1. `HOTD2VR.exe` finds the game, warns for unrecognized executable hashes, extracts the menu font if needed, and invokes the x86 launcher. The launcher creates `Hod2.exe` suspended, applies selected startup changes, injects `HOTD2Bridge.dll`, then resumes the game.
+1. `HOTD2VR.exe` finds the game, warns for unrecognized executable hashes, loads the bundled menu font (regenerating it only if missing/invalid), and invokes the x86 launcher. The launcher creates `Hod2.exe` suspended, applies selected startup changes, injects `HOTD2Bridge.dll`, then resumes the game.
 2. The HOTD2 bridge hooks DirectDraw/Direct3D7 submissions. It captures geometry, textures and the live projection, reconstructs pretransformed vertices, and retains native material, blending, alpha-test and culling information.
 3. Coherent frames and a texture atlas pass through shared memory to the separate x64 Direct3D11/OpenXR viewer.
 4. The viewer renders the scene for both eyes. Controller rays intersect world geometry; the hit projects through HOTD2's camera back into each player's native gun input. HUD and shot-effect geometry are excluded from aim intersections.

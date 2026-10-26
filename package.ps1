@@ -29,6 +29,10 @@ foreach ($name in $runtime) {
 foreach ($name in ($sources + 'HOTD2VR.ini')) {
     if (!(Test-Path -LiteralPath (Join-Path $PSScriptRoot $name) -PathType Leaf)) { throw "Missing package source: $name" }
 }
+$menuFontPath = Join-Path $PSScriptRoot 'assets\menu-font.rgba'
+if (!(Test-Path -LiteralPath $menuFontPath -PathType Leaf)) { throw 'Missing bundled menu font.' }
+$menuFont = [IO.File]::ReadAllBytes($menuFontPath)
+if ($menuFont.Length -ne 524292 -or [Text.Encoding]::ASCII.GetString($menuFont, 0, 4) -ne 'H2P2') { throw 'Invalid bundled menu font.' }
 $loaderHash = '05638C526F07BA3A5F1084BBC3308D654D5167F844FFA1E35515325CB72E0C34'
 if (!(Test-Path -LiteralPath $LoaderPackage)) {
     [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName([IO.Path]::GetFullPath($LoaderPackage))) | Out-Null
@@ -46,6 +50,7 @@ try {
     $contents = Join-Path $stage 'vr'
     [IO.Directory]::CreateDirectory($contents) | Out-Null
     foreach ($name in $runtime) { Copy-Item -LiteralPath (Join-Path $BuildDirectory $name) -Destination $contents }
+    Copy-Item -LiteralPath $menuFontPath -Destination (Join-Path $contents 'menu-font.rgba')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'HOTD2VR.ini') -Destination $contents
     foreach ($name in $sources) {
         $target = Join-Path $contents $name
