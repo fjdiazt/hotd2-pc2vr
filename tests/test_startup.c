@@ -111,6 +111,17 @@ int main(void)
     assert(!bypassDiscCheck(GetCurrentProcess(),memory) && GetLastError()==ERROR_BAD_EXE_FORMAT);
     assert(!memcmp(memory,before,0xA7000));
     assert(VirtualProtect(memory,0xA7000,PAGE_READWRITE,&ignored));
+    /* Known on-disk No-CD patch reverses only this conditional jump. */
+    memcpy(memory+0xA6850,disc_signature,sizeof(disc_signature));memory[0xA6857]=0x75;
+    memcpy(before,memory,0xA7000);
+    assert(VirtualProtect(memory,0xA7000,PAGE_EXECUTE_READ,&ignored));
+    assert(bypassDiscCheck(GetCurrentProcess(),memory));
+    assert(!memcmp(memory,before,0xA7000));
+    assert(VirtualQuery(memory+0xA6857,&info,sizeof(info)) && info.Protect==PAGE_EXECUTE_READ);
+    assert(VirtualProtect(memory,0xA7000,PAGE_READWRITE,&ignored));
+    memory[0xA6858]^=1;memcpy(before,memory,0xA7000);
+    assert(!bypassDiscCheck(GetCurrentProcess(),memory) && GetLastError()==ERROR_BAD_EXE_FORMAT);
+    assert(!memcmp(memory,before,0xA7000));
     memcpy(memory+0xA6850,disc_signature,sizeof(disc_signature));memory[0xA6850]^=1;
     memcpy(before,memory,0xA7000);
     assert(!bypassDiscCheck(GetCurrentProcess(),memory) && GetLastError()==ERROR_BAD_EXE_FORMAT);

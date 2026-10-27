@@ -14,6 +14,7 @@
 #endif
 
 #define HOTD_GAME_SHA256 "C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A"
+#define HOTD_GAME_NOCD_SHA256 "1D5E056711509C700724AD2B35DE1938D7069C68423E3B4DD16EC19D56125524"
 #define HOTD_FONT_SIZE (4+128*32*32*4)
 #define HOTD_FONT_MAGIC "H2P2"
 
@@ -357,12 +358,12 @@ static const char *hotdPrepareGame(const wchar_t *viewer,const wchar_t *explicit
         free(exe);return "Could not read HOTD2 executable, or file is empty. Game not started.";
     }
     char hash[65];
-    if(!hotdGameHash(exe,length,hash) || strcmp(hash,HOTD_GAME_SHA256))
+    if(!hotdGameHash(exe,length,hash) || (strcmp(hash,HOTD_GAME_SHA256) && strcmp(hash,HOTD_GAME_NOCD_SHA256)))
         fprintf(stderr,"Warning: unrecognized HOTD2 executable SHA256; continuing with unverified compatibility.\nSHA256: %s\nInclude this SHA256 when reporting issues.\n",hash[0]?hash:"unavailable");
     HotdFontError error;
     int ready=!font || hotdEnsureFont(game,viewer,exe,length,&error);free(exe);
     if(!ready)return hotdFontFailure(&error,game,viewer,hash);
-    if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check injector.exe, HOTD2Bridge.dll and HOTD2Bridge.log.";
+    if(launch && !hotdStartGame(viewer,game,options))return "Game launch failed. Check launcher output and that injector.exe/HOTD2Bridge.dll are present.";
     return NULL;
 }
 #endif

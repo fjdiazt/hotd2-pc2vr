@@ -95,13 +95,17 @@ static BOOL skipSplash(HANDLE process,BYTE *base)
     return TRUE;
 }
 
-static BOOL bypassDiscCheck(HANDLE process,BYTE *base)
+enum { HOTD_DISC_BYPASSED=1,HOTD_DISC_ALREADY_PATCHED };
+static int bypassDiscCheck(HANDLE process,BYTE *base)
 {
     const BYTE signature[]={0xF6,0x05,0x80,0xEB,0x7D,0x00,0x40,0x74,0x0D},zero=0;
     BYTE actual[sizeof(signature)],check=0xFF;SIZE_T bytes;DWORD protection,ignored;
     /* Both flag outcomes use the native success return; skip only the CD-ROM scan. */
     if(!ReadProcessMemory(process,base+0xA6850,actual,sizeof(actual),&bytes))return FALSE;
+    if(bytes==sizeof(actual) && !memcmp(actual,signature,7) && actual[7]==0x75 && actual[8]==signature[8])
+        return HOTD_DISC_ALREADY_PATCHED;
     if(bytes!=sizeof(actual) || memcmp(actual,signature,sizeof(actual))) {
+        fwprintf(stderr,L"CD-check signature mismatch: unsupported executable patch.\n");
         SetLastError(ERROR_BAD_EXE_FORMAT);return FALSE;
     }
     if(!VirtualProtectEx(process,base+0xA6858,1,PAGE_EXECUTE_READWRITE,&protection))return FALSE;
@@ -111,7 +115,7 @@ static BOOL bypassDiscCheck(HANDLE process,BYTE *base)
     if(!ReadProcessMemory(process,base+0xA6858,&check,1,&bytes) || bytes!=1 || check) {
         SetLastError(ERROR_WRITE_FAULT);return FALSE;
     }
-    return TRUE;
+    return HOTD_DISC_BYPASSED;
 }
 
 int wmain(int argc,wchar_t **argv)
@@ -121,7 +125,7 @@ int wmain(int argc,wchar_t **argv)
     HANDLE thread=NULL,snapshot=INVALID_HANDLE_VALUE;
     void *remote=NULL;SIZE_T written;DWORD module=0,error=0;
     LaunchOptions options;
-    int result=1,resumed=0,native_window;
+    int result=1,resumed=0,native_window,disc_result=0,bridge_attempted=0;
     module=GetModuleFileNameW(NULL,ini,MAX_PATH);if(!module || module>=MAX_PATH)return 2;
     wchar_t data_ini[MAX_PATH];
     if(!hotdDataFileW(ini,L"HOTD2VR.ini",data_ini)) {
@@ -160,7 +164,7 @@ int wmain(int argc,wchar_t **argv)
     if(!setCheckpointEnvironment(&options))goto cleanup;
     swprintf(command,MAX_PATH+4,L"\"%ls\"",game);startup.cb=sizeof(startup);
     if(!CreateProcessW(game,command,NULL,NULL,FALSE,CREATE_SUSPENDED,NULL,dir,&startup,&process))goto cleanup;
-    if(options.launchfix && !bypassDiscCheck(process.hProcess,(BYTE *)0x400000))goto cleanup;
+    if(options.launchfix && !(disc_result=bypassDiscCheck(process.hProcess,(BYTE *)0x400000)))goto cleanup;
     if(options.skip_splash && !skipSplash(process.hProcess,(BYTE *)0x400000))goto cleanup;
     if(native_window || (!options.capture && GetPrivateProfileIntW(L"bridge",L"windowed",1,ini))) {
         const BYTE signature[]={0x6A,0x0B,0xA3,0x28,0xE6,0x7D,0x00},mode=7;
@@ -181,6 +185,7 @@ int wmain(int argc,wchar_t **argv)
     }
     remote=VirtualAllocEx(process.hProcess,NULL,(wcslen(dll)+1)*sizeof(wchar_t),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);
     if(!remote || !WriteProcessMemory(process.hProcess,remote,dll,(wcslen(dll)+1)*sizeof(wchar_t),&written))goto cleanup;
+    bridge_attempted=1;
     thread=CreateRemoteThread(process.hProcess,NULL,0,(LPTHREAD_START_ROUTINE)GetProcAddress(GetModuleHandleW(L"kernel32.dll"),"LoadLibraryW"),remote,0,NULL);
     if(!thread)goto cleanup;
     if(WaitForSingleObject(thread,15000)!=WAIT_OBJECT_0){SetLastError(ERROR_TIMEOUT);goto cleanup;}
@@ -191,7 +196,7 @@ resume:
     resumed=1;
     wprintf(native_window?L"Native windowed game; game PID %lu\n":L"Injected HOTD2Bridge.dll; game PID %lu\n",process.dwProcessId);fflush(stdout);
     if(!native_window && !options.capture){wprintf(L"Graphics hooks disabled; native renderer with gameplay services.\n");fflush(stdout);}
-    if(options.launchfix){wprintf(L"CD check bypassed in memory.\n");fflush(stdout);}
+    if(options.launchfix){wprintf(disc_result==HOTD_DISC_ALREADY_PATCHED?L"Existing No-CD patch detected; unchanged.\n":L"CD check bypassed in memory.\n");fflush(stdout);}
     if(options.skip_splash){wprintf(L"Startup splashes skipped.\n");fflush(stdout);}
     result=0;
     if(options.wait){WaitForSingleObject(process.hProcess,INFINITE);GetExitCodeProcess(process.hProcess,&module);result=(int)module;}
@@ -201,6 +206,6 @@ cleanup:
     if(thread)CloseHandle(thread);
     if(process.hThread)CloseHandle(process.hThread);
     if(process.hProcess)CloseHandle(process.hProcess);
-    if(result)fwprintf(stderr,L"Launch failed (%lu).%ls\n",error,native_window?L"":L" See HOTD2Bridge.log.");
+    if(result)fwprintf(stderr,L"Launch failed (%lu).%ls\n",error,native_window || !bridge_attempted?L"":L" See HOTD2Bridge.log.");
     return result;
 }

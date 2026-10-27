@@ -42,6 +42,8 @@ SHA256 C6B4116788B7F68C56860FB9CC8A94BF984E620907031E4BC3DB43623DBE579A
 MD5    97C9E516A287AAB33A455A396DADAA45
 ```
 
+The known English No-CD variant is also recognized: SHA256 `1D5E056711509C700724AD2B35DE1938D7069C68423E3B4DD16EC19D56125524`. It differs by one byte at file offset `0xA6857` (`74` to `75`). The launcher validates the complete surrounding CD-check signature, leaves this already-patched branch unchanged, and continues normal injection. The original executable keeps the existing memory-only bypass. Other signature mismatches still stop startup with an explicit CD-check error; failures before injection no longer direct users to a bridge log that has not been created.
+
 An unrecognized SHA256 prints a warning with the executable's actual SHA256 and continues startup; no override flag is needed. Other original Windows game versions are unverified. Copy that SHA256 when reporting the game version and symptoms. Native instruction checks and asset validation remain: incompatible hook sites can still stop startup or disable the affected feature. The Remake and emulated versions are outside the supported target.
 
 ## Download and run
